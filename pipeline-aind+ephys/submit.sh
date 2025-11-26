@@ -1,5 +1,7 @@
 #!/bin/bash
 
+BLOB_ID="$1"
+RUN_ID="$2"
 CONFIG_PATH=""
 if [ -n "$3" ]; then
     CONFIG_PATH="$3"
@@ -10,9 +12,9 @@ sbatch <<EOT
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --mem=8GB
-#SBATCH --partition=mit_normal_gpu
+#SBATCH --partition=mit_normal
 #SBATCH --time=2:00:00
-#SBATCH --output /orcd/data/dandi/001/all-dandi-compute/logs/aind-%j-$1.log
+#SBATCH --output /orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_job-%j_blob-$1.log
 
 # File has been modified from AIND docs for SLURM submission
 
@@ -27,9 +29,6 @@ conda activate /orcd/data/dandi/001/env_nf
 DANDI_PARTITION_DIR="/orcd/data/dandi/001"
 DANDI_COMPUTE_DIR="$DANDI_PARTITION_DIR/all-dandi-compute"
 DANDI_ARCHIVE_DIR="$DANDI_PARTITION_DIR/s3dandiarchive"
-
-BLOB_ID="$1"
-RUN_ID="$2"
 
 PIPELINE_PATH="$DANDI_COMPUTE_DIR/aind-ephys-pipeline.source"
 BASE_WORKDIR="$DANDI_COMPUTE_DIR/work"
