@@ -1,5 +1,16 @@
 #!/bin/bash
-sbatch <<EOT
+
+BLOB_ID="$1"
+RUN_ID="$2"
+CONFIG_PATH=""
+if [ -n "$3" ]; then
+    CONFIG_PATH="$3"
+fi
+
+# Create temporary job script
+JOB_SCRIPT=$(mktemp /tmp/slurm_job.XXXXXX.sh)
+
+cat > "$JOB_SCRIPT" <<'EOT'
 #!/bin/bash
 #SBATCH --job-name=AIND-Ephys-Pipeline
 #SBATCH --mem=16GB
@@ -80,3 +91,9 @@ hostname
 
 exit 0
 EOT
+
+# Submit the job
+sbatch --output "/orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_job-%j_blob-${BLOB_ID}_run-${RUN_ID}.log" "$JOB_SCRIPT"
+
+# Clean up
+rm -f "$JOB_SCRIPT"
