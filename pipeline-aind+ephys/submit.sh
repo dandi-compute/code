@@ -1,7 +1,5 @@
 #!/bin/bash
 
-BLOB_ID="$1"
-RUN_ID="$2"
 CONFIG_PATH=""
 if [ -n "$3" ]; then
     CONFIG_PATH="$3"
@@ -17,6 +15,11 @@ sbatch <<EOT
 #SBATCH --output /orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_job-%j_blob-$1_run-$2.log
 
 # File has been modified from AIND docs for SLURM submission
+
+# Welcome message and input display
+BLOB_ID="$1"
+RUN_ID="$2"
+
 echo "\nDeploying AIND Ephys Pipeline on MIT Engaging cluster"
 echo "=====================================================\n\n"
 echo "BLOB ID: $BLOB_ID"
