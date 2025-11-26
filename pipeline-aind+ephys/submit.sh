@@ -17,7 +17,8 @@ sbatch <<EOT
 #SBATCH --output /orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_job-%j_blob-$1.log
 
 # File has been modified from AIND docs for SLURM submission
-echo "Deploying AIND Ephys Pipeline on MIT Engaging cluster"
+echo "\nDeploying AIND Ephys Pipeline on MIT Engaging cluster"
+echo "=====================================================\n\n"
 echo "BLOB ID: $BLOB_ID"
 echo "RUN ID: $RUN_ID"
 
@@ -38,7 +39,7 @@ BASE_WORKDIR="$DANDI_COMPUTE_DIR/work"
 RUN_WORKDIR="BASE_WORKDIR/blobs/$BLOB_ID/run-$RUN_ID"
 NXF_APPTAINER_CACHEDIR="BASE_WORKDIR/apptainer_cache"
 
-DATA_PATH="DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_IB:3:6}/$BLOB_ID"
+DATA_PATH="DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:6}/$BLOB_ID"
 if [ ! -f "$DATA_PATH" ]; then
     echo "Error: Data file does not exist at $DATA_PATH"
     echo "Please check the BLOB ID."
