@@ -14,7 +14,7 @@ sbatch <<EOT
 #SBATCH --mem=8GB
 #SBATCH --partition=mit_normal
 #SBATCH --time=2:00:00
-#SBATCH --output /orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_job-%j_blob-$1.log
+#SBATCH --output /orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_job-%j_blob-$1_run-$2.log
 
 # File has been modified from AIND docs for SLURM submission
 echo "\nDeploying AIND Ephys Pipeline on MIT Engaging cluster"
