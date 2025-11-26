@@ -17,6 +17,9 @@ sbatch <<EOT
 #SBATCH --output /orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_job-%j_blob-$1.log
 
 # File has been modified from AIND docs for SLURM submission
+echo "Deploying AIND Ephys Pipeline on MIT Engaging cluster"
+echo "BLOB ID: $BLOB_ID"
+echo "RUN ID: $RUN_ID"
 
 # modify this section to make the nextflow command available to your environment
 # e.g., using a conda environment with nextflow installed
