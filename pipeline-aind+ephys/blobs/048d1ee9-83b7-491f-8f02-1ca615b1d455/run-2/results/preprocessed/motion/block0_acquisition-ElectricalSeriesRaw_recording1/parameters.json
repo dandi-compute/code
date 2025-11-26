@@ -23,7 +23,7 @@
     },
     "job_kwargs": {
         "pool_engine": "process",
-        "n_jobs": 240,
+        "n_jobs": 192,
         "chunk_duration": "1s",
         "progress_bar": false,
         "mp_context": "spawn",

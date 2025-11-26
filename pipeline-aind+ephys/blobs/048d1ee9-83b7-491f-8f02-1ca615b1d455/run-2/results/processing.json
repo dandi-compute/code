@@ -4,59 +4,107 @@
    "processing_pipeline": {
       "data_processes": [
          {
-            "name": "Ephys visualization",
+            "name": "Spike sorting",
             "software_version": "1.0",
-            "start_date_time": "2025-11-13T10:03:54.971509-05:00",
-            "end_date_time": "2025-11-13T10:04:10.971509-05:00",
+            "start_date_time": "2025-11-25T19:35:16.210449-05:00",
+            "end_date_time": "2025-11-25T19:37:00.210449-05:00",
             "input_location": "../data",
             "output_location": "../results",
-            "code_url": "https://github.com/AllenNeuralDynamics/aind-ephys-visualization",
+            "code_url": "https://github.com/AllenNeuralDynamics/aind-ephys-spikesort-kilosort4",
             "code_version": null,
             "parameters": {
-               "timeseries": {
-                  "n_snippets_per_segment": 2,
-                  "snippet_duration_s": 0.5
-               },
-               "drift": {
-                  "detection": {
-                     "peak_sign": "neg",
-                     "detect_threshold": 5,
-                     "exclude_sweep_ms": 0.1
-                  },
-                  "localization": {
-                     "ms_before": 0.1,
-                     "ms_after": 0.3,
-                     "radius_um": 100.0
-                  },
-                  "n_skip": 30,
-                  "alpha": 0.15,
-                  "vmin": -200,
-                  "vmax": 0,
-                  "cmap": "Greys_r",
-                  "figsize": [
-                     10,
-                     10
-                  ]
-               },
-               "motion": {
-                  "cmap": "Greys_r",
-                  "scatter_decimate": 15,
-                  "figsize": [
-                     15,
-                     10
-                  ]
-               },
+               "sorter_name": "kilosort4",
+               "sorter_params": {
+                  "fs": 30000,
+                  "batch_size": 60000,
+                  "nblocks": 5,
+                  "Th_universal": 9,
+                  "Th_learned": 8,
+                  "nt": 61,
+                  "shift": null,
+                  "scale": null,
+                  "artifact_threshold": null,
+                  "nskip": 25,
+                  "whitening_range": 32,
+                  "highpass_cutoff": 300,
+                  "binning_depth": 5,
+                  "sig_interp": 20,
+                  "drift_smoothing": [
+                     0.5,
+                     0.5,
+                     0.5
+                  ],
+                  "nt0min": null,
+                  "dmin": null,
+                  "dminx": 32,
+                  "min_template_size": 10,
+                  "template_sizes": 5,
+                  "nearest_chans": 10,
+                  "nearest_templates": 100,
+                  "max_channel_distance": null,
+                  "templates_from_data": true,
+                  "n_templates": 6,
+                  "n_pcs": 6,
+                  "Th_single_ch": 6,
+                  "acg_threshold": 0.2,
+                  "ccg_threshold": 0.25,
+                  "cluster_downsampling": 20,
+                  "x_centers": null,
+                  "duplicate_spike_ms": 0.25,
+                  "do_CAR": true,
+                  "invert_sign": false,
+                  "save_extra_vars": false,
+                  "save_preprocessed_copy": false,
+                  "torch_device": "auto",
+                  "bad_channels": null,
+                  "clear_cache": false,
+                  "do_correction": false,
+                  "skip_kilosort_preprocessing": false,
+                  "keep_good_only": false,
+                  "use_binary_file": null,
+                  "delete_recording_dat": true,
+                  "pool_engine": "process",
+                  "n_jobs": -1,
+                  "chunk_duration": "1s",
+                  "progress_bar": false,
+                  "mp_context": null,
+                  "max_threads_per_worker": 1
+               }
+            },
+            "outputs": {
+               "empty_units": 0
+            },
+            "notes": "\n- KS4 found 18 units, 18 after removing empty templates.\n",
+            "resources": null
+         },
+         {
+            "name": "Ephys curation",
+            "software_version": "2.0",
+            "start_date_time": "2025-11-25T19:38:46.922424-05:00",
+            "end_date_time": "2025-11-25T19:39:00.922424-05:00",
+            "input_location": "../data",
+            "output_location": "../results",
+            "code_url": "https://github.com/AllenNeuralDynamics/aind-ephys-curation",
+            "code_version": null,
+            "parameters": {
+               "query": "isi_violations_ratio < 0.5 and presence_ratio > 0.8 and amplitude_cutoff < 0.1",
+               "noise_neural_classifier": "SpikeInterface/UnitRefine_noise_neural_classifier",
+               "sua_mua_classifier": "SpikeInterface/UnitRefine_sua_mua_classifier",
                "recording_name": "block0_acquisition-ElectricalSeriesRaw_recording1"
             },
-            "outputs": {},
-            "notes": "{}",
+            "outputs": {
+               "total_units": 18,
+               "passing_qc": 18,
+               "failing_qc": 0
+            },
+            "notes": "Curation query: isi_violations_ratio < 0.5 and presence_ratio > 0.8 and amplitude_cutoff < 0.1\nPassing default QC: 18/18Noise: 0 / 18\nSUA: 18 / 18\nMUA: 0 / 18\n",
             "resources": null
          },
          {
             "name": "Ephys preprocessing",
             "software_version": "1.0",
-            "start_date_time": "2025-11-13T09:54:54.971934-05:00",
-            "end_date_time": "2025-11-13T09:59:28.971934-05:00",
+            "start_date_time": "2025-11-25T19:27:36.933336-05:00",
+            "end_date_time": "2025-11-25T19:33:49.933336-05:00",
             "input_location": "../data",
             "output_location": "../results",
             "code_url": "https://github.com/AllenNeuralDynamics/aind-ephys-preprocessing",
@@ -164,10 +212,59 @@
             "resources": null
          },
          {
+            "name": "Ephys visualization",
+            "software_version": "1.0",
+            "start_date_time": "2025-11-25T19:39:58.172142-05:00",
+            "end_date_time": "2025-11-25T19:40:05.172142-05:00",
+            "input_location": "../data",
+            "output_location": "../results",
+            "code_url": "https://github.com/AllenNeuralDynamics/aind-ephys-visualization",
+            "code_version": null,
+            "parameters": {
+               "timeseries": {
+                  "n_snippets_per_segment": 2,
+                  "snippet_duration_s": 0.5
+               },
+               "drift": {
+                  "detection": {
+                     "peak_sign": "neg",
+                     "detect_threshold": 5,
+                     "exclude_sweep_ms": 0.1
+                  },
+                  "localization": {
+                     "ms_before": 0.1,
+                     "ms_after": 0.3,
+                     "radius_um": 100.0
+                  },
+                  "n_skip": 30,
+                  "alpha": 0.15,
+                  "vmin": -200,
+                  "vmax": 0,
+                  "cmap": "Greys_r",
+                  "figsize": [
+                     10,
+                     10
+                  ]
+               },
+               "motion": {
+                  "cmap": "Greys_r",
+                  "scatter_decimate": 15,
+                  "figsize": [
+                     15,
+                     10
+                  ]
+               },
+               "recording_name": "block0_acquisition-ElectricalSeriesRaw_recording1"
+            },
+            "outputs": {},
+            "notes": "{}",
+            "resources": null
+         },
+         {
             "name": "Ephys postprocessing",
             "software_version": "1.0",
-            "start_date_time": "2025-11-13T10:01:52.567143-05:00",
-            "end_date_time": "2025-11-13T10:02:14.567143-05:00",
+            "start_date_time": "2025-11-25T19:37:45.716502-05:00",
+            "end_date_time": "2025-11-25T19:38:21.716502-05:00",
             "input_location": "../data",
             "output_location": "../results",
             "code_url": "https://github.com/AllenNeuralDynamics/aind-ephys-postprocessing",
@@ -228,103 +325,6 @@
                "duplicated_units": 0
             },
             "notes": "\n- Removed 0 duplicated units.\n",
-            "resources": null
-         },
-         {
-            "name": "Spike sorting",
-            "software_version": "1.0",
-            "start_date_time": "2025-11-13T10:00:53.230277-05:00",
-            "end_date_time": "2025-11-13T10:01:09.230277-05:00",
-            "input_location": "../data",
-            "output_location": "../results",
-            "code_url": "https://github.com/AllenNeuralDynamics/aind-ephys-spikesort-kilosort4",
-            "code_version": null,
-            "parameters": {
-               "sorter_name": "kilosort4",
-               "sorter_params": {
-                  "fs": 30000,
-                  "batch_size": 60000,
-                  "nblocks": 5,
-                  "Th_universal": 9,
-                  "Th_learned": 8,
-                  "nt": 61,
-                  "shift": null,
-                  "scale": null,
-                  "artifact_threshold": null,
-                  "nskip": 25,
-                  "whitening_range": 32,
-                  "highpass_cutoff": 300,
-                  "binning_depth": 5,
-                  "sig_interp": 20,
-                  "drift_smoothing": [
-                     0.5,
-                     0.5,
-                     0.5
-                  ],
-                  "nt0min": null,
-                  "dmin": null,
-                  "dminx": 32,
-                  "min_template_size": 10,
-                  "template_sizes": 5,
-                  "nearest_chans": 10,
-                  "nearest_templates": 100,
-                  "max_channel_distance": null,
-                  "templates_from_data": true,
-                  "n_templates": 6,
-                  "n_pcs": 6,
-                  "Th_single_ch": 6,
-                  "acg_threshold": 0.2,
-                  "ccg_threshold": 0.25,
-                  "cluster_downsampling": 20,
-                  "x_centers": null,
-                  "duplicate_spike_ms": 0.25,
-                  "do_CAR": true,
-                  "invert_sign": false,
-                  "save_extra_vars": false,
-                  "save_preprocessed_copy": false,
-                  "torch_device": "auto",
-                  "bad_channels": null,
-                  "clear_cache": false,
-                  "do_correction": false,
-                  "skip_kilosort_preprocessing": false,
-                  "keep_good_only": false,
-                  "use_binary_file": null,
-                  "delete_recording_dat": true,
-                  "pool_engine": "process",
-                  "n_jobs": -1,
-                  "chunk_duration": "1s",
-                  "progress_bar": false,
-                  "mp_context": null,
-                  "max_threads_per_worker": 1
-               }
-            },
-            "outputs": {
-               "empty_units": 0
-            },
-            "notes": "\n- KS4 found 18 units, 18 after removing empty templates.\n",
-            "resources": null
-         },
-         {
-            "name": "Ephys curation",
-            "software_version": "2.0",
-            "start_date_time": "2025-11-13T10:02:53.684473-05:00",
-            "end_date_time": "2025-11-13T10:03:01.684473-05:00",
-            "input_location": "../data",
-            "output_location": "../results",
-            "code_url": "https://github.com/AllenNeuralDynamics/aind-ephys-curation",
-            "code_version": null,
-            "parameters": {
-               "query": "isi_violations_ratio < 0.5 and presence_ratio > 0.8 and amplitude_cutoff < 0.1",
-               "noise_neural_classifier": "SpikeInterface/UnitRefine_noise_neural_classifier",
-               "sua_mua_classifier": "SpikeInterface/UnitRefine_sua_mua_classifier",
-               "recording_name": "block0_acquisition-ElectricalSeriesRaw_recording1"
-            },
-            "outputs": {
-               "total_units": 18,
-               "passing_qc": 18,
-               "failing_qc": 0
-            },
-            "notes": "Curation query: isi_violations_ratio < 0.5 and presence_ratio > 0.8 and amplitude_cutoff < 0.1\nPassing default QC: 18/18Noise: 0 / 18\nSUA: 18 / 18\nMUA: 0 / 18\n",
             "resources": null
          }
       ],

@@ -31,7 +31,7 @@
                   {
                      "evaluator": "",
                      "status": "Pending",
-                     "timestamp": "2025-11-13T10:05:37.144877-05:00"
+                     "timestamp": "2025-11-25T19:42:16.146380-05:00"
                   }
                ],
                "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 raw data. No timeseries link found for block0_acquisition-ElectricalSeriesRaw_recording1.",
@@ -43,7 +43,7 @@
          "notes": null,
          "allow_failed_metrics": false,
          "latest_status": "Pending",
-         "created": "2025-11-13T15:05:42.697031Z"
+         "created": "2025-11-26T00:42:20.613883Z"
       },
       {
          "modality": {
@@ -61,7 +61,7 @@
                   {
                      "evaluator": "",
                      "status": "Pass",
-                     "timestamp": "2025-11-13T10:05:37.144877-05:00"
+                     "timestamp": "2025-11-25T19:42:16.146380-05:00"
                   }
                ],
                "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 wide-band power spectrum density",
@@ -86,7 +86,7 @@
                   {
                      "evaluator": "",
                      "status": "Pending",
-                     "timestamp": "2025-11-13T10:05:37.144877-05:00"
+                     "timestamp": "2025-11-25T19:42:16.146380-05:00"
                   }
                ],
                "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 high-frequency power spectrum density",
@@ -111,7 +111,7 @@
                   {
                      "evaluator": "",
                      "status": "Pending",
-                     "timestamp": "2025-11-13T10:05:37.144877-05:00"
+                     "timestamp": "2025-11-25T19:42:16.146380-05:00"
                   }
                ],
                "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 low-frequency power spectrum density",
@@ -123,7 +123,7 @@
          "notes": null,
          "allow_failed_metrics": false,
          "latest_status": "Pending",
-         "created": "2025-11-13T15:05:42.697120Z"
+         "created": "2025-11-26T00:42:20.613943Z"
       },
       {
          "modality": {
@@ -152,7 +152,7 @@
                   {
                      "evaluator": "",
                      "status": "Pass",
-                     "timestamp": "2025-11-13T10:05:37.144877-05:00"
+                     "timestamp": "2025-11-25T19:42:16.146380-05:00"
                   }
                ],
                "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 RMS",
@@ -164,7 +164,7 @@
          "notes": null,
          "allow_failed_metrics": false,
          "latest_status": "Pass",
-         "created": "2025-11-13T15:05:42.697154Z"
+         "created": "2025-11-26T00:42:20.613969Z"
       },
       {
          "modality": {
@@ -195,7 +195,7 @@
                   {
                      "evaluator": "",
                      "status": "Pending",
-                     "timestamp": "2025-11-13T10:05:41.212082-05:00"
+                     "timestamp": "2025-11-25T19:42:19.066458-05:00"
                   }
                ],
                "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 probe drift",
@@ -207,7 +207,7 @@
          "notes": null,
          "allow_failed_metrics": false,
          "latest_status": "Pending",
-         "created": "2025-11-13T15:05:42.697172Z"
+         "created": "2025-11-26T00:42:20.613983Z"
       },
       {
          "modality": {
@@ -238,7 +238,7 @@
                   {
                      "evaluator": "",
                      "status": "Pending",
-                     "timestamp": "2025-11-13T10:05:41.213097-05:00"
+                     "timestamp": "2025-11-25T19:42:19.067242-05:00"
                   }
                ],
                "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 unit metrics yield. No sorting summary link found for block0_acquisition-ElectricalSeriesRaw_recording1.",
@@ -250,7 +250,7 @@
          "notes": null,
          "allow_failed_metrics": false,
          "latest_status": "Pending",
-         "created": "2025-11-13T15:05:42.697192Z"
+         "created": "2025-11-26T00:42:20.613997Z"
       },
       {
          "modality": {
@@ -297,7 +297,7 @@
                   {
                      "evaluator": "",
                      "status": "Pass",
-                     "timestamp": "2025-11-13T10:05:41.213097-05:00"
+                     "timestamp": "2025-11-25T19:42:19.067242-05:00"
                   }
                ],
                "description": "Manual annotation of visual area label based on ISI imaging for block0_acquisition-ElectricalSeriesRaw_recording1",
@@ -309,7 +309,7 @@
          "notes": null,
          "allow_failed_metrics": false,
          "latest_status": "Pass",
-         "created": "2025-11-13T15:05:42.697207Z"
+         "created": "2025-11-26T00:42:20.614008Z"
       },
       {
          "modality": {
@@ -340,7 +340,7 @@
                   {
                      "evaluator": "",
                      "status": "Pending",
-                     "timestamp": "2025-11-13T10:05:41.213097-05:00"
+                     "timestamp": "2025-11-25T19:42:19.067242-05:00"
                   }
                ],
                "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 firing rate",
@@ -352,7 +352,7 @@
          "notes": null,
          "allow_failed_metrics": false,
          "latest_status": "Pending",
-         "created": "2025-11-13T15:05:42.697221Z"
+         "created": "2025-11-26T00:42:20.614021Z"
       }
    ],
    "notes": null
