@@ -1,17 +1,10 @@
 #!/bin/bash
-
-CONFIG_PATH=""
-if [ -n "$3" ]; then
-    CONFIG_PATH="$3"
-fi
-
 sbatch <<EOT
 #!/bin/bash
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --mem=8GB
+#SBATCH --job-name=AIND-Ephys-Pipeline
+#SBATCH --mem=16GB
 #SBATCH --partition=mit_normal
-#SBATCH --time=2:00:00
+#SBATCH --time=4:00:00
 #SBATCH --output /orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_job-%j_blob-$1_run-$2.log
 
 # File has been modified from AIND docs for SLURM submission
@@ -20,10 +13,26 @@ sbatch <<EOT
 BLOB_ID="$1"
 RUN_ID="$2"
 
+CONFIG_PATH=""
+if [ -n "$3" ]; then
+    CONFIG_PATH="$3"
+fi
+if [ -z "$CONFIG_PATH" ]; then
+    # Use default config
+    CONFIG_FILE="$DANDI_COMPUTE_DIR/dandi-compute/pipeline-aind+ephys/default.config"
+else
+    CONFIG_FILE="$DANDI_COMPUTE_DIR/dandi-compute/pipeline-aind+ephys/blobs/$BLOD_ID/run-$RUN_ID/$CONFIG_PATH"
+fi
+if [ ! -f "$CONFIG_PATH" ]; then
+    echo "Error: Config file does not exist at $CONFIG_PATH"
+    exit 1
+fi
+
 echo "\nDeploying AIND Ephys Pipeline on MIT Engaging cluster"
 echo "=====================================================\n\n"
 echo "BLOB ID: $BLOB_ID"
 echo "RUN ID: $RUN_ID"
+echo "CONFIG FILE: $CONFIG_FILE\n\n"
 
 # modify this section to make the nextflow command available to your environment
 # e.g., using a conda environment with nextflow installed
@@ -33,16 +42,16 @@ module load apptainer
 
 conda activate /orcd/data/dandi/001/env_nf
 
-DANDI_PARTITION_DIR="/orcd/data/dandi/001"
-DANDI_COMPUTE_DIR="$DANDI_PARTITION_DIR/all-dandi-compute"
-DANDI_ARCHIVE_DIR="$DANDI_PARTITION_DIR/s3dandiarchive"
+BASE_DANDI_DIR="/orcd/data/dandi/001"
+DANDI_COMPUTE_DIR="$BASE_DANDI_DIR/all-dandi-compute"
+DANDI_ARCHIVE_DIR="$BASE_DANDI_DIR/s3dandiarchive"
 
 PIPELINE_PATH="$DANDI_COMPUTE_DIR/aind-ephys-pipeline.source"
 BASE_WORKDIR="$DANDI_COMPUTE_DIR/work"
 RUN_WORKDIR="BASE_WORKDIR/blobs/$BLOB_ID/run-$RUN_ID"
 NXF_APPTAINER_CACHEDIR="BASE_WORKDIR/apptainer_cache"
 
-DATA_PATH="DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:6}/$BLOB_ID"
+DATA_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:6}/$BLOB_ID"
 if [ ! -f "$DATA_PATH" ]; then
     echo "Error: Data file does not exist at $DATA_PATH"
     echo "Please check the BLOB ID."
@@ -53,17 +62,6 @@ RESULTS_PATH="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/results/blobs/$BLOB_
 if [ -d "$RESULTS_PATH" ]; then
     echo "Error: Run directory already exists at $RESULTS_PATH"
     echo "Please use a different RUN ID or remove the existing directory."
-    exit 1
-fi
-
-if [ -z "$CONFIG_PATH" ]; then
-    # Use default config
-    CONFIG_FILE="$DANDI_COMPUTE_DIR/dandi-compute/pipeline-aind+ephys/default.config"
-else
-    CONFIG_FILE="$DANDI_COMPUTE_DIR/dandi-compute/pipeline-aind+ephys/blobs/$BLOD_ID/run-$RUN_ID/$CONFIG_PATH"
-fi
-if [ ! -f "$CONFIG_PATH" ]; then
-    echo "Error: Config file does not exist at $CONFIG_PATH"
     exit 1
 fi
 
