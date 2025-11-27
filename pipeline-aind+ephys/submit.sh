@@ -8,7 +8,7 @@ if [ -n "$3" ]; then
 fi
 
 # Create temporary job script
-JOB_SCRIPT=$(mktemp ~/tmp/slurm_job.sh)
+JOB_SCRIPT=$(mktemp $HOME/tmp/slurm_job.XXXXXX.sh)
 
 cat > "$JOB_SCRIPT" <<'EOT'
 #!/bin/bash
