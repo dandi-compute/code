@@ -62,10 +62,10 @@ BASE_WORKDIR="$DANDI_COMPUTE_DIR/work"
 RUN_WORKDIR="$BASE_WORKDIR/blobs/$BLOB_ID/run-$RUN_ID"
 NXF_APPTAINER_CACHEDIR="$BASE_WORKDIR/apptainer_cache"
 
-DATA_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:6}/$BLOB_ID"
+DATA_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
 if [ ! -e "$DATA_PATH" ]; then
     echo "Error: Data file does not exist at $DATA_PATH"
-    echo "Please check the BLOB ID."
+    echo "Please check the blob ID."
     exit 1
 fi
 
