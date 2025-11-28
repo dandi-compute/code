@@ -25,7 +25,11 @@ module load apptainer
 
 conda activate /orcd/data/dandi/001/env_nf
 
-BLOB_ID="$(python -c 'import os;import dandi.dandiapi; print(dandi.dandiapi.DandiAPIClient(token=os.getenv(key=\"DANDI_API_KEY\")).get_dandiset(dandiset_id=\"$DANDISET_ID\").get_asset_by_path(path=\"$PATH_IN_DANDISET\").blob)')"
+BLOB_ID="$(python -c \
+    'import os; import dandi.dandiapi; \
+     print(dandi.dandiapi.DandiAPIClient(token=os.getenv(key="DANDI_API_KEY")) \
+           .get_dandiset(dandiset_id="$DANDISET_ID") \
+           .get_asset_by_path(path="$PATH_IN_DANDISET").blob)')"
 RUN_ID="$(python -c 'import uuid; print(str(uuid.uuid4())[:8])')"
 CONFIG_PATH="$3"
 
@@ -57,18 +61,24 @@ echo "Config file: $CONFIG_FILE"
 echo ""
 
 PIPELINE_PATH="$DANDI_COMPUTE_DIR/aind-ephys-pipeline.source"
+
 BASE_WORKDIR="$DANDI_COMPUTE_DIR/work"
-RUN_WORKDIR="$BASE_WORKDIR/blobs/$BLOB_ID/run-$RUN_ID"
+RUN_WORKDIR="$BASE_WORKDIR/blob-$BLOB_ID/run-$RUN_ID"
+mkdir -p "$RUN_WORKDIR"
+
 NXF_APPTAINER_CACHEDIR="$BASE_WORKDIR/apptainer_cache"
 
-DATA_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
-if [ ! -e "$DATA_PATH" ]; then
-    echo "Error: Data file does not exist at $DATA_PATH"
+TRUE_DATA_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
+if [ ! -e "$TRUE_DATA_PATH" ]; then
+    echo "Error: Data file does not exist at $TRUE_DATA_PATH"
     echo "Please check the blob ID."
     exit 1
 fi
+SOURCE_DATA="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blobs/$BLOB_ID/derived/sourcedata"
+mkdir -p "$SOURCE_DATA"
+ln -sf "$TRUE_DATA_PATH" "$SOURCE_DATA/$(basename "$TRUE_DATA_PATH")"
 
-RESULTS_PATH="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/results/blobs/$BLOB_ID/run-$RUN_ID/results"
+RESULTS_PATH="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blobs/$BLOB_ID/run-$RUN_ID/results"
 if [ -d "$RESULTS_PATH" ]; then
     echo "Error: Run directory already exists at $RESULTS_PATH"
     echo "Please use a different RUN ID or remove the existing directory."
@@ -90,7 +100,7 @@ exit 0
 EOT
 
 # Submit the job and pass script args so $1/$2/$3 are populated in the job script
-sbatch --output "/orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_run_${RUN_ID}.log" "$JOB_SCRIPT" "$DANDISET_ID" "$PATH_IN_DANDISET" "$CONFIG_PATH"
+sbatch --output "/orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_run_job-%j.log" "$JOB_SCRIPT" "$DANDISET_ID" "$PATH_IN_DANDISET" "$CONFIG_PATH"
 
 # Clean up
 rm -f "$JOB_SCRIPT"
