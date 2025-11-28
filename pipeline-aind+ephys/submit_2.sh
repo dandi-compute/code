@@ -25,11 +25,7 @@ module load apptainer
 
 conda activate /orcd/data/dandi/001/env_nf
 
-BLOB_ID="$(python -c \
-    'import os; import dandi.dandiapi; \
-     print(dandi.dandiapi.DandiAPIClient(token=os.getenv(key="DANDI_API_KEY")) \
-           .get_dandiset(dandiset_id="$DANDISET_ID") \
-           .get_asset_by_path(path="$PATH_IN_DANDISET").blob)')"
+BLOB_ID=BLOB_ID="$(python -c 'import os;import dandi.dandiapi; print(dandi.dandiapi.DandiAPIClient(token=os.getenv(key=\"DANDI_API_KEY\")).get_dandiset(dandiset_id=\"$DANDISET_ID\").get_asset_by_path(path=\"$PATH_IN_DANDISET\").blob)')"
 RUN_ID="$(python -c 'import uuid; print(str(uuid.uuid4())[:8])')"
 CONFIG_PATH="$3"
 
@@ -100,7 +96,7 @@ exit 0
 EOT
 
 # Submit the job and pass script args so $1/$2/$3 are populated in the job script
-sbatch --output "/orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_run_job-%j.log" "$JOB_SCRIPT" "$DANDISET_ID" "$PATH_IN_DANDISET" "$CONFIG_PATH"
+sbatch --output "/orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_job-%j.log" "$JOB_SCRIPT" "$DANDISET_ID" "$PATH_IN_DANDISET" "$CONFIG_PATH"
 
 # Clean up
 rm -f "$JOB_SCRIPT"
