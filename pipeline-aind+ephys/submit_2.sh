@@ -12,14 +12,20 @@ JOB_SCRIPT=$(mktemp $HOME/tmp/slurm_job.XXXXXX.sh)
 
 cat > "$JOB_SCRIPT" <<'EOT'
 #!/bin/bash
-#SBATCH --job-name=AIND-Ephys-Pipeline
+#SBATCH --job-name=pipeline-aind+ephys
 #SBATCH --mem=16GB
 #SBATCH --partition=mit_normal
 #SBATCH --time=4:00:00
 
 # File has been modified from AIND docs for SLURM submission
 
-BLOB_ID="$(python -c 'import dandi.dandiapi; print(dandi.dandiapi.DandiAPIClient().get_dandiset(dandiset_id=\"$DANDISET_ID\").get_asset_by_path(path=\"$PATH_IN_DANDISET\").blob)')"
+source /etc/profile.d/modules.sh
+module load miniforge
+module load apptainer
+
+conda activate /orcd/data/dandi/001/env_nf
+
+BLOB_ID="$(python -c 'import os;import dandi.dandiapi; print(dandi.dandiapi.DandiAPIClient(token=os.getenv(key=\"DANDI_API_KEY\")).get_dandiset(dandiset_id=\"$DANDISET_ID\").get_asset_by_path(path=\"$PATH_IN_DANDISET\").blob)')"
 RUN_ID="$(python -c 'import uuid; print(str(uuid.uuid4())[:8])')"
 CONFIG_PATH="$3"
 
@@ -49,13 +55,6 @@ echo "Blob ID: $BLOB_ID"
 echo "Run ID: $RUN_ID"
 echo "Config file: $CONFIG_FILE"
 echo ""
-
-# modify this section to make the nextflow command available to your environment
-source /etc/profile.d/modules.sh
-module load miniforge
-module load apptainer
-
-conda activate /orcd/data/dandi/001/env_nf
 
 PIPELINE_PATH="$DANDI_COMPUTE_DIR/aind-ephys-pipeline.source"
 BASE_WORKDIR="$DANDI_COMPUTE_DIR/work"
@@ -91,7 +90,7 @@ exit 0
 EOT
 
 # Submit the job and pass script args so $1/$2/$3 are populated in the job script
-sbatch --output "/orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_job-%j_blob_${BLOB_ID}_run_${RUN_ID}.log" "$JOB_SCRIPT" "$BLOB_ID" "$RUN_ID" "$CONFIG_PATH"
+sbatch --output "/orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_run_${RUN_ID}.log" "$JOB_SCRIPT" "$DANDISET_ID" "$PATH_IN_DANDISET" "$CONFIG_PATH"
 
 # Clean up
 rm -f "$JOB_SCRIPT"
