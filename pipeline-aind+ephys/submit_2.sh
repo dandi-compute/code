@@ -72,7 +72,7 @@ if [ ! -e "$TRUE_DATA_PATH" ]; then
 fi
 SOURCE_DATA="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blobs/$BLOB_ID/derived/sourcedata"
 mkdir -p "$SOURCE_DATA"
-ln -sf "$TRUE_DATA_PATH" "$SOURCE_DATA/$(basename "$TRUE_DATA_PATH")"
+ln -sf "$TRUE_DATA_PATH" "$SOURCE_DATA/$PATH_IN_DANDISET"
 
 RESULTS_PATH="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blobs/$BLOB_ID/run-$RUN_ID/results"
 if [ -d "$RESULTS_PATH" ]; then
