@@ -76,9 +76,11 @@ fi
 echo "True data path: $TRUE_DATA_PATH"
 
 SOURCE_DATA="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blobs/$BLOB_ID/derived/sourcedata"
-SYMLINK_PATH="$SOURCE_DATA/$PATH_IN_DANDISET"
-mkdir -p "$(dirname "$SYMLINK_PATH")"
-ln -sf "$TRUE_DATA_PATH" "$SYMLINK_PATH"
+SYMLINK_PATH="$SOURCE_DATA/$(basename "$PATH_IN_DANDISET")"
+if [ ! -e "$SYMLINK_PATH" ]; then
+    mkdir -p "$(dirname "$SYMLINK_PATH")"
+    ln -sf "$TRUE_DATA_PATH" "$SYMLINK_PATH"
+fi
 
 echo "Symlinked source data: $SOURCE_DATA"
 echo ""
