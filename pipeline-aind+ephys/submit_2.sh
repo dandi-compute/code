@@ -25,7 +25,7 @@ module load apptainer
 
 conda activate /orcd/data/dandi/001/env_nf
 
-BLOB_ID="$(python -c 'import os;import dandi.dandiapi; print(dandi.dandiapi.DandiAPIClient(token=os.getenv(key=\"DANDI_API_KEY\")).get_dandiset(dandiset_id=\"$DANDISET_ID\").get_asset_by_path(path=\"$PATH_IN_DANDISET\").blob)')"
+BLOB_ID="$(python -c "import os; import dandi.dandiapi; print(dandi.dandiapi.DandiAPIClient(token=os.getenv('DANDI_API_KEY')).get_dandiset(dandiset_id='$DANDISET_ID').get_asset_by_path(path='$PATH_IN_DANDISET').blob)")"
 RUN_ID="$(python -c 'import uuid; print(str(uuid.uuid4())[:8])')"
 CONFIG_PATH="$3"
 
