@@ -1,10 +1,11 @@
 #!/bin/bash
 
-DANDISET_ID="$1"
-PATH_IN_DANDISET="$2"
+TOKEN="$1"
+DANDISET_ID="$2"
+PATH_IN_DANDISET="$3"
 CONFIG_PATH=""
-if [ -n "$3" ]; then
-    CONFIG_PATH="$3"
+if [ -n "$4" ]; then
+    CONFIG_PATH="$4"
 fi
 
 # Create temporary job script
@@ -12,7 +13,6 @@ JOB_SCRIPT=$(mktemp $HOME/tmp/slurm_job.XXXXXX.sh)
 
 cat > "$JOB_SCRIPT" <<'EOT'
 #!/bin/bash
-#SBATCH --export=ALL
 #SBATCH --job-name=pipeline-aind+ephys
 #SBATCH --mem=16GB
 #SBATCH --partition=mit_normal
@@ -26,9 +26,12 @@ module load apptainer
 
 conda activate /orcd/data/dandi/001/env_nf
 
-BLOB_ID="$(python get_blob_id.py $DANDI_API_KEY $DANDISET_ID $PATH_IN_DANDISET)"
+TOKEN="$1"
+DANDISET_ID="$2"
+PATH_IN_DANDISET="$3"
+BLOB_ID="$(python get_blob_id.py $TOKEN $DANDISET_ID $PATH_IN_DANDISET)"
 RUN_ID="$(python -c 'import uuid; print(str(uuid.uuid4())[:8])')"
-CONFIG_PATH="$3"
+CONFIG_PATH="$4"
 
 # Base dirs (define before using them)
 BASE_DANDI_DIR="/orcd/data/dandi/001"
@@ -99,7 +102,7 @@ exit 0
 EOT
 
 # Submit the job and pass script args so $1/$2/$3 are populated in the job script
-sbatch --output "/orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_job-%j.log" "$JOB_SCRIPT" "$DANDISET_ID" "$PATH_IN_DANDISET" "$CONFIG_PATH"
+sbatch --output "/orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_job-%j.log" "$JOB_SCRIPT" "$TOKEN" "$DANDISET_ID" "$PATH_IN_DANDISET" "$CONFIG_PATH"
 
 # Clean up
 rm -f "$JOB_SCRIPT"
