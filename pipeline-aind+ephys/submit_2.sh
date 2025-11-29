@@ -63,7 +63,6 @@ if [ ! -e "$TRUE_DATA_PATH" ]; then
     echo "Please check the blob ID."
     exit 1
 fi
-echo "True data path: $TRUE_DATA_PATH"
 
 SOURCE_DATA="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blobs/$BLOB_ID/derived/sourcedata"
 SYMLINK_PATH="$SOURCE_DATA/$(basename "$PATH_IN_DANDISET")"
@@ -83,7 +82,8 @@ echo "Config file: $CONFIG_FILE"
 echo "Base work directory: $BASE_WORKDIR"
 echo "Runner work directory: $RUN_WORKDIR"
 echo "Apptainer cache: $NXF_APPTAINER_CACHEDIR"
-echo "Symlinked source data: $SOURCE_DATA"
+echo "Source data: $SOURCE_DATA"
+echo "True data path: $TRUE_DATA_PATH"
 echo ""
 
 RESULTS_PATH="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blobs/$BLOB_ID/derived/run-$RUN_ID/results"
@@ -97,7 +97,7 @@ DATA_PATH="$SOURCE_DATA" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$N
     -C "$CONFIG_FILE" \
     -log "$RESULTS_PATH/nextflow/nextflow.log" \
     run "$PIPELINE_PATH/pipeline/main_multi_backend.nf" \
-    --work-dir "$RUN_WORKDIR" \
+    -work-dir "$RUN_WORKDIR" \  # Yes, this is only one dash (not the usual two...)
     --job_dispatch_args "--input nwb" \
     --nwb_ecephys_args "--backend hdf5"
 
@@ -106,7 +106,7 @@ hostname
 exit 0
 EOT
 
-sbatch --output "/orcd/data/dandi/001/all-dandi-compute/001675/pipeline-aind+ephys/logs/job-$j.log" \
+sbatch --output "/orcd/data/dandi/001/all-dandi-compute/001675/pipeline-aind+ephys/logs/job-%j.log" \
   "$JOB_SCRIPT" "$TOKEN" "$DANDISET_ID" "$PATH_IN_DANDISET" "$CONFIG_PATH"
 
 # Clean up
