@@ -54,7 +54,6 @@ echo ""
 echo "Blob ID: $BLOB_ID"
 echo "Run ID: $RUN_ID"
 echo "Config file: $CONFIG_FILE"
-echo ""
 
 PIPELINE_PATH="$DANDI_COMPUTE_DIR/aind-ephys-pipeline.source"
 
@@ -73,6 +72,9 @@ fi
 SOURCE_DATA="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blobs/$BLOB_ID/derived/sourcedata"
 mkdir -p "$SOURCE_DATA"
 ln -sf "$TRUE_DATA_PATH" "$SOURCE_DATA/$PATH_IN_DANDISET"
+
+echo "Data path: $SOURCE_DATA"
+echo ""
 
 RESULTS_PATH="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blobs/$BLOB_ID/run-$RUN_ID/results"
 if [ -d "$RESULTS_PATH" ]; then
