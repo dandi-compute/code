@@ -73,13 +73,14 @@ if [ ! -e "$TRUE_DATA_PATH" ]; then
     echo "Please check the blob ID."
     exit 1
 fi
-echo "Data path: $TRUE_DATA_PATH"
+echo "True data path: $TRUE_DATA_PATH"
 
 SOURCE_DATA="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blobs/$BLOB_ID/derived/sourcedata"
-mkdir -p "$SOURCE_DATA"
-ln -sf "$TRUE_DATA_PATH" "$SOURCE_DATA/$PATH_IN_DANDISET"
+SYMLINK_PATH="$SOURCE_DATA/$PATH_IN_DANDISET"
+mkdir -p "$(dirname "$SYMLINK_PATH")"
+ln -sf "$TRUE_DATA_PATH" "$SYMLINK_PATH"
 
-echo "Data path: $SOURCE_DATA"
+echo "Symlinked source data: $SOURCE_DATA"
 echo ""
 
 RESULTS_PATH="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blobs/$BLOB_ID/run-$RUN_ID/results"
