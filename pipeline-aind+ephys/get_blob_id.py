@@ -3,8 +3,7 @@ import argparse
 import dandi.dandiapi
 
 def get_blob_id(*, token: str, dandiset_id: str, path: str) -> str:
-    handled_token = None if token == "" else token
-    client = dandi.dandiapi.DandiAPIClient(token=handled_token)
+    client = dandi.dandiapi.DandiAPIClient(token=token)
     dandiset = client.get_dandiset(dandiset_id=dandiset_id)
     asset = dandiset.get_asset_by_path(path=path)
     return asset.blob
