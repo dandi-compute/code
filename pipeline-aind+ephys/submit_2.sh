@@ -12,6 +12,7 @@ JOB_SCRIPT=$(mktemp $HOME/tmp/slurm_job.XXXXXX.sh)
 
 cat > "$JOB_SCRIPT" <<'EOT'
 #!/bin/bash
+#SBATCH --export=ALL
 #SBATCH --job-name=pipeline-aind+ephys
 #SBATCH --mem=16GB
 #SBATCH --partition=mit_normal
@@ -26,7 +27,6 @@ module load apptainer
 conda activate /orcd/data/dandi/001/env_nf
 
 BLOB_ID="$(python get_blob_id.py $DANDI_API_KEY $DANDISET_ID $PATH_IN_DANDISET)"
-
 RUN_ID="$(python -c 'import uuid; print(str(uuid.uuid4())[:8])')"
 CONFIG_PATH="$3"
 
