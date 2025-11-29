@@ -73,6 +73,8 @@ if [ ! -e "$TRUE_DATA_PATH" ]; then
     echo "Please check the blob ID."
     exit 1
 fi
+echo "Data path: $TRUE_DATA_PATH"
+
 SOURCE_DATA="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blobs/$BLOB_ID/derived/sourcedata"
 mkdir -p "$SOURCE_DATA"
 ln -sf "$TRUE_DATA_PATH" "$SOURCE_DATA/$PATH_IN_DANDISET"
