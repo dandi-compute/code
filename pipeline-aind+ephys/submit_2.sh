@@ -93,7 +93,7 @@ if [ -d "$RESULTS_PATH" ]; then
 fi
 
 # Run nextflow
-DATA_PATH="SOURCE_DATA" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
+DATA_PATH="$SOURCE_DATA" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
     -C "$CONFIG_FILE" \
     -log "$RESULTS_PATH/nextflow/nextflow.log" \
     run "$PIPELINE_PATH/pipeline/main_multi_backend.nf" \
