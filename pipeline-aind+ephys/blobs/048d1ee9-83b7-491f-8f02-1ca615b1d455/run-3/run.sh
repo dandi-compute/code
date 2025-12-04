@@ -1,0 +1,1 @@
+bash submit.sh 001675 example-data/aind-sample.nwb

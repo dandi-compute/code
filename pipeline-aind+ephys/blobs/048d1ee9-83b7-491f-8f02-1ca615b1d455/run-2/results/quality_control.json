@@ -1,0 +1,359 @@
+{
+   "describedBy": "https://raw.githubusercontent.com/AllenNeuralDynamics/aind-data-schema/main/src/aind_data_schema/core/quality_control.py",
+   "schema_version": "1.2.2",
+   "evaluations": [
+      {
+         "modality": {
+            "name": "Extracellular electrophysiology",
+            "abbreviation": "ecephys"
+         },
+         "stage": "Raw data",
+         "name": "Raw Data",
+         "description": "Raw Data",
+         "metrics": [
+            {
+               "name": "Raw data block0_acquisition-ElectricalSeriesRaw_recording1 ",
+               "value": {
+                  "value": "",
+                  "options": [
+                     "Normal",
+                     "No spikes",
+                     "Noisy"
+                  ],
+                  "status": [
+                     "Pass",
+                     "Fail",
+                     "Fail"
+                  ],
+                  "type": "dropdown"
+               },
+               "status_history": [
+                  {
+                     "evaluator": "",
+                     "status": "Pending",
+                     "timestamp": "2025-11-25T19:42:16.146380-05:00"
+                  }
+               ],
+               "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 raw data. No timeseries link found for block0_acquisition-ElectricalSeriesRaw_recording1.",
+               "reference": "quality_control/block0_acquisition-ElectricalSeriesRaw_recording1/traces_raw.png",
+               "evaluated_assets": null
+            }
+         ],
+         "tags": null,
+         "notes": null,
+         "allow_failed_metrics": false,
+         "latest_status": "Pending",
+         "created": "2025-11-26T00:42:20.613883Z"
+      },
+      {
+         "modality": {
+            "name": "Extracellular electrophysiology",
+            "abbreviation": "ecephys"
+         },
+         "stage": "Raw data",
+         "name": "PSD",
+         "description": "PSD",
+         "metrics": [
+            {
+               "name": "PSD (Wide Band) block0_acquisition-ElectricalSeriesRaw_recording1 ",
+               "value": null,
+               "status_history": [
+                  {
+                     "evaluator": "",
+                     "status": "Pass",
+                     "timestamp": "2025-11-25T19:42:16.146380-05:00"
+                  }
+               ],
+               "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 wide-band power spectrum density",
+               "reference": "quality_control/block0_acquisition-ElectricalSeriesRaw_recording1/psd_wide.png",
+               "evaluated_assets": null
+            },
+            {
+               "name": "PSD (High Frequency) block0_acquisition-ElectricalSeriesRaw_recording1 ",
+               "value": {
+                  "value": "",
+                  "options": [
+                     "No contamination",
+                     "High frequency contamination"
+                  ],
+                  "status": [
+                     "Pass",
+                     "Fail"
+                  ],
+                  "type": "dropdown"
+               },
+               "status_history": [
+                  {
+                     "evaluator": "",
+                     "status": "Pending",
+                     "timestamp": "2025-11-25T19:42:16.146380-05:00"
+                  }
+               ],
+               "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 high-frequency power spectrum density",
+               "reference": "quality_control/block0_acquisition-ElectricalSeriesRaw_recording1/psd_hf.png",
+               "evaluated_assets": null
+            },
+            {
+               "name": "PSD (Low Frequency) block0_acquisition-ElectricalSeriesRaw_recording1",
+               "value": {
+                  "value": "",
+                  "options": [
+                     "No contamination",
+                     "Line (60 Hz) contamination"
+                  ],
+                  "status": [
+                     "Pass",
+                     "Fail"
+                  ],
+                  "type": "dropdown"
+               },
+               "status_history": [
+                  {
+                     "evaluator": "",
+                     "status": "Pending",
+                     "timestamp": "2025-11-25T19:42:16.146380-05:00"
+                  }
+               ],
+               "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 low-frequency power spectrum density",
+               "reference": "quality_control/block0_acquisition-ElectricalSeriesRaw_recording1/psd_lf.png",
+               "evaluated_assets": null
+            }
+         ],
+         "tags": null,
+         "notes": null,
+         "allow_failed_metrics": false,
+         "latest_status": "Pending",
+         "created": "2025-11-26T00:42:20.613943Z"
+      },
+      {
+         "modality": {
+            "name": "Extracellular electrophysiology",
+            "abbreviation": "ecephys"
+         },
+         "stage": "Raw data",
+         "name": "Noise",
+         "description": "Noise",
+         "metrics": [
+            {
+               "name": "RMS block0_acquisition-ElectricalSeriesRaw_recording1",
+               "value": {
+                  "value": "",
+                  "options": [
+                     "Good",
+                     "No out channels detected"
+                  ],
+                  "status": [
+                     "Pass",
+                     "Fail"
+                  ],
+                  "type": "dropdown"
+               },
+               "status_history": [
+                  {
+                     "evaluator": "",
+                     "status": "Pass",
+                     "timestamp": "2025-11-25T19:42:16.146380-05:00"
+                  }
+               ],
+               "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 RMS",
+               "reference": "quality_control/block0_acquisition-ElectricalSeriesRaw_recording1/rms.png",
+               "evaluated_assets": null
+            }
+         ],
+         "tags": null,
+         "notes": null,
+         "allow_failed_metrics": false,
+         "latest_status": "Pass",
+         "created": "2025-11-26T00:42:20.613969Z"
+      },
+      {
+         "modality": {
+            "name": "Extracellular electrophysiology",
+            "abbreviation": "ecephys"
+         },
+         "stage": "Raw data",
+         "name": "Drift",
+         "description": "Drift",
+         "metrics": [
+            {
+               "name": "Probe Drift - block0_acquisition-ElectricalSeriesRaw_recording1",
+               "value": {
+                  "value": "",
+                  "options": [
+                     "Good",
+                     "High drift",
+                     "Bad drift estimation"
+                  ],
+                  "status": [
+                     "Pass",
+                     "Fail",
+                     "Fail"
+                  ],
+                  "type": "dropdown"
+               },
+               "status_history": [
+                  {
+                     "evaluator": "",
+                     "status": "Pending",
+                     "timestamp": "2025-11-25T19:42:19.066458-05:00"
+                  }
+               ],
+               "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 probe drift",
+               "reference": "quality_control/block0_acquisition-ElectricalSeriesRaw_recording1/drift_map.png",
+               "evaluated_assets": null
+            }
+         ],
+         "tags": null,
+         "notes": null,
+         "allow_failed_metrics": false,
+         "latest_status": "Pending",
+         "created": "2025-11-26T00:42:20.613983Z"
+      },
+      {
+         "modality": {
+            "name": "Extracellular electrophysiology",
+            "abbreviation": "ecephys"
+         },
+         "stage": "Processing",
+         "name": "Unit Yield",
+         "description": "Unit Yield",
+         "metrics": [
+            {
+               "name": "Unit Metrics Yield - block0_acquisition-ElectricalSeriesRaw_recording1",
+               "value": {
+                  "value": "",
+                  "options": [
+                     "Good",
+                     "Low Yield",
+                     "High Noise"
+                  ],
+                  "status": [
+                     "Pass",
+                     "Fail",
+                     "Fail"
+                  ],
+                  "type": "dropdown"
+               },
+               "status_history": [
+                  {
+                     "evaluator": "",
+                     "status": "Pending",
+                     "timestamp": "2025-11-25T19:42:19.067242-05:00"
+                  }
+               ],
+               "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 unit metrics yield. No sorting summary link found for block0_acquisition-ElectricalSeriesRaw_recording1.",
+               "reference": "quality_control/block0_acquisition-ElectricalSeriesRaw_recording1/unit_yield.png",
+               "evaluated_assets": null
+            }
+         ],
+         "tags": null,
+         "notes": null,
+         "allow_failed_metrics": false,
+         "latest_status": "Pending",
+         "created": "2025-11-26T00:42:20.613997Z"
+      },
+      {
+         "modality": {
+            "name": "Extracellular electrophysiology",
+            "abbreviation": "ecephys"
+         },
+         "stage": "Processing",
+         "name": "ISI Visual Area Label",
+         "description": "ISI Visual Area Label",
+         "metrics": [
+            {
+               "name": "Manual annotation of ISI Visual Area Label - block0_acquisition-ElectricalSeriesRaw_recording1",
+               "value": {
+                  "value": "",
+                  "options": [
+                     "VISp",
+                     "VISa",
+                     "VISal",
+                     "VISam",
+                     "VISl",
+                     "VISli",
+                     "VISpl",
+                     "VISpm",
+                     "VISpor",
+                     "VISrl",
+                     "VIS"
+                  ],
+                  "status": [
+                     "Pass",
+                     "Pass",
+                     "Pass",
+                     "Pass",
+                     "Pass",
+                     "Pass",
+                     "Pass",
+                     "Pass",
+                     "Pass",
+                     "Pass",
+                     "Pass"
+                  ],
+                  "type": "dropdown"
+               },
+               "status_history": [
+                  {
+                     "evaluator": "",
+                     "status": "Pass",
+                     "timestamp": "2025-11-25T19:42:19.067242-05:00"
+                  }
+               ],
+               "description": "Manual annotation of visual area label based on ISI imaging for block0_acquisition-ElectricalSeriesRaw_recording1",
+               "reference": null,
+               "evaluated_assets": null
+            }
+         ],
+         "tags": null,
+         "notes": null,
+         "allow_failed_metrics": false,
+         "latest_status": "Pass",
+         "created": "2025-11-26T00:42:20.614008Z"
+      },
+      {
+         "modality": {
+            "name": "Extracellular electrophysiology",
+            "abbreviation": "ecephys"
+         },
+         "stage": "Processing",
+         "name": "Firing Rate",
+         "description": "Firing Rate",
+         "metrics": [
+            {
+               "name": "Firing rate - block0_acquisition-ElectricalSeriesRaw_recording1",
+               "value": {
+                  "value": "",
+                  "options": [
+                     "No problems detected",
+                     "Seizure",
+                     "Firing Rate Gap"
+                  ],
+                  "status": [
+                     "Pass",
+                     "Fail",
+                     "Fail"
+                  ],
+                  "type": "checkbox"
+               },
+               "status_history": [
+                  {
+                     "evaluator": "",
+                     "status": "Pending",
+                     "timestamp": "2025-11-25T19:42:19.067242-05:00"
+                  }
+               ],
+               "description": "Evaluation of block0_acquisition-ElectricalSeriesRaw_recording1 firing rate",
+               "reference": "quality_control/block0_acquisition-ElectricalSeriesRaw_recording1/firing_rate.png",
+               "evaluated_assets": null
+            }
+         ],
+         "tags": null,
+         "notes": null,
+         "allow_failed_metrics": false,
+         "latest_status": "Pending",
+         "created": "2025-11-26T00:42:20.614021Z"
+      }
+   ],
+   "notes": null
+}
