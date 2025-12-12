@@ -45,7 +45,7 @@ RUN_WORKDIR="$BASE_WORKDIR/blob-$BLOB_ID/run-$RUN_ID"
 NXF_APPTAINER_CACHEDIR="$BASE_WORKDIR/apptainer_cache"
 
 TRUE_DATA_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
-SOURCE_DATA="$DANDISET_DIR/pipeline-aind+ephys/blobs-$BLOB_ID/sourcedata"
+SOURCE_DATA="$DANDISET_DIR/pipeline-aind+ephys/blob-$BLOB_ID/sourcedata"
 SYMLINK_PATH="$SOURCE_DATA/$(basename "$BLOB_ID.nwb")"
 
 RESULTS_PATH="$DANDISET_DIR/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/results"
@@ -100,7 +100,7 @@ conda activate /orcd/data/dandi/001/env_nf
 
 DATA_PATH="$SOURCE_DATA" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
     -C "$CONFIG_FILE" \
-    -log "$RESULTS_PATH/nextflow/nextflow.log" \
+    -log "$LOG_PATH/nextflow.log" \
     run "$PIPELINE_PATH/pipeline/main_multi_backend.nf" \
     --work-dir "$RUN_WORKDIR" \
     --job_dispatch_args "--input nwb" \
