@@ -104,7 +104,8 @@ EOT
 # Submit the job and pass script args so $1/$2/$3 are populated in the job script
 LOG_PATH="/orcd/data/dandi/001/all-dandi-compute/001675/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/logs/job-%j.log"
 
-if [ -n "$(ls -A "$(dirname "$LOG_PATH")" 2>/dev/null)" ]; then    echo "Error: Log directory is not empty at $(dirname "LOG_PATH")"
+if [ -n "$(ls -A "$(dirname "$LOG_PATH")" 2>/dev/null)" ]; then
+    echo "Error: Log directory is not empty at $(dirname "$LOG_PATH")"
     echo "Please use a different RUN ID or remove the existing directory."
     exit 1
 fi
