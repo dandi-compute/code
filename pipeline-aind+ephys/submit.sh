@@ -62,12 +62,35 @@ BASE_WORKDIR="$DANDI_COMPUTE_DIR/work"
 RUN_WORKDIR="$BASE_WORKDIR/blobs/$BLOB_ID/run-$RUN_ID"
 NXF_APPTAINER_CACHEDIR="$BASE_WORKDIR/apptainer_cache"
 
-DATA_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
-if [ ! -e "$DATA_PATH" ]; then
-    echo "Error: Data file does not exist at $DATA_PATH"
+TRUE_DATA_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
+if [ ! -e "$TRUE_DATA_PATH" ]; then
+    echo "Error: Data file does not exist at $TRUE_DATA_PATH"
     echo "Please check the blob ID."
     exit 1
 fi
+
+SOURCE_DATA="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blobs-$BLOB_ID/sourcedata"
+SYMLINK_PATH="$SOURCE_DATA/$(basename "$BLOB_ID.nwb")"
+if [ ! -e "$SYMLINK_PATH" ]; then
+    mkdir -p "$(dirname "$SYMLINK_PATH")"
+    ln -sf "$TRUE_DATA_PATH" "$SYMLINK_PATH"
+fi
+
+# Welcome message and input display
+echo ""
+echo "Deploying AIND Ephys Pipeline on MIT Engaging cluster"
+echo "====================================================="
+echo ""
+echo "Blob ID: $BLOB_ID"
+echo "Run ID: $RUN_ID"
+echo "Config file: $CONFIG_FILE"
+echo "Base work directory: $BASE_WORKDIR"
+echo "Runner work directory: $RUN_WORKDIR"
+echo "Apptainer cache: $NXF_APPTAINER_CACHEDIR"
+echo "True data path: $TRUE_DATA_PATH"
+echo "Source data: $SOURCE_DATA"
+echo "Symlink path: $SYMLINK_PATH"
+echo ""
 
 RESULTS_PATH="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/results"
 if [ -d "$RESULTS_PATH" ]; then
