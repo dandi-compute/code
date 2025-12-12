@@ -13,6 +13,7 @@ if [ -n "$(ls -A "$(dirname "$LOG_PATH")" 2>/dev/null)" ]; then
     echo "Please use a different RUN ID or remove the existing directory."
     exit 1
 fi
+mkdir -p "$(dirname "$LOG_PATH")"
 
 JOB_SCRIPT=$(mktemp $HOME/tmp/slurm_job.XXXXXX.sh)
 
@@ -28,6 +29,7 @@ cat > "$JOB_SCRIPT" <<'EOT'
 BLOB_ID="$1"
 RUN_ID="$2"
 CONFIG_PATH="$3"
+LOG_PATH="$4"
 
 # Base dirs (define before using them)
 BASE_DANDI_DIR="/orcd/data/dandi/001"
@@ -109,8 +111,5 @@ hostname
 exit 0
 EOT
 
-mkdir -p "$(dirname "$LOG_PATH")"
-sbatch --output "$LOG_PATH" "$JOB_SCRIPT" "$BLOB_ID" "$RUN_ID" "$CONFIG_PATH"
-
-# Clean up
+sbatch --output "$LOG_PATH" "$JOB_SCRIPT" "$BLOB_ID" "$RUN_ID" "$CONFIG_PATH" "$LOG_PATH"
 rm -f "$JOB_SCRIPT"
