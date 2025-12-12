@@ -30,9 +30,9 @@ DANDI_ARCHIVE_DIR="$BASE_DANDI_DIR/s3dandiarchive"
 
 if [ -z "$CONFIG_PATH" ]; then
     # Use default config
-    CONFIG_FILE="$DANDI_COMPUTE_DIR/dandi-compute/pipeline-aind+ephys/default.config"
+    CONFIG_FILE="$DANDI_COMPUTE_DIR/001675/dandi-compute/pipeline-aind+ephys/default.config"
 else
-    CONFIG_FILE="$DANDI_COMPUTE_DIR/dandi-compute/pipeline-aind+ephys/blobs/$BLOB_ID/run-$RUN_ID/$CONFIG_PATH"
+    CONFIG_FILE="$DANDI_COMPUTE_DIR/001675/dandi-compute/pipeline-aind+ephys/blobs/$BLOB_ID/run-$RUN_ID/$CONFIG_PATH"
 fi
 
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -41,8 +41,9 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 PIPELINE_PATH="$DANDI_COMPUTE_DIR/aind-ephys-pipeline.source"
+
 BASE_WORKDIR="$DANDI_COMPUTE_DIR/work"
-RUN_WORKDIR="$BASE_WORKDIR/blobs/$BLOB_ID/run-$RUN_ID"
+RUN_WORKDIR="$BASE_WORKDIR/blob-$BLOB_ID/run-$RUN_ID"
 NXF_APPTAINER_CACHEDIR="$BASE_WORKDIR/apptainer_cache"
 
 TRUE_DATA_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
