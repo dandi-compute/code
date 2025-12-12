@@ -40,23 +40,6 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
-# Welcome message and input display
-echo ""
-echo "Deploying AIND Ephys Pipeline on MIT Engaging cluster"
-echo "====================================================="
-echo ""
-echo "BLOB ID: $BLOB_ID"
-echo "RUN ID: $RUN_ID"
-echo "CONFIG FILE: $CONFIG_FILE"
-echo ""
-
-# modify this section to make the nextflow command available to your environment
-source /etc/profile.d/modules.sh
-module load miniforge
-module load apptainer
-
-conda activate /orcd/data/dandi/001/env_nf
-
 PIPELINE_PATH="$DANDI_COMPUTE_DIR/aind-ephys-pipeline.source"
 BASE_WORKDIR="$DANDI_COMPUTE_DIR/work"
 RUN_WORKDIR="$BASE_WORKDIR/blobs/$BLOB_ID/run-$RUN_ID"
@@ -76,6 +59,13 @@ if [ ! -e "$SYMLINK_PATH" ]; then
     ln -sf "$TRUE_DATA_PATH" "$SYMLINK_PATH"
 fi
 
+RESULTS_PATH="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/results"
+if [ -d "$RESULTS_PATH" ]; then
+    echo "Error: Run directory already exists at $RESULTS_PATH"
+    echo "Please use a different RUN ID or remove the existing directory."
+    exit 1
+fi
+
 # Welcome message and input display
 echo ""
 echo "Deploying AIND Ephys Pipeline on MIT Engaging cluster"
@@ -92,14 +82,12 @@ echo "Source data: $SOURCE_DATA"
 echo "Symlink path: $SYMLINK_PATH"
 echo ""
 
-RESULTS_PATH="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/results"
-if [ -d "$RESULTS_PATH" ]; then
-    echo "Error: Run directory already exists at $RESULTS_PATH"
-    echo "Please use a different RUN ID or remove the existing directory."
-    exit 1
-fi
+source /etc/profile.d/modules.sh
+module load miniforge
+module load apptainer
 
-# Run nextflow
+conda activate /orcd/data/dandi/001/env_nf
+
 DATA_PATH="$DATA_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
     -C "$CONFIG_FILE" \
     -log "$RESULTS_PATH/nextflow/nextflow.log" \
