@@ -91,7 +91,9 @@ exit 0
 EOT
 
 # Submit the job and pass script args so $1/$2/$3 are populated in the job script
-sbatch --output "/orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_job-%j_blob_${BLOB_ID}_run_${RUN_ID}.log" "$JOB_SCRIPT" "$BLOB_ID" "$RUN_ID" "$CONFIG_PATH"
+LOG_DIR="/orcd/data/dandi/001/all-dandi-compute/001675/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/logs/job-%j.log"
+mkdir -p "$(dirname "$LOG_DIR")"
+sbatch --output "$LOG_DIR" "$JOB_SCRIPT" "$BLOB_ID" "$RUN_ID" "$CONFIG_PATH"
 
 # Clean up
 rm -f "$JOB_SCRIPT"
