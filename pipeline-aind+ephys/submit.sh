@@ -7,7 +7,13 @@ if [ -n "$3" ]; then
     CONFIG_PATH="$3"
 fi
 
-# Create temporary job script
+LOG_PATH="/orcd/data/dandi/001/all-dandi-compute/001675/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/logs/job-%j.log"
+if [ -n "$(ls -A "$(dirname "$LOG_PATH")" 2>/dev/null)" ]; then
+    echo "Error: Log directory is not empty at $(dirname "$LOG_PATH")"
+    echo "Please use a different RUN ID or remove the existing directory."
+    exit 1
+fi
+
 JOB_SCRIPT=$(mktemp $HOME/tmp/slurm_job.XXXXXX.sh)
 
 cat > "$JOB_SCRIPT" <<'EOT'
@@ -26,13 +32,14 @@ CONFIG_PATH="$3"
 # Base dirs (define before using them)
 BASE_DANDI_DIR="/orcd/data/dandi/001"
 DANDI_COMPUTE_DIR="$BASE_DANDI_DIR/all-dandi-compute"
+DANDISET_DIR="$DANDI_COMPUTE_DIR/dandi-compute/001675"
 DANDI_ARCHIVE_DIR="$BASE_DANDI_DIR/s3dandiarchive"
 
 if [ -z "$CONFIG_PATH" ]; then
     # Use default config
-    CONFIG_FILE="$DANDI_COMPUTE_DIR/001675/dandi-compute/pipeline-aind+ephys/default.config"
+    CONFIG_FILE="$DANDISET_DIR/pipeline-aind+ephys/default.config"
 else
-    CONFIG_FILE="$DANDI_COMPUTE_DIR/001675/dandi-compute/pipeline-aind+ephys/blobs/$BLOB_ID/run-$RUN_ID/$CONFIG_PATH"
+    CONFIG_FILE="$DANDISET_DIR/pipeline-aind+ephys/blobs-$BLOB_ID/run-$RUN_ID/$CONFIG_PATH"
 fi
 
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -101,15 +108,6 @@ hostname
 
 exit 0
 EOT
-
-# Submit the job and pass script args so $1/$2/$3 are populated in the job script
-LOG_PATH="/orcd/data/dandi/001/all-dandi-compute/001675/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/logs/job-%j.log"
-
-if [ -n "$(ls -A "$(dirname "$LOG_PATH")" 2>/dev/null)" ]; then
-    echo "Error: Log directory is not empty at $(dirname "$LOG_PATH")"
-    echo "Please use a different RUN ID or remove the existing directory."
-    exit 1
-fi
 
 mkdir -p "$(dirname "$LOG_PATH")"
 sbatch --output "$LOG_PATH" "$JOB_SCRIPT" "$BLOB_ID" "$RUN_ID" "$CONFIG_PATH"
