@@ -1,8 +1,0 @@
-{
-    "version": "0.103.0",
-    "dev_mode": false,
-    "object": "Motion",
-    "num_segments": 1,
-    "direction": "y",
-    "interpolation_method": "linear"
-}
