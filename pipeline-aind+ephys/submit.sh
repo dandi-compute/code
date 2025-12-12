@@ -69,7 +69,7 @@ if [ ! -e "$DATA_PATH" ]; then
     exit 1
 fi
 
-RESULTS_PATH="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/results/blobs/$BLOB_ID/run-$RUN_ID/results"
+RESULTS_PATH="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/results"
 if [ -d "$RESULTS_PATH" ]; then
     echo "Error: Run directory already exists at $RESULTS_PATH"
     echo "Please use a different RUN ID or remove the existing directory."
