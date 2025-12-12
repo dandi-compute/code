@@ -31,50 +31,50 @@ CONFIG_PATH="$3"
 
 # Base dirs (define before using them)
 BASE_DANDI_DIR="/orcd/data/dandi/001"
-DANDI_COMPUTE_DIR="$BASE_DANDI_DIR/all-dandi-compute"
-DANDISET_DIR="$DANDI_COMPUTE_DIR/dandi-compute/001675"
 DANDI_ARCHIVE_DIR="$BASE_DANDI_DIR/s3dandiarchive"
+DANDI_COMPUTE_BASE_DIR="$BASE_DANDI_DIR/all-dandi-compute"
+DANDI_COMPUTE_GIT_DIR="$DANDI_COMPUTE_BASE_DIR/dandi-compute"
+DANDISET_DIR="$DANDI_COMPUTE_BASE_DIR/001675"
+
+PIPELINE_PATH="$DANDI_COMPUTE_BASE_DIR/aind-ephys-pipeline.source"
+
+BASE_WORKDIR="$DANDI_COMPUTE_BASE_DIR/work"
+RUN_WORKDIR="$BASE_WORKDIR/blob-$BLOB_ID/run-$RUN_ID"
+NXF_APPTAINER_CACHEDIR="$BASE_WORKDIR/apptainer_cache"
+
+TRUE_DATA_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
+SOURCE_DATA="$DANDISET_DIR/pipeline-aind+ephys/blobs-$BLOB_ID/sourcedata"
+SYMLINK_PATH="$SOURCE_DATA/$(basename "$BLOB_ID.nwb")"
+
+RESULTS_PATH="$DANDISET_DIR/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/results"
 
 if [ -z "$CONFIG_PATH" ]; then
-    # Use default config
-    CONFIG_FILE="$DANDISET_DIR/pipeline-aind+ephys/default.config"
+    CONFIG_FILE="$DANDI_COMPUTE_GIT_DIR/pipeline-aind+ephys/default.config"
 else
-    CONFIG_FILE="$DANDISET_DIR/pipeline-aind+ephys/blobs-$BLOB_ID/run-$RUN_ID/$CONFIG_PATH"
+    CONFIG_FILE="$DANDI_COMPUTE_GIT_DIR/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/$CONFIG_PATH"
 fi
-
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Error: Config file does not exist at $CONFIG_FILE"
     exit 1
 fi
 
-PIPELINE_PATH="$DANDI_COMPUTE_DIR/aind-ephys-pipeline.source"
-
-BASE_WORKDIR="$DANDI_COMPUTE_DIR/work"
-RUN_WORKDIR="$BASE_WORKDIR/blob-$BLOB_ID/run-$RUN_ID"
-NXF_APPTAINER_CACHEDIR="$BASE_WORKDIR/apptainer_cache"
-
-TRUE_DATA_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
 if [ ! -e "$TRUE_DATA_PATH" ]; then
     echo "Error: Data file does not exist at $TRUE_DATA_PATH"
     echo "Please check the blob ID."
     exit 1
 fi
 
-SOURCE_DATA="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blobs-$BLOB_ID/sourcedata"
-SYMLINK_PATH="$SOURCE_DATA/$(basename "$BLOB_ID.nwb")"
 if [ ! -e "$SYMLINK_PATH" ]; then
     mkdir -p "$(dirname "$SYMLINK_PATH")"
     ln -sf "$TRUE_DATA_PATH" "$SYMLINK_PATH"
 fi
 
-RESULTS_PATH="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/results"
 if [ -d "$RESULTS_PATH" ]; then
     echo "Error: Run directory already exists at $RESULTS_PATH"
     echo "Please use a different RUN ID or remove the existing directory."
     exit 1
 fi
 
-# Welcome message and input display
 echo ""
 echo "Deploying AIND Ephys Pipeline on MIT Engaging cluster"
 echo "====================================================="
