@@ -46,6 +46,7 @@ NXF_APPTAINER_CACHEDIR="$WORKDIR/apptainer_cache"
 
 NWB_FILE_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
 RESULTS_PATH="$DANDISET_DIR/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/results"
+DATA_PATH="$(dirname "$NWB_FILE_PATH")"
 
 if [ -z "$CONFIG_PATH" ]; then
     CONFIG_FILE="$DANDI_COMPUTE_GIT_DIR/pipeline-aind+ephys/default.config"
@@ -73,14 +74,15 @@ echo ""
 echo "Deploying AIND Ephys Pipeline on MIT Engaging cluster"
 echo "====================================================="
 echo ""
+echo "dandi-compute checkout: $(git -C /orcd/data/dandi/001/all-dandi-compute/dandi-compute describe --tags --always)"
 echo "Blob ID: $BLOB_ID"
 echo "Run ID: $RUN_ID"
 echo "Config file: $CONFIG_FILE"
 echo "Base work directory: $WORKDIR"
 echo "Apptainer cache: $NXF_APPTAINER_CACHEDIR"
 echo "NWB file path: $NWB_FILE_PATH"
-echo "Results path: $RESULTS_PATH"
-# TODO: echo git revparse of dandi-compute and other packages
+echo "DATA_PATH: $DATA_PATH"
+echo "RESULTS_PATH: $RESULTS_PATH"
 echo ""
 
 source /etc/profile.d/modules.sh
@@ -89,7 +91,7 @@ module load apptainer
 
 conda activate /orcd/data/dandi/001/env_nf
 
-DATA_PATH="$(dirname "$NWB_FILE_PATH")" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR"
+DATA_PATH="$DATA_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR"
 nextflow \
     -C "$CONFIG_FILE" \
     -log "$(dirname "$LOG_PATH")/nextflow.log" \
