@@ -101,7 +101,7 @@ conda activate /orcd/data/dandi/001/env_nf
 
 DATA_PATH="$SOURCE_DATA" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
     -C "$CONFIG_FILE" \
-    -log "$LOG_PATH/nextflow.log" \
+    -log "$(dirname "$LOG_PATH")/nextflow.log" \
     run "$PIPELINE_PATH/pipeline/main_multi_backend.nf" \
     --work-dir "$RUN_WORKDIR" \
     --job_dispatch_args "--input nwb" \
