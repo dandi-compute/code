@@ -100,7 +100,7 @@ DATA_PATH="$SOURCE_DATA" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$N
     -C "$CONFIG_FILE" \
     -log "$(dirname "$LOG_PATH")/nextflow.log" \
     run "$PIPELINE_PATH/pipeline/main_multi_backend.nf" \
-    --work-dir "$RUN_WORKDIR" \
+    -work-dir "$RUN_WORKDIR" \
     --job_dispatch_args "--input nwb --nwb-files $TRUE_DATA_PATH" \
     --nwb_ecephys_args "--backend hdf5"
 
