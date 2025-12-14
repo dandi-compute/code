@@ -43,8 +43,6 @@ PIPELINE_PATH="$DANDI_COMPUTE_BASE_DIR/aind-ephys-pipeline.cody"
 
 WORKDIR="$DANDI_COMPUTE_BASE_DIR/work"
 NXF_APPTAINER_CACHEDIR="$WORKDIR/apptainer_cache"
-#CACHEDIR="$DANDI_COMPUTE_BASE_DIR/.cache"
-#NXF_APPTAINER_CACHEDIR="$CACHEDIR/apptainer_cache"
 
 NWB_FILE_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
 RESULTS_PATH="$DANDISET_DIR/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/results"
@@ -85,8 +83,8 @@ echo "Run ID: $RUN_ID"
 echo "Config file: $CONFIG_FILE"
 echo "Base work directory: $WORKDIR"
 echo "Apptainer cache: $NXF_APPTAINER_CACHEDIR"
-echo "True data path: $NWB_FILE_PATH"
-# TODO: echo git revparse of dandi-compute
+echo "NWB file path: $NWB_FILE_PATH"
+# TODO: echo git revparse of dandi-compute and other packages
 echo ""
 
 source /etc/profile.d/modules.sh
@@ -95,7 +93,7 @@ module load apptainer
 
 conda activate /orcd/data/dandi/001/env_nf
 
-DATA_PATH="$SOURCE_DATA" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
+DATA_PATH="$NWB_FILE_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
     -C "$CONFIG_FILE" \
     -log "$(dirname "$LOG_PATH")/nextflow.log" \
     run "$PIPELINE_PATH/pipeline/main_multi_backend.nf" \
