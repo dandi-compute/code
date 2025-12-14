@@ -89,7 +89,7 @@ module load apptainer
 
 conda activate /orcd/data/dandi/001/env_nf
 
-DATA_PATH="$(dirname NWB_FILE_PATH)" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR"
+DATA_PATH="$(dirname "$NWB_FILE_PATH")" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR"
 nextflow \
     -C "$CONFIG_FILE" \
     -log "$(dirname "$LOG_PATH")/nextflow.log" \
