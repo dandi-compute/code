@@ -63,11 +63,6 @@ if [ ! -e "$NWB_FILE_PATH" ]; then
     exit 1
 fi
 
-if [ ! -e "$SYMLINK_PATH" ]; then
-    mkdir -p "$(dirname "$SYMLINK_PATH")"
-    ln -sf "$NWB_FILE_PATH" "$SYMLINK_PATH"
-fi
-
 if [ -d "$RESULTS_PATH" ]; then
     echo "Error: Run directory already exists at $RESULTS_PATH"
     echo "Please use a different RUN ID or remove the existing directory."
@@ -84,6 +79,7 @@ echo "Config file: $CONFIG_FILE"
 echo "Base work directory: $WORKDIR"
 echo "Apptainer cache: $NXF_APPTAINER_CACHEDIR"
 echo "NWB file path: $NWB_FILE_PATH"
+echo "Results path: $RESULTS_PATH"
 # TODO: echo git revparse of dandi-compute and other packages
 echo ""
 
@@ -93,7 +89,8 @@ module load apptainer
 
 conda activate /orcd/data/dandi/001/env_nf
 
-DATA_PATH="$NWB_FILE_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
+DATA_PATH="$(dirname NWB_FILE_PATH)" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR"
+nextflow \
     -C "$CONFIG_FILE" \
     -log "$(dirname "$LOG_PATH")/nextflow.log" \
     run "$PIPELINE_PATH/pipeline/main_multi_backend.nf" \
