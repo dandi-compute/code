@@ -24,14 +24,11 @@ cat > "$JOB_SCRIPT" <<'EOT'
 #SBATCH --partition=mit_normal
 #SBATCH --time=4:00:00
 
-# File has been modified from AIND docs for SLURM submission
-
 BLOB_ID="$1"
 RUN_ID="$2"
 CONFIG_PATH="$3"
 LOG_PATH="$4"
 
-# Base dirs (define before using them)
 BASE_DANDI_DIR="/orcd/data/dandi/001"
 DANDI_ARCHIVE_DIR="$BASE_DANDI_DIR/s3dandiarchive"
 DANDI_COMPUTE_BASE_DIR="$BASE_DANDI_DIR/all-dandi-compute"
