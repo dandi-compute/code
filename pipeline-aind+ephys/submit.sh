@@ -12,6 +12,8 @@ if [ -n "$(ls -A "$(dirname "$LOG_PATH")" 2>/dev/null)" ]; then
     echo "Error: Log directory is not empty at $(dirname "$LOG_PATH")"
     echo "Please use a different RUN ID or remove the existing directory."
     exit 1
+    # TODO: also confirm this remotely prior to running so we can do minimal `dandi download --dandiset.yml`
+    # Also for results dir
 fi
 mkdir -p "$(dirname "$LOG_PATH")"
 
@@ -38,9 +40,8 @@ DANDISET_DIR="$DANDI_COMPUTE_BASE_DIR/001675"
 # PIPELINE_PATH="$DANDI_COMPUTE_BASE_DIR/aind-ephys-pipeline.source"
 PIPELINE_PATH="$DANDI_COMPUTE_BASE_DIR/aind-ephys-pipeline.cody"
 
-BASE_WORKDIR="$DANDI_COMPUTE_BASE_DIR/work"
-RUN_WORKDIR="$BASE_WORKDIR"
-NXF_APPTAINER_CACHEDIR="$BASE_WORKDIR/apptainer_cache"
+WORKDIR="$DANDI_COMPUTE_BASE_DIR/work"
+NXF_APPTAINER_CACHEDIR="$WORKDIR/apptainer_cache"
 
 TRUE_DATA_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
 SOURCE_DATA="$DANDISET_DIR/pipeline-aind+ephys/blob-$BLOB_ID/sourcedata"
@@ -82,12 +83,10 @@ echo ""
 echo "Blob ID: $BLOB_ID"
 echo "Run ID: $RUN_ID"
 echo "Config file: $CONFIG_FILE"
-echo "Base work directory: $BASE_WORKDIR"
-echo "Runner work directory: $RUN_WORKDIR"
+echo "Base work directory: $WORKDIR"
 echo "Apptainer cache: $NXF_APPTAINER_CACHEDIR"
 echo "True data path: $TRUE_DATA_PATH"
-echo "Source data: $SOURCE_DATA"
-echo "Symlink path: $SYMLINK_PATH"
+# TODO: echo git revparse of dandi-compute
 echo ""
 
 source /etc/profile.d/modules.sh
@@ -100,7 +99,7 @@ DATA_PATH="$SOURCE_DATA" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$N
     -C "$CONFIG_FILE" \
     -log "$(dirname "$LOG_PATH")/nextflow.log" \
     run "$PIPELINE_PATH/pipeline/main_multi_backend.nf" \
-    -work-dir "$RUN_WORKDIR" \
+    -work-dir "$WORKDIR" \
     --job_dispatch_args "--input nwb --nwb-files $TRUE_DATA_PATH" \
     --nwb_ecephys_args "--backend hdf5"
 
