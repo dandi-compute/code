@@ -108,7 +108,7 @@ source /etc/profile.d/modules.sh
 module load miniforge
 module load apptainer
 
-conda activate /orcd/data/dandi/001/environments/env_nf
+conda activate /orcd/data/dandi/001/environments/name-nextflow_environment
 
 DATA_PATH="$DATA_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
     -C "$CONFIG_FILE" \
