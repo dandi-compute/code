@@ -50,8 +50,7 @@ case "$BLOB_HEAD" in
         ;;
 esac
 
-BASE_DANDI_DIR="/orcd/data/dandi/$PARTITION"
-DANDI_ARCHIVE_DIR="$BASE_DANDI_DIR/s3dandiarchive"
+BASE_DANDI_DIR="/orcd/data/dandi/001"
 DANDI_COMPUTE_BASE_DIR="$BASE_DANDI_DIR/all-dandi-compute"
 DANDI_COMPUTE_GIT_DIR="$DANDI_COMPUTE_BASE_DIR/dandi-compute"
 DANDISET_DIR="$DANDI_COMPUTE_BASE_DIR/001675"
@@ -63,6 +62,7 @@ PIPELINE_PATH="$DANDI_COMPUTE_BASE_DIR/aind-ephys-pipeline.cody"
 WORKDIR="$DANDI_COMPUTE_BASE_DIR/work"
 NXF_APPTAINER_CACHEDIR="$WORKDIR/apptainer_cache"
 
+DANDI_ARCHIVE_DIR="/orcd/data/dandi/$PARTITION/s3dandiarchive"
 NWB_FILE_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
 RESULTS_PATH="$DANDISET_DIR/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/results"
 DATA_PATH="$(dirname "$NWB_FILE_PATH")"
