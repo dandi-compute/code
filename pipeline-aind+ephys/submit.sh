@@ -7,7 +7,16 @@ if [ -n "$3" ]; then
     CONFIG_PATH="$3"
 fi
 
-# Create temporary job script
+LOG_PATH="/orcd/data/dandi/001/all-dandi-compute/001675/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/logs/job-%j.log"
+if [ -n "$(ls -A "$(dirname "$LOG_PATH")" 2>/dev/null)" ]; then
+    echo "Error: Log directory is not empty at $(dirname "$LOG_PATH")"
+    echo "Please use a different RUN ID or remove the existing directory."
+    exit 1
+    # TODO: also confirm this remotely prior to running so we can do minimal `dandi download --dandiset.yml`
+    # Also for results dir
+fi
+mkdir -p "$(dirname "$LOG_PATH")"
+
 JOB_SCRIPT=$(mktemp $HOME/tmp/slurm_job.XXXXXX.sh)
 
 cat > "$JOB_SCRIPT" <<'EOT'
@@ -17,72 +26,96 @@ cat > "$JOB_SCRIPT" <<'EOT'
 #SBATCH --partition=mit_normal
 #SBATCH --time=4:00:00
 
-# File has been modified from AIND docs for SLURM submission
-
 BLOB_ID="$1"
 RUN_ID="$2"
 CONFIG_PATH="$3"
+LOG_PATH="$4"
 
-# Base dirs (define before using them)
+BLOB_HEAD="${BLOB_ID:0:1}"
+case "$BLOB_HEAD" in
+    [0-9])
+        PARTITION="001"
+        ;;
+    [a-f])
+        BLOB_HEAD_DECIMAL=$((16#$BLOB_HEAD))
+        if [ "$BLOB_HEAD_DECIMAL" -ge 10 ]; then
+            PARTITION="002"
+        else
+            PARTITION="001"
+        fi
+        ;;
+    *)
+        echo "Error: Invalid blob ID format"
+        exit 1
+        ;;
+esac
+
 BASE_DANDI_DIR="/orcd/data/dandi/001"
-DANDI_COMPUTE_DIR="$BASE_DANDI_DIR/all-dandi-compute"
-DANDI_ARCHIVE_DIR="$BASE_DANDI_DIR/s3dandiarchive"
+DANDI_COMPUTE_BASE_DIR="$BASE_DANDI_DIR/all-dandi-compute"
+DANDI_COMPUTE_GIT_DIR="$DANDI_COMPUTE_BASE_DIR/dandi-compute"
+DANDISET_DIR="$DANDI_COMPUTE_BASE_DIR/001675"
+
+# TODO: Currently need to run from Cody's modified branches until all PRs are merged
+# PIPELINE_PATH="$DANDI_COMPUTE_BASE_DIR/aind-ephys-pipeline.source"
+PIPELINE_PATH="$DANDI_COMPUTE_BASE_DIR/aind-ephys-pipeline.cody"
+
+WORKDIR="$DANDI_COMPUTE_BASE_DIR/work"
+NXF_APPTAINER_CACHEDIR="$WORKDIR/apptainer_cache"
+
+DANDI_ARCHIVE_DIR="/orcd/data/dandi/$PARTITION/s3dandiarchive"
+NWB_FILE_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
+RESULTS_PATH="$DANDISET_DIR/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/results"
+DATA_PATH="$(dirname "$NWB_FILE_PATH")"
 
 if [ -z "$CONFIG_PATH" ]; then
-    # Use default config
-    CONFIG_FILE="$DANDI_COMPUTE_DIR/dandi-compute/pipeline-aind+ephys/default.config"
+    CONFIG_FILE="$DANDI_COMPUTE_GIT_DIR/pipeline-aind+ephys/default.config"
 else
-    CONFIG_FILE="$DANDI_COMPUTE_DIR/dandi-compute/pipeline-aind+ephys/blobs/$BLOB_ID/run-$RUN_ID/$CONFIG_PATH"
+    CONFIG_FILE="$DANDI_COMPUTE_GIT_DIR/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/$CONFIG_PATH"
 fi
-
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Error: Config file does not exist at $CONFIG_FILE"
     exit 1
 fi
 
-# Welcome message and input display
-echo ""
-echo "Deploying AIND Ephys Pipeline on MIT Engaging cluster"
-echo "====================================================="
-echo ""
-echo "BLOB ID: $BLOB_ID"
-echo "RUN ID: $RUN_ID"
-echo "CONFIG FILE: $CONFIG_FILE"
-echo ""
-
-# modify this section to make the nextflow command available to your environment
-source /etc/profile.d/modules.sh
-module load miniforge
-module load apptainer
-
-conda activate /orcd/data/dandi/001/env_nf
-
-PIPELINE_PATH="$DANDI_COMPUTE_DIR/aind-ephys-pipeline.source"
-BASE_WORKDIR="$DANDI_COMPUTE_DIR/work"
-RUN_WORKDIR="$BASE_WORKDIR/blobs/$BLOB_ID/run-$RUN_ID"
-NXF_APPTAINER_CACHEDIR="$BASE_WORKDIR/apptainer_cache"
-
-DATA_PATH="$DANDI_ARCHIVE_DIR/blobs/${BLOB_ID:0:3}/${BLOB_ID:3:3}/$BLOB_ID"
-if [ ! -e "$DATA_PATH" ]; then
-    echo "Error: Data file does not exist at $DATA_PATH"
+if [ ! -e "$NWB_FILE_PATH" ]; then
+    echo "Error: Data file does not exist at $NWB_FILE_PATH"
     echo "Please check the blob ID."
     exit 1
 fi
 
-RESULTS_PATH="$DANDI_COMPUTE_DIR/001675/pipeline-aind+ephys/results/blobs/$BLOB_ID/run-$RUN_ID/results"
 if [ -d "$RESULTS_PATH" ]; then
     echo "Error: Run directory already exists at $RESULTS_PATH"
     echo "Please use a different RUN ID or remove the existing directory."
     exit 1
 fi
 
-# Run nextflow
+echo ""
+echo "Deploying AIND Ephys Pipeline on MIT Engaging cluster"
+echo "====================================================="
+echo ""
+echo "dandi-compute checkout: $(git -C /orcd/data/dandi/001/all-dandi-compute/dandi-compute describe --tags --always)"
+echo "Blob ID: $BLOB_ID"
+echo "Run ID: $RUN_ID"
+echo "Config file: $CONFIG_FILE"
+echo "Base work directory: $WORKDIR"
+echo "Apptainer cache: $NXF_APPTAINER_CACHEDIR"
+echo "NWB file path: $NWB_FILE_PATH"
+echo "DATA_PATH: $DATA_PATH"
+echo "RESULTS_PATH: $RESULTS_PATH"
+echo ""
+
+source /etc/profile.d/modules.sh
+module load miniforge
+module load apptainer
+
+conda activate /orcd/data/dandi/001/environments/name-nextflow_environment
+
 DATA_PATH="$DATA_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
     -C "$CONFIG_FILE" \
-    -log "$RESULTS_PATH/nextflow/nextflow.log" \
+    -log "$(dirname "$LOG_PATH")/nextflow.log" \
     run "$PIPELINE_PATH/pipeline/main_multi_backend.nf" \
-    --work-dir "$RUN_WORKDIR" \
-    --job_dispatch_args "--input nwb" \
+    -work-dir "$WORKDIR" \
+    --job_dispatch_args "--input nwb --nwb-files $NWB_FILE_PATH" \
     --nwb_ecephys_args "--backend hdf5"
 
 hostname
@@ -90,8 +123,5 @@ hostname
 exit 0
 EOT
 
-# Submit the job and pass script args so $1/$2/$3 are populated in the job script
-sbatch --output "/orcd/data/dandi/001/all-dandi-compute/logs/pipeline-aind+ephys_job-%j_blob_${BLOB_ID}_run_${RUN_ID}.log" "$JOB_SCRIPT" "$BLOB_ID" "$RUN_ID" "$CONFIG_PATH"
-
-# Clean up
+sbatch --output "$LOG_PATH" "$JOB_SCRIPT" "$BLOB_ID" "$RUN_ID" "$CONFIG_PATH" "$LOG_PATH"
 rm -f "$JOB_SCRIPT"
