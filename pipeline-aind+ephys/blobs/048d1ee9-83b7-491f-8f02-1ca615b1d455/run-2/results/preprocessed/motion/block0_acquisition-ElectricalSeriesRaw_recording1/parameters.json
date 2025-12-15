@@ -1,0 +1,33 @@
+{
+    "preset": "dredge_fast",
+    "detect_kwargs": {
+        "method": "locally_exclusive",
+        "peak_sign": "neg",
+        "detect_threshold": 8.0,
+        "exclude_sweep_ms": 0.8,
+        "radius_um": 80.0
+    },
+    "select_kwargs": {},
+    "localize_peaks_kwargs": {
+        "method": "grid_convolution"
+    },
+    "estimate_motion_kwargs": {
+        "method": "dredge_ap",
+        "direction": "y",
+        "rigid": false,
+        "win_shape": "gaussian",
+        "win_step_um": 30.0,
+        "win_scale_um": 30.0,
+        "win_margin_um": null,
+        "bin_s": 1.0
+    },
+    "job_kwargs": {
+        "pool_engine": "process",
+        "n_jobs": 192,
+        "chunk_duration": "1s",
+        "progress_bar": false,
+        "mp_context": "spawn",
+        "max_threads_per_worker": 1
+    },
+    "sampling_frequency": 25000.0
+}
