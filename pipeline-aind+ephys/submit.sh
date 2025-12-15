@@ -50,7 +50,7 @@ case "$BLOB_HEAD" in
         ;;
 esac
 
-BASE_DANDI_DIR="/orcd/data/dandi/001"
+BASE_DANDI_DIR="/orcd/data/dandi/$PARTITION"
 DANDI_ARCHIVE_DIR="$BASE_DANDI_DIR/s3dandiarchive"
 DANDI_COMPUTE_BASE_DIR="$BASE_DANDI_DIR/all-dandi-compute"
 DANDI_COMPUTE_GIT_DIR="$DANDI_COMPUTE_BASE_DIR/dandi-compute"
@@ -108,7 +108,7 @@ source /etc/profile.d/modules.sh
 module load miniforge
 module load apptainer
 
-conda activate /orcd/data/dandi/001/env_nf
+conda activate /orcd/data/dandi/001/environments/env_nf
 
 DATA_PATH="$DATA_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
     -C "$CONFIG_FILE" \
