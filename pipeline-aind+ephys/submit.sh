@@ -31,6 +31,25 @@ RUN_ID="$2"
 CONFIG_PATH="$3"
 LOG_PATH="$4"
 
+BLOB_HEAD="${BLOB_ID:0:1}"
+case "$BLOB_HEAD" in
+    [0-9])
+        PARTITION="001"
+        ;;
+    [a-f])
+        BLOB_HEAD_DECIMAL=$((16#$BLOB_HEAD))
+        if [ "$BLOB_HEAD_DECIMAL" -ge 10 ]; then
+            PARTITION="002"
+        else
+            PARTITION="001"
+        fi
+        ;;
+    *)
+        echo "Error: Invalid blob ID format"
+        exit 1
+        ;;
+esac
+
 BASE_DANDI_DIR="/orcd/data/dandi/001"
 DANDI_ARCHIVE_DIR="$BASE_DANDI_DIR/s3dandiarchive"
 DANDI_COMPUTE_BASE_DIR="$BASE_DANDI_DIR/all-dandi-compute"
