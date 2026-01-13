@@ -52,7 +52,7 @@ esac
 
 BASE_DANDI_DIR="/orcd/data/dandi/001"
 DANDI_COMPUTE_BASE_DIR="$BASE_DANDI_DIR/dandi-compute"
-DANDI_COMPUTE_CODE="$DANDI_COMPUTE_BASE_DIR/code"
+DANDI_COMPUTE_CODE_DIR="$DANDI_COMPUTE_BASE_DIR/code"
 DANDISET_DIR="$DANDI_COMPUTE_BASE_DIR/001675"
 
 # TODO: Currently need to run from Cody's modified branches until all PRs are merged
@@ -68,9 +68,9 @@ RESULTS_PATH="$DANDISET_DIR/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/result
 DATA_PATH="$(dirname "$NWB_FILE_PATH")"
 
 if [ -z "$CONFIG_PATH" ]; then
-    CONFIG_FILE="$DANDI_COMPUTE_CODE/pipeline-aind+ephys/default.config"
+    CONFIG_FILE="$DANDI_COMPUTE_CODE_DIR/pipeline-aind+ephys/default.config"
 else
-    CONFIG_FILE="$DANDI_COMPUTE_CODE/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/$CONFIG_PATH"
+    CONFIG_FILE="$DANDI_COMPUTE_CODE_DIR/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/$CONFIG_PATH"
 fi
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Error: Config file does not exist at $CONFIG_FILE"
@@ -93,7 +93,7 @@ echo ""
 echo "Deploying AIND Ephys Pipeline on MIT Engaging cluster"
 echo "====================================================="
 echo ""
-echo "dandi-compute checkout: $(git -C /orcd/data/dandi/001/dandi-compute/dandi-compute describe --tags --always)"
+echo "dandi-compute checkout: $(git -C "$DANDI_COMPUTE_CODE_DIR" describe --tags --always)"
 echo "Blob ID: $BLOB_ID"
 echo "Run ID: $RUN_ID"
 echo "Config file: $CONFIG_FILE"
