@@ -7,7 +7,7 @@ if [ -n "$3" ]; then
     CONFIG_PATH="$3"
 fi
 
-LOG_PATH="/orcd/data/dandi/001/all-dandi-compute/001675/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/logs/job-%j.log"
+LOG_PATH="/orcd/data/dandi/001/dandi-compute/001675/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/logs/job-%j.log"
 if [ -n "$(ls -A "$(dirname "$LOG_PATH")" 2>/dev/null)" ]; then
     echo "Error: Log directory is not empty at $(dirname "$LOG_PATH")"
     echo "Please use a different RUN ID or remove the existing directory."
@@ -51,7 +51,7 @@ case "$BLOB_HEAD" in
 esac
 
 BASE_DANDI_DIR="/orcd/data/dandi/001"
-DANDI_COMPUTE_BASE_DIR="$BASE_DANDI_DIR/all-dandi-compute"
+DANDI_COMPUTE_BASE_DIR="$BASE_DANDI_DIR/dandi-compute"
 DANDI_COMPUTE_GIT_DIR="$DANDI_COMPUTE_BASE_DIR/dandi-compute"
 DANDISET_DIR="$DANDI_COMPUTE_BASE_DIR/001675"
 
@@ -93,7 +93,7 @@ echo ""
 echo "Deploying AIND Ephys Pipeline on MIT Engaging cluster"
 echo "====================================================="
 echo ""
-echo "dandi-compute checkout: $(git -C /orcd/data/dandi/001/all-dandi-compute/dandi-compute describe --tags --always)"
+echo "dandi-compute checkout: $(git -C /orcd/data/dandi/001/dandi-compute/dandi-compute describe --tags --always)"
 echo "Blob ID: $BLOB_ID"
 echo "Run ID: $RUN_ID"
 echo "Config file: $CONFIG_FILE"
