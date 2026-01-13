@@ -17,7 +17,7 @@ if [ -n "$(ls -A "$(dirname "$LOG_PATH")" 2>/dev/null)" ]; then
 fi
 mkdir -p "$(dirname "$LOG_PATH")"
 
-JOB_SCRIPT=$(mktemp $HOME/tmp/slurm_job.XXXXXX.sh)
+JOB_SCRIPT=$(mktemp /orcd/data/dandi/001/dandi-compute/work/submit/slurm_job.XXXXXX.sh)
 
 cat > "$JOB_SCRIPT" <<'EOT'
 #!/bin/bash
