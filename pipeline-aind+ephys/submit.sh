@@ -7,7 +7,7 @@ if [ -n "$3" ]; then
     CONFIG_PATH="$3"
 fi
 
-LOG_PATH="/orcd/data/dandi/001/dandi-compute/001675/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/logs/job-%j.log"
+LOG_PATH="/orcd/data/dandi/001/dandi-compute/001697/pipeline-aind+ephys/blob-$BLOB_ID/run-$RUN_ID/logs/job-%j.log"
 if [ -n "$(ls -A "$(dirname "$LOG_PATH")" 2>/dev/null)" ]; then
     echo "Error: Log directory is not empty at $(dirname "$LOG_PATH")"
     echo "Please use a different RUN ID or remove the existing directory."
@@ -53,7 +53,7 @@ esac
 BASE_DANDI_DIR="/orcd/data/dandi/001"
 DANDI_COMPUTE_BASE_DIR="$BASE_DANDI_DIR/dandi-compute"
 DANDI_COMPUTE_CODE_DIR="$DANDI_COMPUTE_BASE_DIR/code"
-DANDISET_DIR="$DANDI_COMPUTE_BASE_DIR/001675"
+DANDISET_DIR="$DANDI_COMPUTE_BASE_DIR/001697"
 
 # TODO: Currently need to run from Cody's modified branches until all PRs are merged
 # PIPELINE_PATH="$DANDI_COMPUTE_BASE_DIR/aind-ephys-pipeline.source"
