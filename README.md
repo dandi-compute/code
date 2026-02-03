@@ -1,3 +1,3 @@
-# DANDI Compute
+# DANDI Compute (Code)
 
-Contains job run statistics and logs used for DANDI compute operations, such as the AIND ephys pipeline.
+Contains essential code for performing computations on DANDI assets.

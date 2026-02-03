@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=80.0", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = {attr = "nwb2bids.__version__"}
+
+
+
+[project]
+name = "dandi-compute-code"
+authors = [
+  { name="Cody Baker", email="cody.c.baker.phd@gmail.com" },
+]
+description = "Contains essential code for performing computations on DANDI assets."
+readme = "README.md"
+license = {file = "LICENSE.txt"}
+requires-python = ">=3.10"
+dependencies = [
+    "jinja2",
+    "rich-click",
+]
+dynamic = ["version"]
+
+[project.scripts]
+nwb2bids = "dandi_compute_code._command_line_interface._main:_cli"
+
+
+
+[tool.black]
+line-length = 120
+target-version = ['py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  \.toml
+  |\.yml
+  |\.txt
+  |\.sh
+  |\.git
+  |\.ini
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.ruff]
+exclude = [
+  "*/__init__.py"
+]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["F", "E", "I"]
+ignore = [
+    "PTH123",
+    "D203",
+    "D212",
+    "T201",
+    "FIX002",
+    "TD003",
+    "TD002",
+    "S101",
+    "ICN001",
+    "INP001",
+]
+fixable = ["ALL"]
+
+[tool.ruff.lint.isort]
+relative-imports-order = "closest-to-furthest"
+known-first-party = ["nwb2bids"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/dandi_compute_code/_hidden_top_level_imports.py" = ["F401"]  # Must perform imports here even if not exposed
