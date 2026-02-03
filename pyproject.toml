@@ -25,6 +25,12 @@ dynamic = ["version"]
 [project.scripts]
 nwb2bids = "dandi_compute_code._command_line_interface._main:_cli"
 
+[dependency-groups]
+dev = ["ipython", "pre-commit"]
+all = [
+    {include-group = "dev"},
+]
+
 
 
 [tool.black]
