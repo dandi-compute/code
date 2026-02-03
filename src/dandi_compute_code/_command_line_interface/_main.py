@@ -2,10 +2,12 @@ import rich_click
 
 from .._aind_ephys_pipeline._handle_template import generate_aind_ephys_submission_script
 
+
 # dandicompute
 @rich_click.group(name="dandicompute")
 def _dandicompute_cli():
     pass
+
 
 # dandicompute submit [OPTIONS]
 @_dandicompute_cli.command(name="convert")
