@@ -3,7 +3,7 @@ requires = ["setuptools>=80.0", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.dynamic]
-version = {attr = "nwb2bids.__version__"}
+version = {attr = "dandi_compute_code.__version__"}
 
 
 
@@ -23,7 +23,7 @@ dependencies = [
 dynamic = ["version"]
 
 [project.scripts]
-nwb2bids = "dandi_compute_code._command_line_interface._main:_cli"
+dandicompute = "dandi_compute_code._command_line_interface._main:_cli"
 
 [dependency-groups]
 dev = ["ipython", "pre-commit"]
@@ -78,7 +78,7 @@ fixable = ["ALL"]
 
 [tool.ruff.lint.isort]
 relative-imports-order = "closest-to-furthest"
-known-first-party = ["nwb2bids"]
+known-first-party = ["dandi_compute_code"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/dandi_compute_code/_hidden_top_level_imports.py" = ["F401"]  # Must perform imports here even if not exposed
