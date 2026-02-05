@@ -1,9 +1,9 @@
 [build-system]
-requires = ["setuptools>=80.0", "setuptools_scm"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
-[tool.setuptools.dynamic]
-version = {attr = "dandi_compute_code.__version__"}
+[tool.hatch.version]
+source = "vcs"
 
 
 
@@ -19,6 +19,7 @@ requires-python = ">=3.10"
 dependencies = [
     "jinja2",
     "rich-click",
+    "dandi",
 ]
 dynamic = ["version"]
 
