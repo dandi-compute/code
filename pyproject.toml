@@ -18,7 +18,7 @@ license = {file = "LICENSE.txt"}
 requires-python = ">=3.10"
 dependencies = [
     "jinja2",
-    "rich-click",
+    "click",  # rich-click did not work well on Engaging
     "dandi",
 ]
 dynamic = ["version"]

@@ -59,7 +59,7 @@ def prepare_aind_ephys_job(
         dandiset_path = f"derivatives/pipeline-aind+ephys/derivatives/asset-{short_content_id}/result-{run_id}"
 
     # TODO: update default path once upstream hashes have been updated
-    dandi_compute_dir = "/orcd/data/dandi/001/dandi-compute"
+    dandi_compute_dir = pathlib.Path("/orcd/data/dandi/001/dandi-compute")
 
     config_file_path = config_file_path or pathlib.Path(__file__).parent / "mit_engaging.config"
     pipeline_file_path = (
@@ -96,8 +96,8 @@ def prepare_aind_ephys_job(
     (dandiset_results_dir / "output").mkdir()
 
     results_directory = intermediate_dir  # Start off the results in the intermediate folder and separate later
-    work_directory = f"{dandi_compute_dir}/work"
-    apptainer_cache_directory = "$WORKDIR/apptainer_cache"
+    work_directory = dandi_compute_dir / "work"
+    apptainer_cache_directory = work_directory / "apptainer_cache"
     environment_directory = "/orcd/data/dandi/001/environments/name-nextflow_environment"
 
     # Construct submission script from template
