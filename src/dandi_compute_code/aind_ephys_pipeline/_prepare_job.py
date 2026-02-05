@@ -1,3 +1,5 @@
+import contextlib
+import io
 import os
 import pathlib
 import tempfile
@@ -18,6 +20,7 @@ def prepare_aind_ephys_job(
     config_file_path: pathlib.Path | None = None,
     pipeline_file_path: pathlib.Path | None = None,
     preprocessing_args: str = "",
+    silent: bool = False,
 ) -> pathlib.Path:
     """
     Prepares an AIND ephys job by generating a submission script and returning the script file path.
@@ -32,6 +35,9 @@ def prepare_aind_ephys_job(
         Path to the pipeline file.
     preprocessing_args : str, optional
         Command-line arguments for preprocessing.
+    silent : bool, optional
+        Whether to suppress output messages from the DANDI client.
+        Default is False.
 
     Returns
     -------
@@ -126,10 +132,18 @@ def prepare_aind_ephys_job(
     code_config_file_path.write_text(data=config_file_path.read_text())
 
     # Upload preparation to 'reserve' spot during processing
-    dandi.upload.upload(
-        paths=[dandiset_results_dir],
-        allow_any_path=True,
-        validation=dandi.upload.UploadValidation.SKIP,
-    )
+    if silent:
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            dandi.upload.upload(
+                paths=[dandiset_results_dir],
+                allow_any_path=True,
+                validation=dandi.upload.UploadValidation.SKIP,
+            )
+    else:
+        dandi.upload.upload(
+            paths=[dandiset_results_dir],
+            allow_any_path=True,
+            validation=dandi.upload.UploadValidation.SKIP,
+        )
 
     return script_file_path
