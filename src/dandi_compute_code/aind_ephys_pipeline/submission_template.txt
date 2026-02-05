@@ -6,7 +6,7 @@
 #SBATCH --time=12:00:00
 
 NWB_FILE_PATH="{{ nwb_file_path }}"
-DATA_PATH="$(dirname "$NWB_FILE_PATH")"
+DATA_PATH="{{ data_path }}"
 
 RESULTS_PATH="{{ results_directory }}"
 WORKDIR="{{ work_directory }}"
@@ -30,4 +30,4 @@ cd $RESULTS_PATH
 # TODO: copy capsule_version.env file into code for provenance
 # TODO: remove need for extra flags
 dandi upload --allow-any-path --validation skip
-rm -rf {{ temporary_processing_directory }}
+{{ temp_name }} >> {{ done_tracker_file_path }}

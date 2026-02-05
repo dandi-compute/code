@@ -17,7 +17,8 @@ def generate_aind_ephys_submission_script(
     environment_directory: str,
     config_file_path: str,
     pipeline_file_path: str,
-    temporary_processing_directory: str,
+    temp_name: str,
+    done_tracker_file_path: str,
 ) -> None:
     """
     Generate AIND Ephys submission script from template.
@@ -44,20 +45,24 @@ def generate_aind_ephys_submission_script(
         The configuration file path.
     pipeline_file_path : str
         The pipeline file path.
-    temporary_processing_directory : str
-        The temporary processing directory.
+    temp_name : str
+        The name of the temporary processing directory.
+    done_tracker_file_path : str
+        The path to the 'done' tracker file.
     """
     raw_template = _RAW_TEMPLATE_FILE_PATH.read_text()
     template = jinja2.Template(source=raw_template)
     script = template.render(
         log_directory=log_directory,
         nwb_file_path=nwb_file_path,
+        data_path=str(pathlib.Path(nwb_file_path).parent),
         results_directory=results_directory,
         work_directory=work_directory,
         apptainer_cache_directory=apptainer_cache_directory,
         environment_directory=environment_directory,
         config_file_path=config_file_path,
         pipeline_file_path=pipeline_file_path,
-        temporary_processing_directory=temporary_processing_directory,
+        temp_name=temp_name,
+        done_tracker_file_path=done_tracker_file_path,
     )
     script_file_path.write_text(data=script)

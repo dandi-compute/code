@@ -102,6 +102,7 @@ def prepare_aind_ephys_job(
     # but must be set in `~/.bashrc`, and must be the same as WORKDIR
     # NUMBA_CACHE_DIR = "/orcd/data/dandi/001/dandi-compute/work"
     environment_directory = "/orcd/data/dandi/001/environments/name-nextflow_environment"
+    done_tracker_file_path = processing_directory / "done.txt"
 
     # Construct submission script from template
     generate_aind_ephys_submission_script(
@@ -114,7 +115,8 @@ def prepare_aind_ephys_job(
         environment_directory=environment_directory,
         config_file_path=str(code_config_file_path),
         pipeline_file_path=str(pipeline_file_path),
-        temporary_processing_directory=str(temporary_processing_directory),
+        temp_name=temporary_processing_directory.name,
+        done_tracker_file_path=done_tracker_file_path,
     )
     code_config_file_path.write_text(data=config_file_path.read_text())
 
