@@ -52,15 +52,15 @@ def _aind_group() -> None:
     default="",
 )
 @click.option(
-    "--silent",
-    help="Suppress output messages.",
+    "--submit",
+    help="Automatically submit the job.",
     required=False,
     is_flag=True,
     default=False,
 )
 @click.option(
-    "--submit",
-    help="Automatically submit the job.",
+    "--silent",
+    help="Suppress output messages.",
     required=False,
     is_flag=True,
     default=False,
@@ -70,8 +70,8 @@ def _aind_prepare_command(
     config_file_path: pathlib.Path | None = None,
     pipeline_file_path: pathlib.Path | None = None,
     preprocessing_args: str = "",
-    silent: bool = False,
     submit: bool = False,
+    silent: bool = False,
 ) -> None:
     script_file_path = prepare_aind_ephys_job(
         content_id=content_id,
@@ -89,7 +89,7 @@ def _aind_prepare_command(
     _styled_echo(text="\nPreparation complete!", color="green")
 
     if submit and not silent:
-        _styled_echo(text="\n\nProcessing script at: {script_file_path}\n\n", color="yellow")
+        _styled_echo(text=f"\n\nProcessing script at: {script_file_path}\n\n", color="yellow")
         return
 
     _styled_echo(

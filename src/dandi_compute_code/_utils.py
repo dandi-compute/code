@@ -19,6 +19,5 @@ def _styled_echo(text: str, color: str) -> None:
     str
         The styled message.
     """
-    text = "\nPreparation complete!"
     message = click.style(text=text, fg="green")
     click.echo(message=message)
