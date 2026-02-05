@@ -78,6 +78,7 @@ def _aind_prepare_command(
         config_file_path=config_file_path,
         pipeline_file_path=pipeline_file_path,
         preprocessing_args=preprocessing_args,
+        silent=silent,
     )
 
     if submit:
