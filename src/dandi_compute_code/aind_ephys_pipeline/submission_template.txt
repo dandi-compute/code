@@ -34,6 +34,7 @@ mv nwb ../output
 mv visualization_output.json visualization/
 mv visualization ..
 cp {{ capsule_versions_file_path }} ../code/
+mv nextflow/* ../logs/
 
 dandi upload --allow-any-path --validation skip  # TODO: remove need for extra flags
 echo "{{ temp_name }}" >> {{ done_tracker_file_path }}
