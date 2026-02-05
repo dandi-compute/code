@@ -7,6 +7,10 @@ from .aind_ephys_pipeline import (
     submit_aind_ephys_job,
 )
 
+rich_click.rich_click.USE_RICH_MARKUP = True
+rich_click.rich_click.SHOW_ARGUMENTS = True
+rich_click.rich_click.GROUP_ARGUMENTS_OPTIONS = True
+
 
 # dandicompute
 @rich_click.group(name="dandicompute")
