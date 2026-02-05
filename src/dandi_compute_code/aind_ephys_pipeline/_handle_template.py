@@ -69,4 +69,4 @@ def generate_aind_ephys_submission_script(
         done_tracker_file_path=done_tracker_file_path,
         capsule_versions_file_path=capsule_versions_file_path,
     )
-    script_file_path.write_text(data=script)
+    script_file_path.write_text(data=f"{script}\n")  # Extra newline to prevent improper console wrapping in manual mode
