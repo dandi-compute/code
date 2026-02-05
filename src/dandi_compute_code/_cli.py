@@ -21,7 +21,7 @@ def _aind_group() -> None:
 
 
 # dandicompute aind prepare [OPTIONS]
-@_aind_group.command(name="submit")
+@_aind_group.command(name="prepare")
 @rich_click.option(
     "--content-id",
     help="The content ID for the data to be processed.",
@@ -63,5 +63,5 @@ def _aind_prepare_command(
     required=True,
     type=rich_click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
 )
-def _aind_prepare_command(script_file_path: pathlib.Path) -> None:
+def _aind_submit_command(script_file_path: pathlib.Path) -> None:
     submit_aind_ephys_job(script_file_path=script_file_path)
