@@ -2,10 +2,8 @@ import pathlib
 
 import click
 
-from .aind_ephys_pipeline import (
-    prepare_aind_ephys_job,
-    submit_aind_ephys_job,
-)
+from ._utils import _styled_echo
+from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_aind_ephys_job
 
 
 # dandicompute
@@ -84,17 +82,20 @@ def _aind_prepare_command(
 
     if submit:
         submit_aind_ephys_job(script_file_path=script_file_path)
-        return
 
     if silent:
         return
 
-    text = "\nPreparation complete!"
-    message = click.style(text=text, fg="green")
-    click.echo(message=message)
-    text = f"\n\nTo submit the job, run:\n\n\tdandicompute aind submit --script-file-path {script_file_path}\n\n"
-    message = click.style(text=text, fg="yellow")
-    click.echo(message=message)
+    _styled_echo(text="\nPreparation complete!", fg="green")
+
+    if submit and not silent:
+        _styled_echo(text="\n\nProcessing script at: {script_file_path}\n\n", fg="yellow")
+        return
+
+    _styled_echo(
+        text=f"\n\nTo submit the job, run:\n\n\tdandicompute aind submit --script-file-path {script_file_path}\n\n",
+        fg="yellow",
+    )
 
 
 # dandicompute aind submit [OPTIONS]
