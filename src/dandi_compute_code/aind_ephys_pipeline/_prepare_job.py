@@ -17,6 +17,7 @@ def prepare_aind_ephys_job(
     content_id: str,
     config_file_path: pathlib.Path | None = None,
     pipeline_file_path: pathlib.Path | None = None,
+    preprocessing_args: str = "",
 ) -> pathlib.Path:
     """
     Prepares an AIND ephys job by generating a submission script and returning the script file path.
@@ -29,6 +30,8 @@ def prepare_aind_ephys_job(
         Path to the configuration file.
     pipeline_file_path : pathlib.Path, optional
         Path to the pipeline file.
+    preprocessing_args : str, optional
+        Command-line arguments for preprocessing.
 
     Returns
     -------
@@ -117,6 +120,7 @@ def prepare_aind_ephys_job(
         pipeline_file_path=str(pipeline_file_path),
         temp_name=temporary_processing_directory.name,
         done_tracker_file_path=str(done_tracker_file_path),
+        preprocessing_args=preprocessing_args,
         capsule_versions_file_path=str(capsule_versions_file_path),
     )
     code_config_file_path.write_text(data=config_file_path.read_text())

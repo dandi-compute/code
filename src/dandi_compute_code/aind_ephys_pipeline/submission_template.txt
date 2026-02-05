@@ -26,6 +26,7 @@ DATA_PATH="$DATA_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF
     run "{{ pipeline_file_path }}" \
     -work-dir "$WORKDIR" \
     --job_dispatch_args "--input nwb --nwb-files $NWB_FILE_PATH" \
+    --preprocessing_args "{{ preprocessing_args }}" \
     --nwb_ecephys_args "--backend hdf5"
 
 cd $RESULTS_PATH
@@ -35,4 +36,4 @@ mv visualization ..
 cp {{ capsule_versions_file_path }} ../code/
 
 dandi upload --allow-any-path --validation skip  # TODO: remove need for extra flags
-"{{ temp_name }}" >> {{ done_tracker_file_path }}
+echo "{{ temp_name }}" >> {{ done_tracker_file_path }}

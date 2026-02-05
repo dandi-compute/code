@@ -23,24 +23,35 @@ def _aind_group() -> None:
 # dandicompute aind prepare [OPTIONS]
 @_aind_group.command(name="prepare")
 @click.option(
-    "--content-id",
+    "--id",
+    "content_id",
     help="The content ID for the data to be processed.",
     required=True,
     type=str,
 )
 @click.option(
-    "--config-file-path",
+    "--config",
+    "config_file_path",
     help="Path to the configuration file.",
     required=False,
     type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
     default=None,
 )
 @click.option(
-    "--pipeline-file-path",
+    "--pipeline",
+    "pipeline_file_path",
     help="Path to the pipeline file.",
     required=False,
     type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
     default=None,
+)
+@click.option(
+    "--preprocessing",
+    "preprocessing_args",
+    help="Command-line arguments for preprocessing.",
+    required=False,
+    type=str,
+    default="",
 )
 @click.option(
     "--silent",
@@ -60,11 +71,15 @@ def _aind_prepare_command(
     content_id: str,
     config_file_path: pathlib.Path | None = None,
     pipeline_file_path: pathlib.Path | None = None,
+    preprocessing_args: str = "",
     silent: bool = False,
     submit: bool = False,
 ) -> None:
     script_file_path = prepare_aind_ephys_job(
-        content_id=content_id, config_file_path=config_file_path, pipeline_file_path=pipeline_file_path
+        content_id=content_id,
+        config_file_path=config_file_path,
+        pipeline_file_path=pipeline_file_path,
+        preprocessing_args=preprocessing_args,
     )
 
     if submit:
