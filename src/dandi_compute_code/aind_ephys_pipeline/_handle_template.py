@@ -17,9 +17,10 @@ def generate_aind_ephys_submission_script(
     environment_directory: str,
     config_file_path: str,
     pipeline_file_path: str,
+    preprocessing_args: str,
+    capsule_versions_file_path: str,
     temp_name: str,
     done_tracker_file_path: str,
-    capsule_versions_file_path: str,
 ) -> None:
     """
     Generate AIND Ephys submission script from template.
@@ -46,12 +47,14 @@ def generate_aind_ephys_submission_script(
         The configuration file path.
     pipeline_file_path : str
         The pipeline file path.
+    preprocessing_args : str
+        The command-line arguments for preprocessing.
+    capsule_versions_file_path : str
+        The path to the capsule versions file.
     temp_name : str
         The name of the temporary processing directory.
     done_tracker_file_path : str
         The path to the 'done' tracker file.
-    capsule_versions_file_path : str
-        The path to the capsule versions file.
     """
     raw_template = _RAW_TEMPLATE_FILE_PATH.read_text()
     template = jinja2.Template(source=raw_template)
@@ -65,8 +68,9 @@ def generate_aind_ephys_submission_script(
         environment_directory=environment_directory,
         config_file_path=config_file_path,
         pipeline_file_path=pipeline_file_path,
+        preprocessing_args=preprocessing_args,
+        capsule_versions_file_path=capsule_versions_file_path,
         temp_name=temp_name,
         done_tracker_file_path=done_tracker_file_path,
-        capsule_versions_file_path=capsule_versions_file_path,
     )
     script_file_path.write_text(data=f"{script}\n")  # Extra newline to prevent improper console wrapping in manual mode

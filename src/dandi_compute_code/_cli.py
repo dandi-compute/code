@@ -100,7 +100,8 @@ def _aind_prepare_command(
 # dandicompute aind submit [OPTIONS]
 @_aind_group.command(name="submit")
 @click.option(
-    "--script-file-path",
+    "--script",
+    "script_file_path",
     help="Path to the submission script file.",
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
