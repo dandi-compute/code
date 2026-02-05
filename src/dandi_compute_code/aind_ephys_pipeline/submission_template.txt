@@ -16,6 +16,7 @@ NXF_APPTAINER_CACHEDIR="{{ apptainer_cache_directory }}"
 
 source /etc/profile.d/modules.sh
 module load miniforge
+module load apptainer
 
 conda activate {{ environment_directory }}
 
