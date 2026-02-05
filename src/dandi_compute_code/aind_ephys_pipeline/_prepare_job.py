@@ -98,13 +98,16 @@ def prepare_aind_ephys_job(
     results_directory = intermediate_dir  # Start off the results in the intermediate folder and separate later
     work_directory = dandi_compute_dir / "work"
     apptainer_cache_directory = work_directory / "apptainer_cache"
+    # NOTE: NUMBA_CACHE_DIR is also needed for the pipeline
+    # but must be set in `~/.bashrc`, and must be the same as WORKDIR
+    # NUMBA_CACHE_DIR = "/orcd/data/dandi/001/dandi-compute/work"
     environment_directory = "/orcd/data/dandi/001/environments/name-nextflow_environment"
 
     # Construct submission script from template
     generate_aind_ephys_submission_script(
         script_file_path=script_file_path,
         log_directory=str(log_directory),
-        nwbfile_path=nwbfile_path,
+        nwb_file_path=nwbfile_path,
         results_directory=str(results_directory),
         work_directory=str(work_directory),
         apptainer_cache_directory=str(apptainer_cache_directory),

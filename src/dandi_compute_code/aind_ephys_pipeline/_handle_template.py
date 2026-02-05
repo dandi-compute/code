@@ -10,7 +10,7 @@ from ._globals import _RAW_TEMPLATE_FILE_PATH
 def generate_aind_ephys_submission_script(
     script_file_path: pathlib.Path,
     log_directory: str,
-    nwbfile_path: str,
+    nwb_file_path: str,
     results_directory: str,
     work_directory: str,
     apptainer_cache_directory: str,
@@ -30,7 +30,7 @@ def generate_aind_ephys_submission_script(
         Where to write the submission script.
     log_directory : str
         The log directory.
-    nwbfile_path : str
+    nwb_file_path : str
         The input NWB file path.
     results_directory : str
         The results directory.
@@ -51,7 +51,7 @@ def generate_aind_ephys_submission_script(
     template = jinja2.Template(source=raw_template)
     script = template.render(
         log_directory=log_directory,
-        nwbfile_path=nwbfile_path,
+        nwb_file_path=nwb_file_path,
         results_directory=results_directory,
         work_directory=work_directory,
         apptainer_cache_directory=apptainer_cache_directory,
