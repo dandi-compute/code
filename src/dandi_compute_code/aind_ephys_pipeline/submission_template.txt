@@ -32,7 +32,7 @@ cd $RESULTS_PATH
 mv nwb ../output
 mv visualization_output.json visualization/
 mv visualization ..
-cp {{ capsule_versions_file_path }} code/
+cp {{ capsule_versions_file_path }} ../code/
 
 dandi upload --allow-any-path --validation skip  # TODO: remove need for extra flags
 "{{ temp_name }}" >> {{ done_tracker_file_path }}
