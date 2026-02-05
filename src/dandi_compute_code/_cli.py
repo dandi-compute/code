@@ -86,15 +86,15 @@ def _aind_prepare_command(
     if silent:
         return
 
-    _styled_echo(text="\nPreparation complete!", fg="green")
+    _styled_echo(text="\nPreparation complete!", color="green")
 
     if submit and not silent:
-        _styled_echo(text="\n\nProcessing script at: {script_file_path}\n\n", fg="yellow")
+        _styled_echo(text="\n\nProcessing script at: {script_file_path}\n\n", color="yellow")
         return
 
     _styled_echo(
         text=f"\n\nTo submit the job, run:\n\n\tdandicompute aind submit --script-file-path {script_file_path}\n\n",
-        fg="yellow",
+        color="yellow",
     )
 
 
