@@ -71,7 +71,7 @@ def prepare_aind_ephys_job(
     # TODO: figure out if Zarr or not - only supports blobs ATM
 
     # Create an empty copy of Dandiset
-    processing_directory = f"{dandi_compute_dir}/processing"
+    processing_directory = dandi_compute_dir / "processing"
     temporary_processing_directory = pathlib.Path(tempfile.mkdtemp(dir=processing_directory))
     dandi.download.download(
         urls="DANDI:001697",
