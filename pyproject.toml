@@ -24,7 +24,7 @@ dependencies = [
 dynamic = ["version"]
 
 [project.scripts]
-dandicompute = "dandi_compute_code._cli._main:_cli"
+dandicompute = "dandi_compute_code._cli:_dandicompute_group"
 
 [dependency-groups]
 dev = ["ipython", "pre-commit"]
