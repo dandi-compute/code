@@ -93,7 +93,6 @@ def prepare_aind_ephys_job(
     log_directory.mkdir()
     intermediate_dir = dandiset_results_dir / "intermediate"
     intermediate_dir.mkdir()
-    (dandiset_results_dir / "output").mkdir()
 
     results_directory = intermediate_dir  # Start off the results in the intermediate folder and separate later
     work_directory = dandi_compute_dir / "work"
@@ -103,6 +102,7 @@ def prepare_aind_ephys_job(
     # NUMBA_CACHE_DIR = "/orcd/data/dandi/001/dandi-compute/work"
     environment_directory = "/orcd/data/dandi/001/environments/name-nextflow_environment"
     done_tracker_file_path = processing_directory / "done.txt"
+    capsule_versions_file_path = pipeline_file_path.parent / "capsule_versions.env"
 
     # Construct submission script from template
     generate_aind_ephys_submission_script(
@@ -117,6 +117,7 @@ def prepare_aind_ephys_job(
         pipeline_file_path=str(pipeline_file_path),
         temp_name=temporary_processing_directory.name,
         done_tracker_file_path=str(done_tracker_file_path),
+        capsule_versions_file_path=str(capsule_versions_file_path),
     )
     code_config_file_path.write_text(data=config_file_path.read_text())
 

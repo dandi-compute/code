@@ -49,15 +49,27 @@ def _aind_group() -> None:
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--submit",
+    help="Automatically submit the job.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
 def _aind_prepare_command(
     content_id: str,
     config_file_path: pathlib.Path | None = None,
     pipeline_file_path: pathlib.Path | None = None,
     silent: bool = False,
+    submit: bool = False,
 ) -> None:
     script_file_path = prepare_aind_ephys_job(
         content_id=content_id, config_file_path=config_file_path, pipeline_file_path=pipeline_file_path
     )
+
+    if submit:
+        submit_aind_ephys_job(script_file_path=script_file_path)
+        return
 
     if silent:
         return

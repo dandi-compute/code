@@ -29,8 +29,10 @@ DATA_PATH="$DATA_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF
     --nwb_ecephys_args "--backend hdf5"
 
 cd $RESULTS_PATH
-# TODO: move various items into places
-# TODO: copy capsule_version.env file into code for provenance
-# TODO: remove need for extra flags
-dandi upload --allow-any-path --validation skip
-{{ temp_name }} >> {{ done_tracker_file_path }}
+mv nwb ../output
+mv visualization_output.json visualization/
+mv visualization ..
+cp {{ capsule_versions_file_path }} code/
+
+dandi upload --allow-any-path --validation skip  # TODO: remove need for extra flags
+"{{ temp_name }}" >> {{ done_tracker_file_path }}
