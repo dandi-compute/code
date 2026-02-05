@@ -116,7 +116,7 @@ def prepare_aind_ephys_job(
         config_file_path=str(code_config_file_path),
         pipeline_file_path=str(pipeline_file_path),
         temp_name=temporary_processing_directory.name,
-        done_tracker_file_path=done_tracker_file_path,
+        done_tracker_file_path=str(done_tracker_file_path),
     )
     code_config_file_path.write_text(data=config_file_path.read_text())
 
