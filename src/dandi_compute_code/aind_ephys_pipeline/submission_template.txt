@@ -5,8 +5,6 @@
 #SBATCH --partition=mit_normal
 #SBATCH --time=12:00:00
 
-set -e
-
 NWB_FILE_PATH="{{ nwb_file_path }}"
 DATA_PATH="{{ data_path }}"
 
