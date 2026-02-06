@@ -1,0 +1,38 @@
+#!/bin/bash
+#SBATCH --job-name=AIND-Ephys-Pipeline
+#SBATCH --output={{ log_directory }}/job-%j_slurm.log
+#SBATCH --mem=16GB
+#SBATCH --partition=mit_normal
+#SBATCH --time=12:00:00
+
+NWB_FILE_PATH="{{ nwb_file_path }}"
+DATA_PATH="{{ data_path }}"
+
+RESULTS_PATH="{{ results_directory }}"
+WORKDIR="{{ work_directory }}"
+NXF_APPTAINER_CACHEDIR="{{ apptainer_cache_directory }}"
+
+source /etc/profile.d/modules.sh
+module load miniforge
+module load apptainer
+
+conda activate {{ environment_directory }}
+
+DATA_PATH="$DATA_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
+    -C "{{ config_file_path }}" \
+    -log "{{ log_directory }}/nextflow.log" \
+    run "{{ pipeline_file_path }}" \
+    -work-dir "$WORKDIR" \
+    --job_dispatch_args "--input nwb --nwb-files $NWB_FILE_PATH" \
+    --preprocessing_args "{{ preprocessing_args }}" \
+    --nwb_ecephys_args "--backend hdf5"
+
+cd $RESULTS_PATH
+mv nwb ../output
+mv visualization_output.json visualization/
+mv visualization ..
+cp {{ capsule_versions_file_path }} ../code/
+mv nextflow/* ../logs/
+
+dandi upload --allow-any-path --validation skip  # TODO: remove need for extra flags
+echo "{{ temp_name }}" >> {{ done_tracker_file_path }}

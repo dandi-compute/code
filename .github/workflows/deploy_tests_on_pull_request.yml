@@ -1,0 +1,27 @@
+name: Deploy tests
+
+on:
+  pull_request:
+    types: [synchronize, opened, reopened, ready_for_review]
+  merge_group:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  Tests:
+    uses: ./.github/workflows/testing.yml
+    with:
+      os_list: '["windows-2022","windows-latest","macos-15-intel","macos-latest","ubuntu-latest"]'
+      python_list: '["3.10","3.11","3.12","3.13","3.14"]'
+
+  all-tests-passed:
+    if: always()
+    needs: [Tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: re-actors/alls-green@release/v1
+        with:
+          jobs: ${{ toJSON(needs) }}
