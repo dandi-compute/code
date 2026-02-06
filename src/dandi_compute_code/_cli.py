@@ -94,7 +94,7 @@ def _aind_prepare_command(
         return
 
     _styled_echo(
-        text=f"\n\nTo submit the job, run:\n\n\tdandicompute aind submit --script-file-path {script_file_path}\n\n",
+        text=f"\n\nTo submit the job, run:\n\n\tdandicompute aind submit --script {script_file_path}\n\n",
         color="yellow",
     )
 
