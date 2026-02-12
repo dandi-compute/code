@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=AIND-Ephys-Pipeline
 #SBATCH --output={{ log_directory }}/job-%j_slurm.log
-#SBATCH --mem=16GB
+#SBATCH --mem=1GB
+#SBATCH --cpus-per-task 1
 #SBATCH --partition=mit_normal
 #SBATCH --time=12:00:00
 
