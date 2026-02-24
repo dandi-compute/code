@@ -72,7 +72,7 @@ def prepare_aind_ephys_job(
 
     config_file_path = config_file_path or pathlib.Path(__file__).parent / "mit_engaging.config"
     pipeline_file_path = (
-        pipeline_file_path or dandi_compute_dir / "aind-ephys-pipeline.cody/pipeline/main_multi_backend.nf"
+        pipeline_file_path or dandi_compute_dir / "aind-ephys-pipeline.source/pipeline/main_multi_backend.nf"
     )
     blob_head = content_id[0]
     partition = "001" if ord(blob_head) - ord("0") < 10 else "002"
