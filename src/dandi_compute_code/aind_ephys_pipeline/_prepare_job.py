@@ -51,21 +51,21 @@ def prepare_aind_ephys_job(
     client = dandi.dandiapi.DandiAPIClient(token=os.environ["DANDI_API_KEY"])
     dandiset = client.get_dandiset(dandiset_id="001697")
 
-    short_content_id = content_id[:8]
+    bids_content_id = content_id.replace("-", "+")
 
     # TODO: if first run for asset, skip below and add sourcedata
 
     # Assign the lowest integer run ID that has not been used yet, up to a maximum limit
     maximum_run_id = 99
     run_id = 1
-    dandiset_path = f"derivatives/pipeline-aind+ephys/derivatives/asset-{short_content_id}/result-{run_id}"
+    dandiset_path = f"derivatives/pipeline-aind+ephys/derivatives/asset-{bids_content_id}/result-{run_id}"
     for _ in range(maximum_run_id + 1):
         assets_checker = dandiset.get_assets_with_path_prefix(path=dandiset_path)
         if next(assets_checker, None) is None:
             continue
 
         run_id += 1
-        dandiset_path = f"derivatives/pipeline-aind+ephys/derivatives/asset-{short_content_id}/result-{run_id}"
+        dandiset_path = f"derivatives/pipeline-aind+ephys/derivatives/asset-{bids_content_id}/result-{run_id}"
 
     # TODO: update default path once upstream hashes have been updated
     dandi_compute_dir = pathlib.Path("/orcd/data/dandi/001/dandi-compute")
@@ -75,7 +75,7 @@ def prepare_aind_ephys_job(
         pipeline_file_path or dandi_compute_dir / "aind-ephys-pipeline.cody/pipeline/main_multi_backend.nf"
     )
     blob_head = content_id[0]
-    partition = "001" if ord(blob_head) - ord("0") < 10 else "002"
+    partition = "001" if ord(blob_head) - ord("0") < 9 else "002"
     nwbfile_path = f"/orcd/data/dandi/{partition}/s3dandiarchive/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}"
     # TODO: figure out if Zarr or not - only supports blobs ATM
 
