@@ -2,7 +2,7 @@ import pathlib
 
 import click
 
-from ._utils import _styled_echo
+from ._utils import _styled_echo, clean_work_directory
 from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_aind_ephys_job
 
 
@@ -10,6 +10,20 @@ from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_aind_ephys_job
 @click.group(name="dandicompute")
 def _dandicompute_group():
     pass
+
+
+# dandicompute clean [OPTIONS]
+@_dandicompute_group.command(name="clean")
+@click.option(
+    "--folder",
+    "folder",
+    help="Path to the folder to clean (all contents except 'apptainer_cache' will be deleted).",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+def _clean_command(folder: pathlib.Path) -> None:
+    clean_work_directory(folder=folder)
+    _styled_echo(text="\nWork directory cleaned!", color="green")
 
 
 # dandicompute aind

@@ -1,5 +1,30 @@
+import pathlib
+import shutil
+
 import click
 import pydantic
+
+
+@pydantic.validate_call
+def clean_work_directory(folder: pathlib.Path) -> None:
+    """
+    Clean all contents of a directory except the 'apptainer_cache' subdirectory.
+
+    Parameters
+    ----------
+    folder : pathlib.Path
+        Path to the directory to clean.
+    """
+    if not folder.is_dir():
+        message = f"The specified folder does not exist or is not a directory: {folder}"
+        raise NotADirectoryError(message)
+    for item in folder.iterdir():
+        if item.name == "apptainer_cache":
+            continue
+        if item.is_dir():
+            shutil.rmtree(item)
+        else:
+            item.unlink()
 
 
 @pydantic.validate_call
