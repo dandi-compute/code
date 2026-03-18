@@ -19,6 +19,9 @@ module load apptainer
 
 conda activate {{ environment_directory }}
 
+# Need to ensure latest DANDI-CLI version is always used, otherwise upload of logs may not be possible at the end
+pip install -U dandi
+
 DATA_PATH="$DATA_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
     -C "{{ config_file_path }}" \
     -log "{{ log_directory }}/nextflow.log" \
