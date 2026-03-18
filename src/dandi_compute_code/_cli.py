@@ -15,14 +15,14 @@ def _dandicompute_group():
 # dandicompute clean [OPTIONS]
 @_dandicompute_group.command(name="clean")
 @click.option(
-    "--folder",
-    "folder",
-    help="Path to the folder to clean (all contents except 'apptainer_cache' will be deleted).",
+    "--directory",
+    "directory",
+    help="Path to the directory to clean (all contents except 'apptainer_cache' will be deleted).",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
-def _clean_command(folder: pathlib.Path) -> None:
-    clean_work_directory(folder=folder)
+def _clean_command(directory: pathlib.Path) -> None:
+    clean_work_directory(directory=directory)
     _styled_echo(text="\nWork directory cleaned!", color="green")
 
 
