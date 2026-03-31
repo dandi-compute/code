@@ -8,10 +8,10 @@ import typing
 
 import dandi
 import dandi.dandiapi
-import dandi.dandiarchive
 import dandi.download
 import dandi.upload
 import pydantic
+import yaml
 
 from ._handle_template import generate_aind_ephys_submission_script
 
@@ -78,6 +78,25 @@ def prepare_aind_ephys_job(
     else:
         params_id = hashlib.md5(parameters_file_path.read_bytes()).hexdigest()
 
+    dandi_compute_dir = pathlib.Path("/orcd/data/dandi/001/dandi-compute")
+    dandi_cache_directory = dandi_compute_dir / "dandi-cache"
+    content_id_to_unique_dandiset_path_file = (
+        dandi_cache_directory
+        / "content-id-to-unique-dandiset-path"
+        / "derivatives"
+        / "content_id_to_unique_dandiset_path.yaml"
+    )
+    with content_id_to_unique_dandiset_path_file.open(mode="r") as file_stream:
+        content_id_to_unique_dandiset_path = yaml.safe_load(file_stream)
+
+    if content_id not in content_id_to_unique_dandiset_path:
+        message = (
+            f"Content ID {content_id} not found in content ID to unique Dandiset path mapping. "
+            "This likely means that the content ID is not associated with a Dandiset, "
+            "or that the mapping file is out of date."
+        )
+        raise ValueError(message)
+
     # TODO: if first run for asset, skip below and add sourcedata
 
     # Assign the lowest integer run ID that has not been used yet, up to a maximum limit
@@ -97,9 +116,6 @@ def prepare_aind_ephys_job(
             f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/content-{bidsy_content_id}/"
             f"attempt-{run_id}_params-{params_id}"
         )
-
-    # TODO: update default path once upstream hashes have been updated
-    dandi_compute_dir = pathlib.Path("/orcd/data/dandi/001/dandi-compute")
 
     config_file_path = config_file_path or pathlib.Path(__file__).parent / "mit_engaging.config"
     pipeline_file_path = (
