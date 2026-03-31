@@ -19,7 +19,6 @@ def generate_aind_ephys_submission_script(
     pipeline_file_path: str,
     pipeline_repo_directory: str,
     pipeline_version: str,
-    capsule_versions_file_path: str,
     temp_name: str,
     done_tracker_file_path: str,
     params_file_path: str,
