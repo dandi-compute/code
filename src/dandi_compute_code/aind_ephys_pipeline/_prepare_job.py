@@ -153,7 +153,6 @@ def prepare_aind_ephys_job(
     intermediate_dir = dandiset_output_dir / "intermediate"
     intermediate_dir.mkdir()
 
-    results_directory = intermediate_dir  # Start off the results in the intermediate folder and separate later
     work_directory = dandi_compute_dir / "work"
     apptainer_cache_directory = work_directory / "apptainer_cache"
     # NOTE: NUMBA_CACHE_DIR is also needed for the pipeline
@@ -170,7 +169,7 @@ def prepare_aind_ephys_job(
         script_file_path=script_file_path,
         log_directory=str(log_directory),
         nwb_file_path=nwbfile_path,
-        results_directory=str(results_directory),
+        results_directory=str(intermediate_dir),  # Start off the results in the intermediate folder and separate later
         work_directory=str(work_directory),
         apptainer_cache_directory=str(apptainer_cache_directory),
         environment_directory=environment_directory,

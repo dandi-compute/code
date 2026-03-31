@@ -38,6 +38,7 @@ mv nwb ../output
 mv visualization_output.json visualization/
 mv visualization ..
 mv nextflow/* ../logs/
+rm -rf $RESULTS_PATH  # Clean up intermediate values
 
 dandi upload --allow-any-path --validation skip  # TODO: remove need for extra flags
 echo "{{ temp_name }}" >> {{ done_tracker_file_path }}
