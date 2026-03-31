@@ -28,8 +28,8 @@ pip install -U dandi
 DATA_PATH="$DATA_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
     -C "{{ config_file_path }}" \
     -log "{{ log_directory }}/nextflow.log" \
-    -work-dir "$WORKDIR" \
     run "{{ pipeline_file_path }}" \
+    -work-dir "$WORKDIR" \
     --params-file "{{ params_file_path }}" \
     --job_dispatch_args "--nwb-files $NWB_FILE_PATH"
 
@@ -37,7 +37,6 @@ cd $RESULTS_PATH
 mv nwb ../output
 mv visualization_output.json visualization/
 mv visualization ..
-cp {{ capsule_versions_file_path }} ../code/
 mv nextflow/* ../logs/
 
 dandi upload --allow-any-path --validation skip  # TODO: remove need for extra flags

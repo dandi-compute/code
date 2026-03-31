@@ -84,7 +84,8 @@ def prepare_aind_ephys_job(
     maximum_run_id = 99
     run_id = 1
     dandiset_path = (
-        f"derivatives/pipeline-aind+ephys/derivatives/content-{bidsy_content_id}/attempt-{run_id}_params-{params_id}"
+        f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/content-{bidsy_content_id}/"
+        f"attempt-{run_id}_params-{params_id}"
     )
     for _ in range(maximum_run_id + 1):
         assets_checker = dandiset.get_assets_with_path_prefix(path=dandiset_path)
@@ -93,7 +94,7 @@ def prepare_aind_ephys_job(
 
         run_id += 1
         dandiset_path = (
-            f"derivatives/pipeline-aind+ephys/derivatives/content-{bidsy_content_id}/"
+            f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/content-{bidsy_content_id}/"
             f"attempt-{run_id}_params-{params_id}"
         )
 
@@ -126,6 +127,7 @@ def prepare_aind_ephys_job(
     script_file_path = code_dir / "submit.sh"
     code_config_file_path = code_dir / config_file_path.name
     code_parameters_file_path = code_dir / parameters_file_path.name
+    code_capsule_versions_file_path = code_dir / "capsule_versions.env"
 
     log_directory = dandiset_output_dir / "logs"
 
@@ -162,10 +164,10 @@ def prepare_aind_ephys_job(
         temp_name=temporary_processing_directory.name,
         done_tracker_file_path=str(done_tracker_file_path),
         params_file_path=str(code_parameters_file_path),
-        capsule_versions_file_path=str(capsule_versions_file_path),
     )
     code_config_file_path.write_text(data=config_file_path.read_text())
     code_parameters_file_path.write_text(data=parameters_file_path.read_text())
+    code_capsule_versions_file_path.write_text(data=capsule_versions_file_path.read_text())
 
     # Upload preparation to 'reserve' spot during processing
     if silent:

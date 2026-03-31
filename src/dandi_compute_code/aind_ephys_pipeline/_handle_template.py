@@ -53,8 +53,6 @@ def generate_aind_ephys_submission_script(
         Path to the base pipeline repository intended to be used.
     pipeline_version : str, optional
         The pipeline version, which is used to checkout a branch of the pipeline repository.
-    capsule_versions_file_path : str
-        The path to the capsule versions file.
     temp_name : str
         The name of the temporary processing directory.
     done_tracker_file_path : str
@@ -77,7 +75,6 @@ def generate_aind_ephys_submission_script(
         pipeline_repo_directory=pipeline_repo_directory,
         pipeline_version=pipeline_version,
         params_file_path=params_file_path,
-        capsule_versions_file_path=capsule_versions_file_path,
         temp_name=temp_name,
         done_tracker_file_path=done_tracker_file_path,
     )
