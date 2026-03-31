@@ -96,24 +96,24 @@ def prepare_aind_ephys_job(
         raise ValueError(message)
 
     dandiset_id, dandiset_path = next(iter(content_id_to_unique_dandiset_path[content_id].items()))
-    dandiset_path_no_suffix = dandiset_path.remove_suffix(".nwb")
+    dandiset_path_no_suffix = dandiset_path.removesuffix(".nwb")
 
     # TODO: if first run for asset, skip below and add sourcedata
 
     # Assign the lowest integer run ID that has not been used yet, up to a maximum limit
     maximum_run_id = 99
     run_id = 1
-    dandiset_path = (
+    output_dandiset_path = (
         f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/dandiset-{dandiset_id}/"
         f"{dandiset_path_no_suffix}/attempt-{run_id}_params-{params_id}"
     )
     for _ in range(maximum_run_id + 1):
-        assets_checker = dandiset.get_assets_with_path_prefix(path=dandiset_path)
+        assets_checker = dandiset.get_assets_with_path_prefix(path=output_dandiset_path)
         if next(assets_checker, None) is None:
             continue
 
         run_id += 1
-        dandiset_path = (
+        output_dandiset_path = (
             f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/dandiset-{dandiset_id}/"
             f"{dandiset_path_no_suffix}/attempt-{run_id}_params-{params_id}"
         )
@@ -138,7 +138,7 @@ def prepare_aind_ephys_job(
     )
 
     # Construct BIDS derivative content
-    dandiset_output_dir = temporary_processing_directory / "001697" / dandiset_path
+    dandiset_output_dir = temporary_processing_directory / "001697" / output_dandiset_path
 
     code_dir = dandiset_output_dir / "code"
     script_file_path = code_dir / "submit.sh"
