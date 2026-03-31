@@ -25,8 +25,8 @@ pip install -U dandi
 DATA_PATH="$DATA_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF_APPTAINER_CACHEDIR" nextflow \
     -C "{{ config_file_path }}" \
     -log "{{ log_directory }}/nextflow.log" \
-    run "{{ pipeline_file_path }}" \
     -work-dir "$WORKDIR" \
+    run "{{ pipeline_file_path }}" \
     --params-file "{{ params_file_path }}" \
     --job_dispatch_args "--nwb-files $NWB_FILE_PATH"
 
