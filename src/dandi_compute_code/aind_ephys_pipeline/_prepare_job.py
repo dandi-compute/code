@@ -96,6 +96,7 @@ def prepare_aind_ephys_job(
         raise ValueError(message)
 
     dandiset_id, dandiset_path = next(iter(content_id_to_unique_dandiset_path[content_id].items()))
+    dandiset_path_no_suffix = dandiset_path.remove_suffix(".nwb")
 
     # TODO: if first run for asset, skip below and add sourcedata
 
@@ -104,7 +105,7 @@ def prepare_aind_ephys_job(
     run_id = 1
     dandiset_path = (
         f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/dandiset-{dandiset_id}/"
-        f"{dandiset_path}/attempt-{run_id}_params-{params_id}"
+        f"{dandiset_path_no_suffix}/attempt-{run_id}_params-{params_id}"
     )
     for _ in range(maximum_run_id + 1):
         assets_checker = dandiset.get_assets_with_path_prefix(path=dandiset_path)
@@ -114,7 +115,7 @@ def prepare_aind_ephys_job(
         run_id += 1
         dandiset_path = (
             f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/dandiset-{dandiset_id}/"
-            f"{dandiset_path}/attempt-{run_id}_params-{params_id}"
+            f"{dandiset_path_no_suffix}/attempt-{run_id}_params-{params_id}"
         )
 
     config_file_path = config_file_path or pathlib.Path(__file__).parent / "mit_engaging.config"
