@@ -160,3 +160,6 @@ fabric.properties
 # Data files for AIND pipeline
 *.npy
 *.nwb
+
+# Nextflow
+*.nextflow/
