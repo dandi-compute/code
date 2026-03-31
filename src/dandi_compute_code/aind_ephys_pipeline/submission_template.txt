@@ -27,9 +27,8 @@ DATA_PATH="$DATA_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF
     -log "{{ log_directory }}/nextflow.log" \
     run "{{ pipeline_file_path }}" \
     -work-dir "$WORKDIR" \
-    --job_dispatch_args "--input nwb --nwb-files $NWB_FILE_PATH" \
-    --preprocessing_args "{{ preprocessing_args }}" \
-    --nwb_ecephys_args "--backend hdf5"
+    --params-file "{{ params_file_path }}" \
+    --job_dispatch_args "--nwb-files $NWB_FILE_PATH"
 
 cd $RESULTS_PATH
 mv nwb ../output

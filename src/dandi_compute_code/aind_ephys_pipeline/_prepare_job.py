@@ -3,6 +3,7 @@ import io
 import os
 import pathlib
 import tempfile
+import typing
 
 import dandi
 import dandi.dandiapi
@@ -18,6 +19,8 @@ from ._handle_template import generate_aind_ephys_submission_script
 def prepare_aind_ephys_job(
     content_id: str,
     config_file_path: pathlib.Path | None = None,
+    parameters_key: typing.Literal["default", "no-motion", "custom"] = "default",
+    parameters_file_path: pathlib.Path | None = None,
     pipeline_file_path: pathlib.Path | None = None,
     preprocessing_args: str = "",
     silent: bool = False,
@@ -31,6 +34,11 @@ def prepare_aind_ephys_job(
         The content ID for the data to be processed.
     config_file_path : pathlib.Path, optional
         Path to the configuration file.
+    parameters_key : one of "default", "no-motion", or "custom".
+        The name of the parameters to use.
+        If "custom" is selected, `parameters_file_path` must be provided.
+    parameters_file_path : pathlib.Path, optional
+        Path to the parameters file.
     pipeline_file_path : pathlib.Path, optional
         Path to the pipeline file.
     preprocessing_args : str, optional
@@ -44,6 +52,12 @@ def prepare_aind_ephys_job(
     script_file_path : pathlib.Path
         The path to the generated submission script.
     """
+    if parameters_key == "custom" and parameters_file_path is None:
+        message = "If `parameters_key` is 'custom', then `parameters_file_path` must be provided."
+        raise ValueError(message)
+    if parameters_key != "custom" and parameters_file_path is not None:
+        message = "If `parameters_file_path` is provided, then `parameters_key` must be 'custom'."
+        raise ValueError(message)
     # TODO: remove the API key use once Dandiset is public
     if "DANDI_API_KEY" not in os.environ:
         message = "`DANDI_API_KEY` environment variable is not set."
@@ -71,6 +85,12 @@ def prepare_aind_ephys_job(
     dandi_compute_dir = pathlib.Path("/orcd/data/dandi/001/dandi-compute")
 
     config_file_path = config_file_path or pathlib.Path(__file__).parent / "mit_engaging.config"
+
+    if parameters_key == "default":
+        parameters_file_path = pathlib.Path(__file__).parent / "parameters.json"
+    elif parameters_key == "no-motion":
+        parameters_file_path = pathlib.Path(__file__).parent / "parameters_no_motion.json"
+
     pipeline_file_path = (
         pipeline_file_path or dandi_compute_dir / "aind-ephys-pipeline.cody/pipeline/main_multi_backend.nf"
     )
@@ -95,6 +115,7 @@ def prepare_aind_ephys_job(
     code_dir = dandiset_results_dir / "code"
     script_file_path = code_dir / "submit.sh"
     code_config_file_path = code_dir / config_file_path.name
+    parameters_file_path = code_dir / parameters_file_path.name
 
     log_directory = dandiset_results_dir / "logs"
 
