@@ -383,7 +383,7 @@
                 },
                 "selection": {
                     "method": "uniform",
-                    "method_kwargs": {"n_peaks_per_channel": 5000, "min_n_peaks": 100000, "select_per_channel": false},
+                    "method_kwargs": {"n_peaks_per_channel": 5000, "min_n_peaks": 100000, "select_per_channel": false}
                 },
                 "apply_motion_correction": true,
                 "motion_correction": {"preset": "dredge_fast"},
