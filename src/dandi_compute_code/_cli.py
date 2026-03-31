@@ -58,6 +58,14 @@ def _aind_group() -> None:
     default=None,
 )
 @click.option(
+    "--version",
+    "pipeline_version",
+    help="The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.",
+    required=False,
+    type=str,
+    default="v1.0.0",
+)
+@click.option(
     "--preprocessing",
     "preprocessing_args",
     help="Command-line arguments for preprocessing.",
@@ -83,6 +91,7 @@ def _aind_prepare_command(
     content_id: str,
     config_file_path: pathlib.Path | None = None,
     pipeline_file_path: pathlib.Path | None = None,
+    pipeline_version: str = "v1.0.0",
     preprocessing_args: str = "",
     submit: bool = False,
     silent: bool = False,
@@ -91,6 +100,7 @@ def _aind_prepare_command(
         content_id=content_id,
         config_file_path=config_file_path,
         pipeline_file_path=pipeline_file_path,
+        pipeline_version=pipeline_version,
         preprocessing_args=preprocessing_args,
         silent=silent,
     )

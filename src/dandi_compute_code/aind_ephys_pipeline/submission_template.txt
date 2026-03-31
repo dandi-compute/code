@@ -19,6 +19,9 @@ module load apptainer
 
 conda activate {{ environment_directory }}
 
+# Ensure the correct version of AIND pipeline is used
+git -C "{{ pipeline_repo_directory }}" checkout {{ pipeline_version }}
+
 # Need to ensure latest DANDI-CLI version is always used, otherwise upload of logs may not be possible at the end
 pip install -U dandi
 
