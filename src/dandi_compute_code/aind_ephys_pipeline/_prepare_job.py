@@ -45,8 +45,6 @@ def prepare_aind_ephys_job(
     pipeline_version : str, optional
         The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.
         Default is "v1.0.0".
-    preprocessing_args : str, optional
-        Command-line arguments for preprocessing.
     silent : bool, optional
         Whether to suppress output messages from the DANDI client.
         Default is False.

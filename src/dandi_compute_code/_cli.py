@@ -66,14 +66,6 @@ def _aind_group() -> None:
     default="v1.0.0",
 )
 @click.option(
-    "--preprocessing",
-    "preprocessing_args",
-    help="Command-line arguments for preprocessing.",
-    required=False,
-    type=str,
-    default="",
-)
-@click.option(
     "--submit",
     help="Automatically submit the job.",
     required=False,
@@ -92,7 +84,6 @@ def _aind_prepare_command(
     config_file_path: pathlib.Path | None = None,
     pipeline_file_path: pathlib.Path | None = None,
     pipeline_version: str = "v1.0.0",
-    preprocessing_args: str = "",
     submit: bool = False,
     silent: bool = False,
 ) -> None:
@@ -101,7 +92,6 @@ def _aind_prepare_command(
         config_file_path=config_file_path,
         pipeline_file_path=pipeline_file_path,
         pipeline_version=pipeline_version,
-        preprocessing_args=preprocessing_args,
         silent=silent,
     )
 
