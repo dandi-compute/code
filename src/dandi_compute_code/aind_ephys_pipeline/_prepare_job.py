@@ -67,8 +67,6 @@ def prepare_aind_ephys_job(
     client = dandi.dandiapi.DandiAPIClient(token=os.environ["DANDI_API_KEY"])
     dandiset = client.get_dandiset(dandiset_id="001697")
 
-    bidsy_content_id = content_id.replace("-", "+")
-
     if parameters_key == "default":
         parameters_file_path = pathlib.Path(__file__).parent / "default_parameters.json"
         params_id = parameters_key
@@ -97,14 +95,16 @@ def prepare_aind_ephys_job(
         )
         raise ValueError(message)
 
+    dandiset_id, dandiset_path = next(iter(content_id_to_unique_dandiset_path[content_id].items()))
+
     # TODO: if first run for asset, skip below and add sourcedata
 
     # Assign the lowest integer run ID that has not been used yet, up to a maximum limit
     maximum_run_id = 99
     run_id = 1
     dandiset_path = (
-        f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/content-{bidsy_content_id}/"
-        f"attempt-{run_id}_params-{params_id}"
+        f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/dandiset-{dandiset_id}/"
+        f"{dandiset_path}/attempt-{run_id}_params-{params_id}"
     )
     for _ in range(maximum_run_id + 1):
         assets_checker = dandiset.get_assets_with_path_prefix(path=dandiset_path)
@@ -113,8 +113,8 @@ def prepare_aind_ephys_job(
 
         run_id += 1
         dandiset_path = (
-            f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/content-{bidsy_content_id}/"
-            f"attempt-{run_id}_params-{params_id}"
+            f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/dandiset-{dandiset_id}/"
+            f"{dandiset_path}/attempt-{run_id}_params-{params_id}"
         )
 
     config_file_path = config_file_path or pathlib.Path(__file__).parent / "mit_engaging.config"
