@@ -74,9 +74,9 @@ def prepare_aind_ephys_job(
         params_id = parameters_key
     elif parameters_key == "no-motion":
         parameters_file_path = pathlib.Path(__file__).parent / "no_motion_parameters.json"
-        params_id = parameters_key
+        params_id = parameters_key.replace("-", "+")
     else:
-        params_id = hashlib.md5(parameters_file_path.read_bytes()).hexdigest()
+        params_id = hashlib.md5(parameters_file_path.read_bytes()).hexdigest()[0:7]
 
     dandi_compute_dir = pathlib.Path("/orcd/data/dandi/001/dandi-compute")
     dandi_cache_directory = dandi_compute_dir / "dandi-cache"
@@ -98,7 +98,9 @@ def prepare_aind_ephys_job(
         raise ValueError(message)
 
     dandiset_id, dandiset_path = next(iter(content_id_to_unique_dandiset_path[content_id].items()))
-    dandiset_path_no_suffix = dandiset_path.removesuffix(".nwb")
+    dandiset_path_no_suffix_or_leading_bids = (
+        dandiset_path.removesuffix(".nwb").removeprefix("sourcedata/").removeprefix("derivatives/")
+    )
 
     # TODO: if first run for asset, skip below and add sourcedata
 
@@ -115,13 +117,15 @@ def prepare_aind_ephys_job(
         raise ValueError(message)
     commit_head = commit_hash[0:7]
 
+    bidsy_pipeline_version = pipeline_version.replace("-", "+")
+    output_dandiset_path_base = (
+        f"derivatives/pipeline-aind+ephys_version-{bidsy_pipeline_version}+{commit_head}/derivatives/"
+        f"dandiset-{dandiset_id}/{dandiset_path_no_suffix_or_leading_bids}/params-{params_id}"
+    )
+
     # Assign the lowest integer run ID that has not been used yet, up to a maximum limit
     maximum_run_id = 99
     run_id = 1
-    output_dandiset_path_base = (
-        f"derivatives/pipeline-aind+ephys_version-{pipeline_version}+{commit_head}/derivatives/dandiset-{dandiset_id}/"
-        f"{dandiset_path_no_suffix}/params-{params_id}"
-    )
     output_dandiset_path = f"{output_dandiset_path_base}_attempt-{run_id}"
     for _ in range(maximum_run_id + 1):
         assets_checker = dandiset.get_assets_with_path_prefix(path=output_dandiset_path)
