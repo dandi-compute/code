@@ -3,6 +3,8 @@ import hashlib
 import io
 import os
 import pathlib
+import re
+import subprocess
 import tempfile
 import typing
 
@@ -22,7 +24,7 @@ def prepare_aind_ephys_job(
     config_file_path: pathlib.Path | None = None,
     parameters_key: typing.Literal["default", "no-motion", "custom"] = "default",
     parameters_file_path: pathlib.Path | None = None,
-    pipeline_file_path: pathlib.Path | None = None,
+    pipeline_directory: pathlib.Path | None = None,
     pipeline_version: str = "v1.0.0",
     silent: bool = False,
 ) -> pathlib.Path:
@@ -40,8 +42,8 @@ def prepare_aind_ephys_job(
         If "custom" is selected, `parameters_file_path` must be provided.
     parameters_file_path : pathlib.Path, optional
         Path to the parameters file.
-    pipeline_file_path : pathlib.Path, optional
-        Path to the pipeline file.
+    pipeline_directory : pathlib.Path, optional
+        Local path to the pipeline repository.
     pipeline_version : str, optional
         The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.
         Default is "v1.0.0".
@@ -100,30 +102,38 @@ def prepare_aind_ephys_job(
 
     # TODO: if first run for asset, skip below and add sourcedata
 
+    pipeline_directory = pipeline_directory or dandi_compute_dir / "aind-ephys-pipeline.cody"
+    pipeline_file_path = pipeline_directory / "pipeline" / "main_multi_backend.nf"
+
+    commit_hash = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"],
+        cwd=pipeline_directory,
+        text=True,
+    ).strip()
+    if not re.match(r"^[0-9a-f]{40}$", commit_hash):
+        message = f"Unexpected commit hash format: {commit_hash}"
+        raise ValueError(message)
+    commit_head = commit_hash[0:7]
+
     # Assign the lowest integer run ID that has not been used yet, up to a maximum limit
     maximum_run_id = 99
     run_id = 1
-    output_dandiset_path = (
-        f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/dandiset-{dandiset_id}/"
-        f"{dandiset_path_no_suffix}/attempt-{run_id}_params-{params_id}"
+    output_dandiset_path_base = (
+        f"derivatives/pipeline-aind+ephys_version-{pipeline_version}+{commit_head}/derivatives/dandiset-{dandiset_id}/"
+        f"{dandiset_path_no_suffix}/params-{params_id}"
     )
+    output_dandiset_path = f"{output_dandiset_path_base}_attempt-{run_id}"
     for _ in range(maximum_run_id + 1):
         assets_checker = dandiset.get_assets_with_path_prefix(path=output_dandiset_path)
         if next(assets_checker, None) is None:
             continue
 
         run_id += 1
-        output_dandiset_path = (
-            f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/dandiset-{dandiset_id}/"
-            f"{dandiset_path_no_suffix}/attempt-{run_id}_params-{params_id}"
-        )
+        output_dandiset_path = f"{output_dandiset_path_base}_attempt-{run_id}"
 
     config_file_path = config_file_path or pathlib.Path(__file__).parent / "mit_engaging.config"
-    pipeline_file_path = (
-        pipeline_file_path or dandi_compute_dir / "aind-ephys-pipeline.cody/pipeline/main_multi_backend.nf"
-    )
     blob_head = content_id[0]
-    partition = "001" if ord(blob_head) - ord("0") < 10 else "002"
+    partition = "001" if ord(blob_head) - ord("0") <= 8 else "002"  # TODO: pull from source to keep up to date
     nwbfile_path = f"/orcd/data/dandi/{partition}/s3dandiarchive/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}"
     # TODO: figure out if Zarr or not - only supports blobs ATM
 
