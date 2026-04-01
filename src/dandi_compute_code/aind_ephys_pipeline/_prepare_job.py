@@ -43,7 +43,7 @@ def prepare_aind_ephys_job(
     parameters_file_path : pathlib.Path, optional
         Path to the parameters file.
     pipeline_directory : pathlib.Path, optional
-        Local path to the pipeline repository.
+        Local path to the AIND pipeline repository.
     pipeline_version : str, optional
         The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.
         Default is "v1.0.0".
