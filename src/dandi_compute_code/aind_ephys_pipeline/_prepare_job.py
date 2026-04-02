@@ -3,6 +3,8 @@ import hashlib
 import io
 import os
 import pathlib
+import re
+import subprocess
 import tempfile
 import typing
 
@@ -22,8 +24,8 @@ def prepare_aind_ephys_job(
     config_file_path: pathlib.Path | None = None,
     parameters_key: typing.Literal["default", "no-motion", "custom"] = "default",
     parameters_file_path: pathlib.Path | None = None,
-    pipeline_file_path: pathlib.Path | None = None,
-    pipeline_version: str = "v1.0.0",
+    pipeline_directory: pathlib.Path | None = None,
+    pipeline_version: str = "v1.0.0-fixes",
     silent: bool = False,
 ) -> pathlib.Path:
     """
@@ -40,11 +42,11 @@ def prepare_aind_ephys_job(
         If "custom" is selected, `parameters_file_path` must be provided.
     parameters_file_path : pathlib.Path, optional
         Path to the parameters file.
-    pipeline_file_path : pathlib.Path, optional
-        Path to the pipeline file.
+    pipeline_directory : pathlib.Path, optional
+        Local path to the AIND pipeline repository.
     pipeline_version : str, optional
         The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.
-        Default is "v1.0.0".
+        Default is "v1.0.0-fixes".
     silent : bool, optional
         Whether to suppress output messages from the DANDI client.
         Default is False.
@@ -60,6 +62,11 @@ def prepare_aind_ephys_job(
     if parameters_key != "custom" and parameters_file_path is not None:
         message = "If `parameters_file_path` is provided, then `parameters_key` must be 'custom'."
         raise ValueError(message)
+    if pipeline_version == "v1.0.0":
+        message = (
+            "Version `v1.0.0` is incompatible with the new parameters file usage." "Please use `v1.0.0-fixes` instead."
+        )
+        raise ValueError(message)
     # TODO: remove the API key use once Dandiset is public
     if "DANDI_API_KEY" not in os.environ:
         message = "`DANDI_API_KEY` environment variable is not set."
@@ -67,16 +74,14 @@ def prepare_aind_ephys_job(
     client = dandi.dandiapi.DandiAPIClient(token=os.environ["DANDI_API_KEY"])
     dandiset = client.get_dandiset(dandiset_id="001697")
 
-    bidsy_content_id = content_id.replace("-", "+")
-
     if parameters_key == "default":
         parameters_file_path = pathlib.Path(__file__).parent / "default_parameters.json"
         params_id = parameters_key
     elif parameters_key == "no-motion":
         parameters_file_path = pathlib.Path(__file__).parent / "no_motion_parameters.json"
-        params_id = parameters_key
+        params_id = parameters_key.replace("-", "+")
     else:
-        params_id = hashlib.md5(parameters_file_path.read_bytes()).hexdigest()
+        params_id = hashlib.md5(parameters_file_path.read_bytes()).hexdigest()[0:7]
 
     dandi_compute_dir = pathlib.Path("/orcd/data/dandi/001/dandi-compute")
     dandi_cache_directory = dandi_compute_dir / "dandi-cache"
@@ -97,32 +102,47 @@ def prepare_aind_ephys_job(
         )
         raise ValueError(message)
 
+    dandiset_id, dandiset_path = next(iter(content_id_to_unique_dandiset_path[content_id].items()))
+    dandiset_path_no_suffix_or_leading_bids = (
+        dandiset_path.removesuffix(".nwb").removeprefix("sourcedata/").removeprefix("derivatives/")
+    )
+
     # TODO: if first run for asset, skip below and add sourcedata
+
+    pipeline_directory = pipeline_directory or dandi_compute_dir / "aind-ephys-pipeline.cody"
+    pipeline_file_path = pipeline_directory / "pipeline" / "main_multi_backend.nf"
+
+    commit_hash = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"],
+        cwd=pipeline_directory,
+        text=True,
+    ).strip()
+    if not re.match(r"^[0-9a-f]{40}$", commit_hash):
+        message = f"Unexpected commit hash format: {commit_hash}"
+        raise ValueError(message)
+    commit_head = commit_hash[0:7]
+
+    bidsy_pipeline_version = pipeline_version.replace("-", "+")
+    output_dandiset_path_base = (
+        f"derivatives/pipeline-aind+ephys_version-{bidsy_pipeline_version}+{commit_head}/derivatives/"
+        f"dandiset-{dandiset_id}/{dandiset_path_no_suffix_or_leading_bids}/params-{params_id}"
+    )
 
     # Assign the lowest integer run ID that has not been used yet, up to a maximum limit
     maximum_run_id = 99
     run_id = 1
-    dandiset_path = (
-        f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/content-{bidsy_content_id}/"
-        f"attempt-{run_id}_params-{params_id}"
-    )
+    output_dandiset_path = f"{output_dandiset_path_base}_attempt-{run_id}"
     for _ in range(maximum_run_id + 1):
-        assets_checker = dandiset.get_assets_with_path_prefix(path=dandiset_path)
+        assets_checker = dandiset.get_assets_with_path_prefix(path=output_dandiset_path)
         if next(assets_checker, None) is None:
             continue
 
         run_id += 1
-        dandiset_path = (
-            f"derivatives/pipeline-aind+ephys_version-{pipeline_version}/derivatives/content-{bidsy_content_id}/"
-            f"attempt-{run_id}_params-{params_id}"
-        )
+        output_dandiset_path = f"{output_dandiset_path_base}_attempt-{run_id}"
 
     config_file_path = config_file_path or pathlib.Path(__file__).parent / "mit_engaging.config"
-    pipeline_file_path = (
-        pipeline_file_path or dandi_compute_dir / "aind-ephys-pipeline.cody/pipeline/main_multi_backend.nf"
-    )
     blob_head = content_id[0]
-    partition = "001" if ord(blob_head) - ord("0") < 10 else "002"
+    partition = "001" if ord(blob_head) - ord("0") <= 8 else "002"  # TODO: pull from source to keep up to date
     nwbfile_path = f"/orcd/data/dandi/{partition}/s3dandiarchive/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}"
     # TODO: figure out if Zarr or not - only supports blobs ATM
 
@@ -137,7 +157,7 @@ def prepare_aind_ephys_job(
     )
 
     # Construct BIDS derivative content
-    dandiset_output_dir = temporary_processing_directory / "001697" / dandiset_path
+    dandiset_output_dir = temporary_processing_directory / "001697" / output_dandiset_path
 
     code_dir = dandiset_output_dir / "code"
     script_file_path = code_dir / "submit.sh"
@@ -152,7 +172,6 @@ def prepare_aind_ephys_job(
     intermediate_dir = dandiset_output_dir / "intermediate"
     intermediate_dir.mkdir()
 
-    results_directory = intermediate_dir  # Start off the results in the intermediate folder and separate later
     work_directory = dandi_compute_dir / "work"
     apptainer_cache_directory = work_directory / "apptainer_cache"
     # NOTE: NUMBA_CACHE_DIR is also needed for the pipeline
@@ -169,7 +188,7 @@ def prepare_aind_ephys_job(
         script_file_path=script_file_path,
         log_directory=str(log_directory),
         nwb_file_path=nwbfile_path,
-        results_directory=str(results_directory),
+        results_directory=str(intermediate_dir),  # Start off the results in the intermediate folder and separate later
         work_directory=str(work_directory),
         apptainer_cache_directory=str(apptainer_cache_directory),
         environment_directory=environment_directory,

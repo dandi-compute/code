@@ -1,4 +1,5 @@
 import pathlib
+import typing
 
 import click
 
@@ -51,8 +52,8 @@ def _aind_group() -> None:
 )
 @click.option(
     "--pipeline",
-    "pipeline_file_path",
-    help="Path to the pipeline file.",
+    "pipeline_directory",
+    help="Local path to the AIND pipeline repository.",
     required=False,
     type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
     default=None,
@@ -63,7 +64,15 @@ def _aind_group() -> None:
     help="The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.",
     required=False,
     type=str,
-    default="v1.0.0",
+    default="v1.0.0-fixes",
+)
+@click.option(
+    "--params",
+    "parameters_key",
+    help="The name of the parameters to use.",
+    required=False,
+    type=click.Choice(["default", "no-motion"], case_sensitive=False),
+    default="default",
 )
 @click.option(
     "--submit",
@@ -82,16 +91,18 @@ def _aind_group() -> None:
 def _aind_prepare_command(
     content_id: str,
     config_file_path: pathlib.Path | None = None,
-    pipeline_file_path: pathlib.Path | None = None,
-    pipeline_version: str = "v1.0.0",
+    pipeline_directory: pathlib.Path | None = None,
+    pipeline_version: str = "v1.0.0-fixes",
+    parameters_key: typing.Literal["default", "no-motion"] = "default",
     submit: bool = False,
     silent: bool = False,
 ) -> None:
     script_file_path = prepare_aind_ephys_job(
         content_id=content_id,
         config_file_path=config_file_path,
-        pipeline_file_path=pipeline_file_path,
+        pipeline_directory=pipeline_directory,
         pipeline_version=pipeline_version,
+        parameters_key=parameters_key,
         silent=silent,
     )
 
