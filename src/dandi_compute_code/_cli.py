@@ -51,8 +51,8 @@ def _aind_group() -> None:
 )
 @click.option(
     "--pipeline",
-    "pipeline_file_path",
-    help="Path to the pipeline file.",
+    "pipeline_directory",
+    help="Local path to the AIND pipeline repository.",
     required=False,
     type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
     default=None,
@@ -82,7 +82,7 @@ def _aind_group() -> None:
 def _aind_prepare_command(
     content_id: str,
     config_file_path: pathlib.Path | None = None,
-    pipeline_file_path: pathlib.Path | None = None,
+    pipeline_directory: pathlib.Path | None = None,
     pipeline_version: str = "v1.0.0",
     submit: bool = False,
     silent: bool = False,
@@ -90,7 +90,7 @@ def _aind_prepare_command(
     script_file_path = prepare_aind_ephys_job(
         content_id=content_id,
         config_file_path=config_file_path,
-        pipeline_file_path=pipeline_file_path,
+        pipeline_directory=pipeline_directory,
         pipeline_version=pipeline_version,
         silent=silent,
     )
