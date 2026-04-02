@@ -3,6 +3,7 @@ import typing
 
 import click
 
+from ._testing import check_and_trigger, check_last_week
 from ._utils import _styled_echo, clean_work_directory
 from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_aind_ephys_job
 
@@ -122,6 +123,32 @@ def _aind_prepare_command(
         text=f"\n\nTo submit the job, run:\n\n\tdandicompute aind submit --script {script_file_path}\n\n",
         color="yellow",
     )
+
+
+# dandicompute testing
+@_dandicompute_group.group(name="testing")
+def _testing_group() -> None:
+    pass
+
+
+# dandicompute testing check-and-trigger
+@_testing_group.command(name="check-and-trigger")
+def _testing_check_and_trigger_command() -> None:
+    try:
+        check_and_trigger()
+    except RuntimeError as exception:
+        raise click.ClickException(str(exception)) from exception
+    _styled_echo(text="\nTesting check passed!", color="green")
+
+
+# dandicompute testing check-last-week
+@_testing_group.command(name="check-last-week")
+def _testing_check_last_week_command() -> None:
+    try:
+        check_last_week()
+    except RuntimeError as exception:
+        raise click.ClickException(str(exception)) from exception
+    _styled_echo(text="\nTesting assets found within the past week!", color="green")
 
 
 # dandicompute aind submit [OPTIONS]
