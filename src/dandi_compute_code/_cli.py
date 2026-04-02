@@ -69,7 +69,7 @@ def _aind_group() -> None:
 @click.option(
     "--params",
     "parameters_key",
-    help="The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.",
+    help="The name of the parameters to use.",
     required=False,
     type=click.Choice(["default", "no-motion"], case_sensitive=False),
     default="default",
