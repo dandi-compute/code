@@ -66,6 +66,14 @@ def _aind_group() -> None:
     default="v1.0.0",
 )
 @click.option(
+    "--params",
+    "parameters_key",
+    help="The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.",
+    required=False,
+    type=click.Choice(["default", "no-motion"], case_sensitive=False),
+    default="default",
+)
+@click.option(
     "--submit",
     help="Automatically submit the job.",
     required=False,
@@ -84,6 +92,7 @@ def _aind_prepare_command(
     config_file_path: pathlib.Path | None = None,
     pipeline_directory: pathlib.Path | None = None,
     pipeline_version: str = "v1.0.0",
+    parameters_key: typing.Literal["default", "no-motion"] = "default",
     submit: bool = False,
     silent: bool = False,
 ) -> None:
@@ -92,6 +101,7 @@ def _aind_prepare_command(
         config_file_path=config_file_path,
         pipeline_directory=pipeline_directory,
         pipeline_version=pipeline_version,
+        parameters_key=parameters_key,
         silent=silent,
     )
 
