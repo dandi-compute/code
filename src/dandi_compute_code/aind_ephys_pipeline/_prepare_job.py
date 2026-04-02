@@ -1,4 +1,5 @@
 import contextlib
+import datetime
 import hashlib
 import io
 import os
@@ -106,6 +107,11 @@ def prepare_aind_ephys_job(
     dandiset_path_no_suffix_or_leading_bids = (
         dandiset_path.removesuffix(".nwb").removeprefix("sourcedata/").removeprefix("derivatives/")
     )
+
+    # Special case - add date entity for testing asset
+    if content_id == "048d1ee9-83b7-491f-8f02-1ca615b1d455":
+        today = datetime.date.today().isoformat().replace("-", "+")
+        params_id += f"_date-{today}"
 
     # TODO: if first run for asset, skip below and add sourcedata
 
