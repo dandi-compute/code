@@ -64,7 +64,7 @@ def _aind_group() -> None:
     help="The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.",
     required=False,
     type=str,
-    default="v1.0.0",
+    default="v1.0.0-fixes",
 )
 @click.option(
     "--params",
