@@ -64,8 +64,7 @@ def prepare_aind_ephys_job(
         raise ValueError(message)
     if pipeline_version == "v1.0.0":
         message = (
-            "Version `v1.0.0` is incompatible with the new parameters file usage."
-            "Please use `v1.0.0-fixes` instead."
+            "Version `v1.0.0` is incompatible with the new parameters file usage." "Please use `v1.0.0-fixes` instead."
         )
         raise ValueError(message)
     # TODO: remove the API key use once Dandiset is public
