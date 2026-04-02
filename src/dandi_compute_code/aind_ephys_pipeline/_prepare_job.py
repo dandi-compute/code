@@ -25,7 +25,7 @@ def prepare_aind_ephys_job(
     parameters_key: typing.Literal["default", "no-motion", "custom"] = "default",
     parameters_file_path: pathlib.Path | None = None,
     pipeline_directory: pathlib.Path | None = None,
-    pipeline_version: str = "v1.0.0",
+    pipeline_version: str = "v1.0.0-fixes",
     silent: bool = False,
 ) -> pathlib.Path:
     """
@@ -46,7 +46,7 @@ def prepare_aind_ephys_job(
         Local path to the AIND pipeline repository.
     pipeline_version : str, optional
         The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.
-        Default is "v1.0.0".
+        Default is "v1.0.0-fixes".
     silent : bool, optional
         Whether to suppress output messages from the DANDI client.
         Default is False.
@@ -61,6 +61,12 @@ def prepare_aind_ephys_job(
         raise ValueError(message)
     if parameters_key != "custom" and parameters_file_path is not None:
         message = "If `parameters_file_path` is provided, then `parameters_key` must be 'custom'."
+        raise ValueError(message)
+    if pipeline_version == "v1.0.0":
+        message = (
+            "Version `v1.0.0` is incompatible with the new parameters file usage."
+            "Please use `v1.0.0-fixes` instead."
+        )
         raise ValueError(message)
     # TODO: remove the API key use once Dandiset is public
     if "DANDI_API_KEY" not in os.environ:
