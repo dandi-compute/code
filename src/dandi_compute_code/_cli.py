@@ -92,7 +92,7 @@ def _aind_prepare_command(
     content_id: str,
     config_file_path: pathlib.Path | None = None,
     pipeline_directory: pathlib.Path | None = None,
-    pipeline_version: str = "v1.0.0",
+    pipeline_version: str = "v1.0.0-fixes",
     parameters_key: typing.Literal["default", "no-motion"] = "default",
     submit: bool = False,
     silent: bool = False,
