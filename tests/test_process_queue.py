@@ -22,32 +22,30 @@ from dandi_compute_code.queue._process_queue import (
     process_queue,
 )
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 #: Consolidated queue config used by all tests that need a queue directory.
+#: Schema: top-level "pipelines" key; pipeline names are plain (no prefix);
+#: version_priority / params_priority are flat lists of plain names;
+#: max_attempts_per_asset and asset_overrides live directly on the pipeline object.
 _EXAMPLE_QUEUE_CONFIG = {
-    "pipeline-test": {
-        "priority": ["version-v1.0"],
-        "versions": {
-            "version-v1.0": {
-                "priority": ["params-default"],
-                "params": {
-                    "params-default": {
-                        "max_attempts_per_asset": 2,
-                        "asset_overrides": {"asset-aaa": 1},
-                    }
-                },
-            }
-        },
+    "pipelines": {
+        "test": {
+            "version_priority": ["v1.0"],
+            "params_priority": ["default"],
+            "max_attempts_per_asset": 2,
+            "asset_overrides": {"asset-aaa": 1},
+        }
     }
 }
 
 
 def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
     """
-    Build a minimal but realistic queue directory tree under *tmp_path*.
+    Build a minimal but realistic queue directory under *tmp_path*.
 
     Structure
     ---------
@@ -160,9 +158,9 @@ def test_fill_waiting_adds_entries(tmp_path: pathlib.Path) -> None:
 
         _fill_waiting(
             cwd=queue_dir,
-            pipeline_name="pipeline-test",
-            pipeline_version="version-v1.0",
-            params="params-default",
+            pipeline="test",
+            version="v1.0",
+            params="default",
         )
 
     lines = [line for line in (queue_dir / "waiting.jsonl").read_text().splitlines() if line.strip()]
@@ -182,9 +180,9 @@ def test_fill_waiting_skips_when_already_populated(tmp_path: pathlib.Path) -> No
     with mock.patch("urllib.request.urlopen") as mock_urlopen:
         _fill_waiting(
             cwd=queue_dir,
-            pipeline_name="pipeline-test",
-            pipeline_version="version-v1.0",
-            params="params-default",
+            pipeline="test",
+            version="v1.0",
+            params="default",
         )
         mock_urlopen.assert_not_called()
 
@@ -213,9 +211,9 @@ def test_fill_waiting_respects_max_attempts(tmp_path: pathlib.Path) -> None:
 
         _fill_waiting(
             cwd=queue_dir,
-            pipeline_name="pipeline-test",
-            pipeline_version="version-v1.0",
-            params="params-default",
+            pipeline="test",
+            version="v1.0",
+            params="default",
         )
 
     lines = [line for line in (queue_dir / "waiting.jsonl").read_text().splitlines() if line.strip()]
@@ -343,7 +341,7 @@ def test_process_queue_creates_missing_jsonl_files(tmp_path: pathlib.Path) -> No
     """process_queue creates waiting.jsonl and submitted.jsonl if they don't exist."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(json.dumps({}))
+    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
 
     with (
         mock.patch("dandi_compute_code.queue._process_queue._fill_waiting"),

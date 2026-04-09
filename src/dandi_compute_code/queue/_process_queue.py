@@ -21,11 +21,11 @@ def _fetch_counts(
     file_path : pathlib.Path
         Path to the JSONL file (e.g., submitted.jsonl).
     pipeline : str
-        Pipeline name (without 'pipeline-' prefix).
+        Pipeline name (e.g., 'aind+ephys').
     version : str
-        Version string (without 'version-' prefix).
+        Version string (e.g., 'v1.0.0+fixes+47bd492').
     params : str
-        Params string (without 'params-' prefix).
+        Params string (e.g., 'default').
 
     Returns
     -------
@@ -46,7 +46,7 @@ def _fetch_counts(
     return collections.Counter(content_ids)
 
 
-def _fill_waiting(*, cwd: pathlib.Path, pipeline_name: str, pipeline_version: str, params: str) -> None:
+def _fill_waiting(*, cwd: pathlib.Path, pipeline: str, version: str, params: str) -> None:
     """
     Fill the waiting queue with new entries for a given pipeline/version/params combination.
 
@@ -58,29 +58,27 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline_name: str, pipeline_version: st
     ----------
     cwd : pathlib.Path
         Path to the queue root directory (must be named 'queue').
-    pipeline_name : str
-        Pipeline key as it appears in ``queue_config.json`` (e.g., 'pipeline-aind+ephys').
-    pipeline_version : str
-        Version key as it appears in ``queue_config.json`` (e.g., 'version-v1.0.0+fixes+47bd492').
+    pipeline : str
+        Pipeline name as it appears in ``queue_config.json`` under ``pipelines``
+        (e.g., 'aind+ephys').
+    version : str
+        Version string as it appears in ``version_priority``
+        (e.g., 'v1.0.0+fixes+47bd492').
     params : str
-        Params key as it appears in ``queue_config.json`` (e.g., 'params-default').
+        Params string as it appears in ``params_priority`` (e.g., 'default').
     """
     waiting_file = cwd / "waiting.jsonl"
-
-    pipeline = pipeline_name.removeprefix("pipeline-")
-    version = pipeline_version.removeprefix("version-")
-    params_value = params.removeprefix("params-")
 
     previous_waiting = [
         entry
         for line in waiting_file.read_text().splitlines()
         if line.strip()
         for entry in [json.loads(line.strip())]
-        if entry.get("pipeline") == pipeline and entry.get("version") == version and entry.get("params") == params_value
+        if entry.get("pipeline") == pipeline and entry.get("version") == version and entry.get("params") == params
     ]
     if previous_waiting:
         print(
-            f"Queue already has entries for {pipeline_name}/{pipeline_version}/{params}!"
+            f"Queue already has entries for {pipeline}/{version}/{params}!"
             " Waiting until all entries have run before re-filling."
         )
         return
@@ -90,7 +88,7 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline_name: str, pipeline_version: st
         file_path=submitted_file,
         pipeline=pipeline,
         version=version,
-        params=params_value,
+        params=params,
     )
 
     url = (
@@ -101,10 +99,10 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline_name: str, pipeline_version: st
         qualifying_aind_content_ids = json.loads(gzip.decompress(response.read()))
 
     queue_config = json.loads((cwd / "queue_config.json").read_text())
-    params_cfg = queue_config[pipeline_name]["versions"][pipeline_version]["params"][params]
+    pipeline_cfg = queue_config["pipelines"][pipeline]
 
-    global_max_attempts = params_cfg["max_attempts_per_asset"]
-    asset_overrides = params_cfg["asset_overrides"]
+    global_max_attempts = pipeline_cfg["max_attempts_per_asset"]
+    asset_overrides = pipeline_cfg["asset_overrides"]
 
     new_waiting = set()
     for content_id in qualifying_aind_content_ids:
@@ -120,7 +118,7 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline_name: str, pipeline_version: st
                     {
                         "pipeline": pipeline,
                         "version": version,
-                        "params": params_value,
+                        "params": params,
                         "content_id": content_id,
                     }
                 )
@@ -194,13 +192,9 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
         if not all([pipeline, version, params, content_id]):
             continue
 
-        pipeline_key = "pipeline-" + pipeline
-        version_key = "version-" + version
-        params_key = "params-" + params
-        params_cfg = queue_config[pipeline_key]["versions"][version_key]["params"][params_key]
-
-        global_max_attempts = params_cfg["max_attempts_per_asset"]
-        asset_overrides = params_cfg["asset_overrides"]
+        pipeline_cfg = queue_config["pipelines"][pipeline]
+        global_max_attempts = pipeline_cfg["max_attempts_per_asset"]
+        asset_overrides = pipeline_cfg["asset_overrides"]
 
         submitted_counter = _fetch_counts(
             file_path=submitted_file,
@@ -266,8 +260,8 @@ def process_queue(*, cwd: pathlib.Path) -> None:
 
     If there are no waiting entries for a pipeline/version/params combination, it will be
     re-filled in accordance with ``queue_config.json`` and the current state of the
-    qualifying AIND cache.  The fill order follows the priority lists defined in
-    ``queue_config.json`` at the pipeline and version levels.
+    qualifying AIND cache.  The fill order follows the ``version_priority`` and
+    ``params_priority`` lists defined per pipeline in ``queue_config.json``.
 
     If there are no currently running jobs, the next entry in ``waiting.jsonl`` will be
     popped and submitted according to the logic in ``submit_job.py``.
@@ -295,28 +289,13 @@ def process_queue(*, cwd: pathlib.Path) -> None:
 
     queue_config = json.loads((cwd / "queue_config.json").read_text())
 
-    for pipeline_name, pipeline_data in queue_config.items():
-        version_priority_order = pipeline_data.get("priority", [])
-        versions_data = pipeline_data.get("versions", {})
-
-        prioritized_version_names = [v for v in version_priority_order if v in versions_data]
-        remaining_version_names = [v for v in versions_data if v not in prioritized_version_names]
-        version_names = prioritized_version_names + remaining_version_names
-
-        for pipeline_version in version_names:
-            version_data = versions_data[pipeline_version]
-            params_priority_order = version_data.get("priority", [])
-            params_data = version_data.get("params", {})
-
-            prioritized_params_names = [p for p in params_priority_order if p in params_data]
-            remaining_params_names = [p for p in params_data if p not in prioritized_params_names]
-            params_names = prioritized_params_names + remaining_params_names
-
-            for params in params_names:
+    for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
+        for version in pipeline_data.get("version_priority", []):
+            for params in pipeline_data.get("params_priority", []):
                 _fill_waiting(
                     cwd=cwd,
-                    pipeline_name=pipeline_name,
-                    pipeline_version=pipeline_version,
+                    pipeline=pipeline_name,
+                    version=version,
                     params=params,
                 )
 
