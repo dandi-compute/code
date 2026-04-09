@@ -2,6 +2,7 @@ import contextlib
 import datetime
 import hashlib
 import io
+import json
 import os
 import pathlib
 import re
@@ -68,21 +69,19 @@ def prepare_aind_ephys_job(
             "Version `v1.0.0` is incompatible with the new parameters file usage." "Please use `v1.0.0-fixes` instead."
         )
         raise ValueError(message)
+    config_file_path = config_file_path or pathlib.Path(__file__).parent / "mit_engaging.config"
+
     # TODO: remove the API key use once Dandiset is public
     if "DANDI_API_KEY" not in os.environ:
         message = "`DANDI_API_KEY` environment variable is not set."
         raise RuntimeError(message)
-    client = dandi.dandiapi.DandiAPIClient(token=os.environ["DANDI_API_KEY"])
-    dandiset = client.get_dandiset(dandiset_id="001697")
 
     if parameters_key == "default":
         parameters_file_path = pathlib.Path(__file__).parent / "default_parameters.json"
-        params_id = parameters_key
     elif parameters_key == "no-motion":
         parameters_file_path = pathlib.Path(__file__).parent / "no_motion_parameters.json"
-        params_id = parameters_key.replace("-", "+")
-    else:
-        params_id = hashlib.md5(parameters_file_path.read_bytes()).hexdigest()[0:7]
+    params_id = hashlib.md5(parameters_file_path.read_bytes()).hexdigest()[0:7]
+    config_id = hashlib.md5(config_file_path.read_bytes()).hexdigest()[0:7] if config_file_path else "default"
 
     dandi_compute_dir = pathlib.Path("/orcd/data/dandi/001/dandi-compute")
     dandi_cache_directory = dandi_compute_dir / "dandi-cache"
@@ -104,37 +103,56 @@ def prepare_aind_ephys_job(
         raise ValueError(message)
 
     dandiset_id, dandiset_path = next(iter(content_id_to_unique_dandiset_path[content_id].items()))
-    dandiset_path_no_suffix_or_leading_bids = (
-        dandiset_path.removesuffix(".nwb").removeprefix("sourcedata/").removeprefix("derivatives/")
-    )
+    entity_pairs = dandiset_path.removesuffix(".nwb").split("_")
+    entities = {}
+    for pair in entity_pairs:
+        key, value = pair.split("-", 1)
+        entities[key] = value
 
     # Special case - add date entity for testing asset
     if content_id == "048d1ee9-83b7-491f-8f02-1ca615b1d455":
         today = datetime.date.today().isoformat().replace("-", "+")
-        params_id += f"_date-{today}"
+        config_id += f"_date-{today}"
 
     # TODO: if first run for asset, skip below and add sourcedata
 
     pipeline_directory = pipeline_directory or dandi_compute_dir / "aind-ephys-pipeline.cody"
     pipeline_file_path = pipeline_directory / "pipeline" / "main_multi_backend.nf"
+    dandi_compute_code_source_dir = dandi_compute_dir / "code"
 
-    commit_hash = subprocess.check_output(
+    pipeline_commit_hash = subprocess.check_output(
         ["git", "rev-parse", "HEAD"],
         cwd=pipeline_directory,
         text=True,
     ).strip()
-    if not re.match(r"^[0-9a-f]{40}$", commit_hash):
-        message = f"Unexpected commit hash format: {commit_hash}"
+    if not re.match(r"^[0-9a-f]{40}$", pipeline_commit_hash):
+        message = f"Unexpected commit hash format: {pipeline_commit_hash}"
         raise ValueError(message)
-    commit_head = commit_hash[0:7]
+    pipeline_commit_head = pipeline_commit_hash[0:7]
+
+    dandi_comptue_code_commit_hash = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"],
+        cwd=dandi_compute_code_source_dir,
+        text=True,
+    ).strip()
+    if not re.match(r"^[0-9a-f]{40}$", dandi_comptue_code_commit_hash):
+        message = f"Unexpected commit hash format: {dandi_comptue_code_commit_hash}"
+        raise ValueError(message)
+    dandi_compute_code_source_commit_head = dandi_comptue_code_commit_hash[0:7]
 
     bidsy_pipeline_version = pipeline_version.replace("-", "+")
-    output_dandiset_path_base = (
-        f"derivatives/dandiset-{dandiset_id}/{dandiset_path_no_suffix_or_leading_bids}/"
-        f"pipeline-aind+ephys_version-{bidsy_pipeline_version}+{commit_head}/params-{params_id}"
+    output_dandiset_path_base = f"derivatives/dandiset-{dandiset_id}/sub-{entities['sub']}/"
+    if "ses" in entities:
+        output_dandiset_path_base += f"ses-{entities['subject']}/"
+    output_dandiset_path_base += (
+        f"pipeline-aind+ephys/version-{bidsy_pipeline_version}+{pipeline_commit_head}/"
+        f"params-{params_id}_config-{config_id}"
     )
 
     # Assign the lowest integer run ID that has not been used yet, up to a maximum limit
+    client = dandi.dandiapi.DandiAPIClient(token=os.environ["DANDI_API_KEY"])
+    dandiset = client.get_dandiset(dandiset_id="001697")
+
     maximum_run_id = 99
     run_id = 1
     output_dandiset_path = f"{output_dandiset_path_base}_attempt-{run_id}"
@@ -146,7 +164,6 @@ def prepare_aind_ephys_job(
         run_id += 1
         output_dandiset_path = f"{output_dandiset_path_base}_attempt-{run_id}"
 
-    config_file_path = config_file_path or pathlib.Path(__file__).parent / "mit_engaging.config"
     blob_head = content_id[0]
     partition = "001" if ord(blob_head) - ord("0") <= 8 else "002"  # TODO: pull from source to keep up to date
     nwbfile_path = f"/orcd/data/dandi/{partition}/s3dandiarchive/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}"
@@ -169,7 +186,9 @@ def prepare_aind_ephys_job(
     script_file_path = code_dir / "submit.sh"
     code_config_file_path = code_dir / config_file_path.name
     code_parameters_file_path = code_dir / parameters_file_path.name
+    code_pipeline_file_path = code_dir / pipeline_file_path.name
     code_capsule_versions_file_path = code_dir / "capsule_versions.env"
+    dataset_description_file_path = dandiset_output_dir / "dataset_description.json"
 
     log_directory = dandiset_output_dir / "logs"
 
@@ -188,6 +207,28 @@ def prepare_aind_ephys_job(
 
     pipeline_repo_directory = pipeline_file_path.parent.parent
     capsule_versions_file_path = pipeline_repo_directory / "pipeline" / "capsule_versions.env"
+
+    # TODO: could look up description, authors, license, etc. from source dandiset metadata
+    pipeline_url = f"https://github.com/CodyCBakerPhD/aind-ephys-pipeline/tree/{pipeline_version.replace('+','%2B')}"
+    dataset_description = {
+        "Name": f"DANDI Compute: AIND Ephys Pipeline Output for Dandiset {dandiset_id}",
+        "BIDSVersion": "1.10",
+        "DatasetType": "study",
+        "GeneratedBy": [
+            {
+                "Name": "AIND Ephys Pipeline",
+                "Description": "A customized and version-locked branch of the main AIND ephys pipeline.",
+                "Version": pipeline_version,
+                "CodeURL": pipeline_url,
+            },
+            {
+                "Name": "DANDI Compute: Code",
+                "Description": "A customized and version-locked branch of the main AIND ephys pipeline.",
+                "Version": dandi_compute_code_source_commit_head,
+                "CodeURL": "https://github.com/dandi-compute/code",
+            },
+        ],
+    }
 
     # Construct submission script from template
     generate_aind_ephys_submission_script(
@@ -209,6 +250,8 @@ def prepare_aind_ephys_job(
     code_config_file_path.write_text(data=config_file_path.read_text())
     code_parameters_file_path.write_text(data=parameters_file_path.read_text())
     code_capsule_versions_file_path.write_text(data=capsule_versions_file_path.read_text())
+    code_pipeline_file_path.write_text(data=pipeline_file_path.read_text())
+    dataset_description_file_path.write_text(data=json.dumps(obj=dataset_description, indent=2))
 
     # Upload preparation to 'reserve' spot during processing
     if silent:
