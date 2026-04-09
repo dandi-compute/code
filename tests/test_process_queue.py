@@ -22,7 +22,6 @@ from dandi_compute_code.queue._process_queue import (
     process_queue,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -52,15 +51,11 @@ def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
 
     pipeline_dir = queue_dir / "pipeline-test"
     pipeline_dir.mkdir()
-    (pipeline_dir / "pipeline_config.json").write_text(
-        json.dumps({"priority": ["version-v1.0"]})
-    )
+    (pipeline_dir / "pipeline_config.json").write_text(json.dumps({"priority": ["version-v1.0"]}))
 
     version_dir = pipeline_dir / "version-v1.0"
     version_dir.mkdir()
-    (version_dir / "version_config.json").write_text(
-        json.dumps({"priority": ["params-default"]})
-    )
+    (version_dir / "version_config.json").write_text(json.dumps({"priority": ["params-default"]}))
 
     params_dir = version_dir / "params-default"
     params_dir.mkdir()
@@ -291,20 +286,12 @@ def test_submit_next_pops_entry_and_records_submission(tmp_path: pathlib.Path) -
     assert result is True
 
     # First entry should have been consumed
-    remaining = [
-        json.loads(line)
-        for line in (queue_dir / "waiting.jsonl").read_text().splitlines()
-        if line.strip()
-    ]
+    remaining = [json.loads(line) for line in (queue_dir / "waiting.jsonl").read_text().splitlines() if line.strip()]
     assert len(remaining) == 1
     assert remaining[0]["content_id"] == "asset-ccc"
 
     # First entry should have been written to submitted.jsonl
-    submitted = [
-        json.loads(line)
-        for line in (queue_dir / "submitted.jsonl").read_text().splitlines()
-        if line.strip()
-    ]
+    submitted = [json.loads(line) for line in (queue_dir / "submitted.jsonl").read_text().splitlines() if line.strip()]
     assert len(submitted) == 1
     assert submitted[0]["content_id"] == "asset-bbb"
 
@@ -334,11 +321,7 @@ def test_submit_next_skips_exhausted_entries(tmp_path: pathlib.Path) -> None:
 
     assert result is True
 
-    submitted = [
-        json.loads(line)
-        for line in (queue_dir / "submitted.jsonl").read_text().splitlines()
-        if line.strip()
-    ]
+    submitted = [json.loads(line) for line in (queue_dir / "submitted.jsonl").read_text().splitlines() if line.strip()]
     submitted_ids = [e["content_id"] for e in submitted]
     assert "asset-bbb" in submitted_ids
     # asset-aaa must not appear as a new submission

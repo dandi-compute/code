@@ -38,11 +38,7 @@ def _fetch_counts(
         if not stripped:
             continue
         entry = json.loads(stripped)
-        if (
-            entry.get("pipeline") != pipeline
-            or entry.get("version") != version
-            or entry.get("params") != params
-        ):
+        if entry.get("pipeline") != pipeline or entry.get("version") != version or entry.get("params") != params:
             continue
         content_id = entry.get("content_id", "")
         if content_id:
@@ -50,9 +46,7 @@ def _fetch_counts(
     return collections.Counter(content_ids)
 
 
-def _fill_waiting(
-    *, cwd: pathlib.Path, pipeline_name: str, pipeline_version: str, params: str
-) -> None:
+def _fill_waiting(*, cwd: pathlib.Path, pipeline_name: str, pipeline_version: str, params: str) -> None:
     """
     Fill the waiting queue with new entries for a given pipeline/version/params combination.
 
@@ -82,9 +76,7 @@ def _fill_waiting(
         for line in waiting_file.read_text().splitlines()
         if line.strip()
         for entry in [json.loads(line.strip())]
-        if entry.get("pipeline") == pipeline
-        and entry.get("version") == version
-        and entry.get("params") == params_value
+        if entry.get("pipeline") == pipeline and entry.get("version") == version and entry.get("params") == params_value
     ]
     if previous_waiting:
         print(
@@ -117,9 +109,7 @@ def _fill_waiting(
 
     new_waiting = set()
     for content_id in qualifying_aind_content_ids:
-        if done_counter.get(content_id, 0) >= asset_overrides.get(
-            content_id, global_max_attempts
-        ):
+        if done_counter.get(content_id, 0) >= asset_overrides.get(content_id, global_max_attempts):
             continue
 
         new_waiting.add(content_id)
@@ -204,12 +194,7 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
         if not all([pipeline, version, params, content_id]):
             continue
 
-        queue_directory = (
-            cwd
-            / ("pipeline-" + pipeline)
-            / ("version-" + version)
-            / ("params-" + params)
-        )
+        queue_directory = cwd / ("pipeline-" + pipeline) / ("version-" + version) / ("params-" + params)
         config_file = queue_directory / "params_config.json"
         config = json.loads(config_file.read_text())
 
@@ -223,9 +208,7 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
             params=params,
         )
 
-        if submitted_counter.get(content_id, 0) >= asset_overrides.get(
-            content_id, global_max_attempts
-        ):
+        if submitted_counter.get(content_id, 0) >= asset_overrides.get(content_id, global_max_attempts):
             continue
 
         entry = (pipeline, version, params, content_id)
@@ -320,14 +303,10 @@ def process_queue(*, cwd: pathlib.Path) -> None:
         version_priority_order = pipeline_config["priority"]
 
         prioritized_version_dirs = [
-            pipeline_dir / version
-            for version in version_priority_order
-            if (pipeline_dir / version).is_dir()
+            pipeline_dir / version for version in version_priority_order if (pipeline_dir / version).is_dir()
         ]
         remaining_version_dirs = [
-            path
-            for path in pipeline_dir.iterdir()
-            if path.is_dir() and path not in prioritized_version_dirs
+            path for path in pipeline_dir.iterdir() if path.is_dir() and path not in prioritized_version_dirs
         ]
         version_dirs = prioritized_version_dirs + remaining_version_dirs
         for version_dir in version_dirs:
@@ -338,14 +317,10 @@ def process_queue(*, cwd: pathlib.Path) -> None:
             params_priority_order = version_config["priority"]
 
             prioritized_params_dirs = [
-                version_dir / params
-                for params in params_priority_order
-                if (version_dir / params).is_dir()
+                version_dir / params for params in params_priority_order if (version_dir / params).is_dir()
             ]
             remaining_params_dirs = [
-                path
-                for path in version_dir.iterdir()
-                if path.is_dir() and path not in prioritized_params_dirs
+                path for path in version_dir.iterdir() if path.is_dir() and path not in prioritized_params_dirs
             ]
             params_dirs = prioritized_params_dirs + remaining_params_dirs
             for params_dir in params_dirs:
