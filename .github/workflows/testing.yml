@@ -37,3 +37,6 @@ jobs:
 
       - name: Test import
         run: python -c "import dandi_compute_code"
+
+      - name: Run unit tests
+        run: pytest tests/ -v

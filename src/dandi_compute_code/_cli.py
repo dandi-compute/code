@@ -5,6 +5,7 @@ import click
 
 from ._utils import _styled_echo, clean_work_directory
 from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_aind_ephys_job
+from .queue import process_queue
 
 
 # dandicompute
@@ -135,3 +136,24 @@ def _aind_prepare_command(
 )
 def _aind_submit_command(script_file_path: pathlib.Path) -> None:
     submit_aind_ephys_job(script_file_path=script_file_path)
+
+
+# dandicompute queue
+@_dandicompute_group.group(name="queue")
+def _queue_group() -> None:
+    pass
+
+
+# dandicompute queue process [OPTIONS]
+@_queue_group.command(name="process")
+@click.option(
+    "--directory",
+    "directory",
+    help="Path to the queue root directory (must be named 'queue'). Defaults to the current working directory.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+def _queue_process_command(directory: pathlib.Path | None = None) -> None:
+    cwd = directory if directory is not None else pathlib.Path.cwd()
+    process_queue(cwd=cwd)

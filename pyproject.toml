@@ -27,9 +27,16 @@ dynamic = ["version"]
 dandicompute = "dandi_compute_code._cli:_dandicompute_group"
 
 [dependency-groups]
-dev = ["ipython", "pre-commit"]
+dev = ["ipython", "pre-commit", "pytest"]
 all = [
     {include-group = "dev"},
+]
+
+
+
+[tool.pytest.ini_options]
+markers = [
+    "ai_generated: marks tests as AI-generated (deselect with '-m \"not ai_generated\"')",
 ]
 
 
