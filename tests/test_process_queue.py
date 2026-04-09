@@ -22,9 +22,28 @@ from dandi_compute_code.queue._process_queue import (
     process_queue,
 )
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+#: Consolidated queue config used by all tests that need a queue directory.
+_EXAMPLE_QUEUE_CONFIG = {
+    "pipeline-test": {
+        "priority": ["version-v1.0"],
+        "versions": {
+            "version-v1.0": {
+                "priority": ["params-default"],
+                "params": {
+                    "params-default": {
+                        "max_attempts_per_asset": 2,
+                        "asset_overrides": {"asset-aaa": 1},
+                    }
+                },
+            }
+        },
+    }
+}
 
 
 def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
@@ -36,37 +55,14 @@ def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
     queue/
         waiting.jsonl
         submitted.jsonl
-        pipeline-test/
-            pipeline_config.json        {"priority": ["version-v1.0"]}
-            version-v1.0/
-                version_config.json     {"priority": ["params-default"]}
-                params-default/
-                    params_config.json  {"max_attempts_per_asset": 2, "asset_overrides": {"asset-aaa": 1}}
+        queue_config.json   (single consolidated config for all pipelines/versions/params)
     """
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
 
     (queue_dir / "waiting.jsonl").write_text("")
     (queue_dir / "submitted.jsonl").write_text("")
-
-    pipeline_dir = queue_dir / "pipeline-test"
-    pipeline_dir.mkdir()
-    (pipeline_dir / "pipeline_config.json").write_text(json.dumps({"priority": ["version-v1.0"]}))
-
-    version_dir = pipeline_dir / "version-v1.0"
-    version_dir.mkdir()
-    (version_dir / "version_config.json").write_text(json.dumps({"priority": ["params-default"]}))
-
-    params_dir = version_dir / "params-default"
-    params_dir.mkdir()
-    (params_dir / "params_config.json").write_text(
-        json.dumps(
-            {
-                "max_attempts_per_asset": 2,
-                "asset_overrides": {"asset-aaa": 1},
-            }
-        )
-    )
+    (queue_dir / "queue_config.json").write_text(json.dumps(_EXAMPLE_QUEUE_CONFIG))
 
     return queue_dir
 
@@ -348,6 +344,7 @@ def test_process_queue_creates_missing_jsonl_files(tmp_path: pathlib.Path) -> No
     """process_queue creates waiting.jsonl and submitted.jsonl if they don't exist."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(json.dumps({}))
 
     with (
         mock.patch("dandi_compute_code.queue._process_queue._fill_waiting"),

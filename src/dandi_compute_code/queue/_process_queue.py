@@ -59,11 +59,11 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline_name: str, pipeline_version: st
     cwd : pathlib.Path
         Path to the queue root directory (must be named 'queue').
     pipeline_name : str
-        Pipeline directory name (e.g., 'pipeline-aind+ephys').
+        Pipeline key as it appears in ``queue_config.json`` (e.g., 'pipeline-aind+ephys').
     pipeline_version : str
-        Version directory name (e.g., 'version-v1.0.0+fixes+47bd492').
+        Version key as it appears in ``queue_config.json`` (e.g., 'version-v1.0.0+fixes+47bd492').
     params : str
-        Params directory name (e.g., 'params-default').
+        Params key as it appears in ``queue_config.json`` (e.g., 'params-default').
     """
     waiting_file = cwd / "waiting.jsonl"
 
@@ -100,12 +100,11 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline_name: str, pipeline_version: st
     with urllib.request.urlopen(url=url) as response:
         qualifying_aind_content_ids = json.loads(gzip.decompress(response.read()))
 
-    queue_directory = cwd / pipeline_name / pipeline_version / params
-    config_file = queue_directory / "params_config.json"
-    config = json.loads(config_file.read_text())
+    queue_config = json.loads((cwd / "queue_config.json").read_text())
+    params_cfg = queue_config[pipeline_name]["versions"][pipeline_version]["params"][params]
 
-    global_max_attempts = config["max_attempts_per_asset"]
-    asset_overrides = config["asset_overrides"]
+    global_max_attempts = params_cfg["max_attempts_per_asset"]
+    asset_overrides = params_cfg["asset_overrides"]
 
     new_waiting = set()
     for content_id in qualifying_aind_content_ids:
@@ -157,8 +156,7 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
     Pop the next valid entry from ``waiting.jsonl`` and submit it.
 
     An entry is considered invalid and skipped if it has already reached its
-    maximum allowed attempt count (as defined in the corresponding
-    ``params_config.json``).
+    maximum allowed attempt count (as defined in ``queue_config.json``).
 
     Parameters
     ----------
@@ -179,6 +177,8 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
         waiting_file.write_text(data="")
         return False
 
+    queue_config = json.loads((cwd / "queue_config.json").read_text())
+
     entry = None
     while lines:
         line = lines.pop(0)
@@ -194,12 +194,13 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
         if not all([pipeline, version, params, content_id]):
             continue
 
-        queue_directory = cwd / ("pipeline-" + pipeline) / ("version-" + version) / ("params-" + params)
-        config_file = queue_directory / "params_config.json"
-        config = json.loads(config_file.read_text())
+        pipeline_key = "pipeline-" + pipeline
+        version_key = "version-" + version
+        params_key = "params-" + params
+        params_cfg = queue_config[pipeline_key]["versions"][version_key]["params"][params_key]
 
-        global_max_attempts = config["max_attempts_per_asset"]
-        asset_overrides = config["asset_overrides"]
+        global_max_attempts = params_cfg["max_attempts_per_asset"]
+        asset_overrides = params_cfg["asset_overrides"]
 
         submitted_counter = _fetch_counts(
             file_path=submitted_file,
@@ -264,9 +265,9 @@ def process_queue(*, cwd: pathlib.Path) -> None:
     Each line is a JSON object with fields: pipeline, version, params, and content_id.
 
     If there are no waiting entries for a pipeline/version/params combination, it will be
-    re-filled in accordance with the ``params_config.json`` and the current state of the
-    qualifying AIND cache.  The fill order follows the priority specified in each
-    ``pipeline_config.json`` / ``version_config.json``.
+    re-filled in accordance with ``queue_config.json`` and the current state of the
+    qualifying AIND cache.  The fill order follows the priority lists defined in
+    ``queue_config.json`` at the pipeline and version levels.
 
     If there are no currently running jobs, the next entry in ``waiting.jsonl`` will be
     popped and submitted according to the logic in ``submit_job.py``.
@@ -292,40 +293,26 @@ def process_queue(*, cwd: pathlib.Path) -> None:
     if not submitted_file.exists():
         submitted_file.write_text("")
 
-    pipeline_dirs = [path for path in cwd.iterdir() if path.is_dir()]
-    for pipeline_dir in pipeline_dirs:
-        pipeline_name = pipeline_dir.name
-        if "pipeline" not in pipeline_name:
-            continue
+    queue_config = json.loads((cwd / "queue_config.json").read_text())
 
-        pipeline_config_file = pipeline_dir / "pipeline_config.json"
-        pipeline_config = json.loads(pipeline_config_file.read_text())
-        version_priority_order = pipeline_config["priority"]
+    for pipeline_name, pipeline_data in queue_config.items():
+        version_priority_order = pipeline_data.get("priority", [])
+        versions_data = pipeline_data.get("versions", {})
 
-        prioritized_version_dirs = [
-            pipeline_dir / version for version in version_priority_order if (pipeline_dir / version).is_dir()
-        ]
-        remaining_version_dirs = [
-            path for path in pipeline_dir.iterdir() if path.is_dir() and path not in prioritized_version_dirs
-        ]
-        version_dirs = prioritized_version_dirs + remaining_version_dirs
-        for version_dir in version_dirs:
-            pipeline_version = version_dir.name
+        prioritized_version_names = [v for v in version_priority_order if v in versions_data]
+        remaining_version_names = [v for v in versions_data if v not in prioritized_version_names]
+        version_names = prioritized_version_names + remaining_version_names
 
-            version_config_file = version_dir / "version_config.json"
-            version_config = json.loads(version_config_file.read_text())
-            params_priority_order = version_config["priority"]
+        for pipeline_version in version_names:
+            version_data = versions_data[pipeline_version]
+            params_priority_order = version_data.get("priority", [])
+            params_data = version_data.get("params", {})
 
-            prioritized_params_dirs = [
-                version_dir / params for params in params_priority_order if (version_dir / params).is_dir()
-            ]
-            remaining_params_dirs = [
-                path for path in version_dir.iterdir() if path.is_dir() and path not in prioritized_params_dirs
-            ]
-            params_dirs = prioritized_params_dirs + remaining_params_dirs
-            for params_dir in params_dirs:
-                params = params_dir.name
+            prioritized_params_names = [p for p in params_priority_order if p in params_data]
+            remaining_params_names = [p for p in params_data if p not in prioritized_params_names]
+            params_names = prioritized_params_names + remaining_params_names
 
+            for params in params_names:
                 _fill_waiting(
                     cwd=cwd,
                     pipeline_name=pipeline_name,
