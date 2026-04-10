@@ -214,7 +214,7 @@ def prepare_aind_ephys_job(
     # TODO: could look up description, authors, license, etc. from source dandiset metadata
     pipeline_url = f"https://github.com/CodyCBakerPhD/aind-ephys-pipeline/tree/{pipeline_version.replace('+','%2B')}"
     dataset_description = {
-        "Name": f"DANDI Compute: AIND Ephys Pipeline Output for Dandiset {dandiset_id}",
+        "Name": f"DANDI Compute: AIND Ephys pipeline output for Dandiset {dandiset_id}",
         "BIDSVersion": "1.10",
         "DatasetType": "study",
         "GeneratedBy": [
@@ -226,11 +226,12 @@ def prepare_aind_ephys_job(
             },
             {
                 "Name": "DANDI Compute: Code",
-                "Description": "A customized and version-locked branch of the main AIND ephys pipeline.",
+                "Description": "The primary source code for orchestration of AIND on MIT Engaging.",
                 "Version": dandi_compute_code_source_commit_head,
                 "CodeURL": "https://github.com/dandi-compute/code",
             },
         ],
+        "SourceDatasets": [{"URL": f"https://dandiarchive.org/dandiset/{dandiset_id}/"}],
     }
 
     # Construct submission script from template
