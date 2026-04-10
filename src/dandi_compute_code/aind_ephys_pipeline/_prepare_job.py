@@ -143,7 +143,7 @@ def prepare_aind_ephys_job(
     bidsy_pipeline_version = pipeline_version.replace("-", "+")
     output_dandiset_path_base = f"derivatives/dandiset-{dandiset_id}/sub-{entities['sub']}/"
     if "ses" in entities:
-        output_dandiset_path_base += f"ses-{entities['subject']}/"
+        output_dandiset_path_base += f"ses-{entities['ses']}/"
     output_dandiset_path_base += (
         f"pipeline-aind+ephys/version-{bidsy_pipeline_version}+{pipeline_commit_head}/"
         f"params-{params_id}_config-{config_id}"
