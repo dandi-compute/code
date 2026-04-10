@@ -103,10 +103,13 @@ def prepare_aind_ephys_job(
         raise ValueError(message)
 
     dandiset_id, dandiset_path = next(iter(content_id_to_unique_dandiset_path[content_id].items()))
-    entity_pairs = dandiset_path.removesuffix(".nwb").split("_")
+    # Parse BIDS entities from the filename stem only (not directory parts),
+    # and skip tokens that are modality suffixes (no "-" separator, e.g. "ecephys").
     entities = {}
-    for pair in entity_pairs:
-        key, value = pair.split("-", 1)
+    for token in pathlib.Path(dandiset_path).stem.split("_"):
+        if "-" not in token:
+            continue
+        key, value = token.split("-", 1)
         entities[key] = value
 
     # Special case - add date entity for testing asset
@@ -141,8 +144,6 @@ def prepare_aind_ephys_job(
     dandi_compute_code_source_commit_head = dandi_comptue_code_commit_hash[0:7]
 
     bidsy_pipeline_version = pipeline_version.replace("-", "+")
-    print(dandiset_path)
-    print(entities)
     output_dandiset_path_base = f"derivatives/dandiset-{dandiset_id}/sub-{entities['sub']}/"
     if "ses" in entities:
         output_dandiset_path_base += f"ses-{entities['ses']}/"
