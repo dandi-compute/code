@@ -141,6 +141,8 @@ def prepare_aind_ephys_job(
     dandi_compute_code_source_commit_head = dandi_comptue_code_commit_hash[0:7]
 
     bidsy_pipeline_version = pipeline_version.replace("-", "+")
+    print(dandiset_path)
+    print(entities)
     output_dandiset_path_base = f"derivatives/dandiset-{dandiset_id}/sub-{entities['sub']}/"
     if "ses" in entities:
         output_dandiset_path_base += f"ses-{entities['ses']}/"
