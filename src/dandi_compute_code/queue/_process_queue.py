@@ -106,7 +106,9 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline: str, version: str, params: str
 
     new_waiting = set()
     for content_id in qualifying_aind_content_ids:
-        if (asset_override := asset_overrides.get(content_id, global_max_attempts)) is not None and done_counter.get(content_id, 0) >= asset_override:
+        if (asset_override := asset_overrides.get(content_id, global_max_attempts)) is not None and done_counter.get(
+            content_id, 0
+        ) >= asset_override:
             continue
 
         new_waiting.add(content_id)
