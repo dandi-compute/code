@@ -205,7 +205,9 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
             params=params,
         )
 
-        if (asset_override := asset_overrides.get(content_id, global_max_attempts)) is not None and submitted_counter.get(content_id, 0) >= asset_override:
+        if (
+            asset_override := asset_overrides.get(content_id, global_max_attempts)
+        ) is not None and submitted_counter.get(content_id, 0) >= asset_override:
             continue
 
         entry = (pipeline, version, params, content_id)
