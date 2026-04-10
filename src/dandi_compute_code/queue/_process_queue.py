@@ -102,11 +102,13 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline: str, version: str, params: str
     pipeline_cfg = queue_config["pipelines"][pipeline]
 
     global_max_attempts = pipeline_cfg["max_attempts_per_asset"]
-    asset_overrides = pipeline_cfg["asset_overrides"]
+    asset_overrides = pipeline_cfg.get("asset_overrides") or {}
 
     new_waiting = set()
     for content_id in qualifying_aind_content_ids:
-        if done_counter.get(content_id, 0) >= asset_overrides.get(content_id, global_max_attempts):
+        if (asset_override := asset_overrides.get(content_id, global_max_attempts)) is not None and done_counter.get(
+            content_id, 0
+        ) >= asset_override:
             continue
 
         new_waiting.add(content_id)
@@ -194,7 +196,7 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
 
         pipeline_cfg = queue_config["pipelines"][pipeline]
         global_max_attempts = pipeline_cfg["max_attempts_per_asset"]
-        asset_overrides = pipeline_cfg["asset_overrides"]
+        asset_overrides = pipeline_cfg.get("asset_overrides") or {}
 
         submitted_counter = _fetch_counts(
             file_path=submitted_file,
@@ -203,7 +205,9 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
             params=params,
         )
 
-        if submitted_counter.get(content_id, 0) >= asset_overrides.get(content_id, global_max_attempts):
+        if (
+            asset_override := asset_overrides.get(content_id, global_max_attempts)
+        ) is not None and submitted_counter.get(content_id, 0) >= asset_override:
             continue
 
         entry = (pipeline, version, params, content_id)

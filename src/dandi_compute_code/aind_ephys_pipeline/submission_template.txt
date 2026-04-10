@@ -34,9 +34,9 @@ DATA_PATH="$DATA_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF
     --job_dispatch_args "--nwb-files $NWB_FILE_PATH"
 
 cd $RESULTS_PATH
-mv nwb ../output
+mv nwb/ ../derivatives/
 mv visualization_output.json visualization/
-mv visualization ..
+mv visualization/ ..
 mv nextflow/* ../logs/
 cd ..
 rm -rf $RESULTS_PATH  # Clean up intermediate values
