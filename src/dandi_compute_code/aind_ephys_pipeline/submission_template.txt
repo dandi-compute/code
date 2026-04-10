@@ -41,5 +41,5 @@ mv nextflow/* ../logs/
 cd ..
 rm -rf $RESULTS_PATH  # Clean up intermediate values
 
-dandi upload --allow-any-path --validation skip  # TODO: remove need for extra flags
+dandi upload --validation skip  # Dandiset is valid if ignoring NWBI issues from copied files (BIDS part is valid)
 echo "{{ temp_name }}" >> {{ done_tracker_file_path }}
