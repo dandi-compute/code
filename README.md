@@ -36,7 +36,7 @@ Non-code files for the AIND ephys pipeline are organized under the following sub
 - **`params/`** — JSON parameter files passed to the pipeline (e.g., `default_parameters.json`, `no_motion_parameters.json`).
   To add a new parameters file:
   1. Add the `[id]_parameters.json` file to this directory.
-  2. Register it in `params/registered_params.json` by adding an entry with the short name as the key, and its relative `path` and full MD5 `checksum` as values, e.g.:
+  2. Register it in `registries/registered_params.json` by adding an entry with the short name as the key, and its relative `path` and full MD5 `checksum` as values, e.g.:
      ```json
      "my+params": {
        "path": "my_params_parameters.json",
@@ -44,6 +44,8 @@ Non-code files for the AIND ephys pipeline are organized under the following sub
      }
      ```
   The short name can then be passed via the `parameters_key` argument in `_prepare_job.py` or via `--params` on the CLI.
+
+- **`registries/`** — JSON registry files mapping short names to resource paths and checksums (e.g., `registered_params.json`).
 
 - **`configs/`** — Nextflow configuration files for a specific compute environment (e.g., `mit_engaging.config`).
   Add a new `[environment].config` file here. Users can pass the path explicitly via the `--config` CLI option or the `config_file_path` argument in `_prepare_job.py`.

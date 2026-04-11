@@ -40,7 +40,7 @@ def prepare_aind_ephys_job(
     config_file_path : pathlib.Path, optional
         Path to the configuration file.
     parameters_key : str
-        The short name of the parameters to use. Must be a key registered in `params/registered_params.json`.
+        The short name of the parameters to use. Must be a key registered in `registries/registered_params.json`.
         Use "custom" to provide a custom parameters file via `parameters_file_path`.
     parameters_file_path : pathlib.Path, optional
         Path to the parameters file.
@@ -77,7 +77,7 @@ def prepare_aind_ephys_job(
         raise RuntimeError(message)
 
     if parameters_key != "custom":
-        params_registry_path = pathlib.Path(__file__).parent / "params" / "registered_params.json"
+        params_registry_path = pathlib.Path(__file__).parent / "registries" / "registered_params.json"
         params_registry = json.loads(params_registry_path.read_text())
         if parameters_key not in params_registry:
             registered_keys = list(params_registry.keys())
@@ -85,7 +85,7 @@ def prepare_aind_ephys_job(
                 f"Parameters key '{parameters_key}' is not registered. "
                 f"Registered keys are: {registered_keys}. "
                 "To register a new parameters file, add the JSON file to the `params/` directory "
-                "and add an entry to `params/registered_params.json` mapping the short name to its "
+                "and add an entry to `registries/registered_params.json` mapping the short name to its "
                 "relative `path` and full MD5 `checksum`."
             )
             raise ValueError(message)
@@ -96,7 +96,7 @@ def prepare_aind_ephys_job(
             message = (
                 f"Checksum mismatch for parameters file '{parameters_file_path.name}': "
                 f"expected {expected_checksum!r}, got {actual_checksum!r}. "
-                "The file may have been modified. Update the `checksum` in `params/registered_params.json` "
+                "The file may have been modified. Update the `checksum` in `registries/registered_params.json` "
                 "to reflect the new file contents."
             )
             raise ValueError(message)
