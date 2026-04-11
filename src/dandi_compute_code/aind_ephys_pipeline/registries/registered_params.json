@@ -1,10 +1,10 @@
 {
   "default": {
-    "path": "default_parameters.json",
+    "path": "default.json",
     "checksum": "98fd947595f60b65812a4b0ea29b7141"
   },
   "no+motion": {
-    "path": "no_motion_parameters.json",
+    "path": "no_motion.json",
     "checksum": "aa073df2761666edbf0bb66cab85ca4c"
   }
 }

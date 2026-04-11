@@ -33,13 +33,13 @@ Non-code files for the AIND ephys pipeline are organized under the following sub
 - **`templates/`** — Jinja2 submission script templates (e.g., `submission_template.txt`).
   Add a new `.txt` template here and reference it via `_globals.py` or a new globals module.
 
-- **`params/`** — JSON parameter files passed to the pipeline (e.g., `default_parameters.json`, `no_motion_parameters.json`).
+- **`params/`** — JSON parameter files passed to the pipeline (e.g., `default.json`, `no_motion.json`).
   To add a new parameters file:
-  1. Add the `[id]_parameters.json` file to this directory.
+  1. Add the `[id].json` file to this directory.
   2. Register it in `registries/registered_params.json` by adding an entry with the short name as the key, and its relative `path` and full MD5 `checksum` as values, e.g.:
      ```json
      "my+params": {
-       "path": "my_params_parameters.json",
+       "path": "my_params.json",
        "checksum": "<md5 hash of the file>"
      }
      ```
