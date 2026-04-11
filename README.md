@@ -25,7 +25,7 @@ The `dataset_description.json` of each result directory contains the provenance 
 
 
 
-## Dispatch: AIND on Engaging
+## Manual dispatch commands on MIT Engaging
 
 To run manually with confirmation to trigger (for debugging):
 
