@@ -24,7 +24,7 @@ from ._handle_template import generate_aind_ephys_submission_script
 def prepare_aind_ephys_job(
     content_id: str,
     config_file_path: pathlib.Path | None = None,
-    parameters_key: typing.Literal["default", "no+motion", "custom"] = "default",
+    parameters_key: str = "default",
     parameters_file_path: pathlib.Path | None = None,
     pipeline_directory: pathlib.Path | None = None,
     pipeline_version: str = "v1.0.0-fixes",
@@ -39,9 +39,9 @@ def prepare_aind_ephys_job(
         The content ID for the data to be processed.
     config_file_path : pathlib.Path, optional
         Path to the configuration file.
-    parameters_key : one of "default", "no+motion", or "custom".
-        The name of the parameters to use.
-        If "custom" is selected, `parameters_file_path` must be provided.
+    parameters_key : str
+        The short name of the parameters to use. Must be a key registered in `params/registered_params.json`.
+        Use "custom" to provide a custom parameters file via `parameters_file_path`.
     parameters_file_path : pathlib.Path, optional
         Path to the parameters file.
     pipeline_directory : pathlib.Path, optional
@@ -76,11 +76,33 @@ def prepare_aind_ephys_job(
         message = "`DANDI_API_KEY` environment variable is not set."
         raise RuntimeError(message)
 
-    if parameters_key == "default":
-        parameters_file_path = pathlib.Path(__file__).parent / "params" / "default_parameters.json"
-    elif parameters_key == "no+motion":
-        parameters_file_path = pathlib.Path(__file__).parent / "params" / "no_motion_parameters.json"
-    params_id = hashlib.md5(parameters_file_path.read_bytes()).hexdigest()[0:7]
+    if parameters_key != "custom":
+        params_registry_path = pathlib.Path(__file__).parent / "params" / "registered_params.json"
+        params_registry = json.loads(params_registry_path.read_text())
+        if parameters_key not in params_registry:
+            registered_keys = list(params_registry.keys())
+            message = (
+                f"Parameters key '{parameters_key}' is not registered. "
+                f"Registered keys are: {registered_keys}. "
+                "To register a new parameters file, add the JSON file to the `params/` directory "
+                "and add an entry to `params/registered_params.json` mapping the short name to its "
+                "relative `path` and full MD5 `checksum`."
+            )
+            raise ValueError(message)
+        parameters_file_path = pathlib.Path(__file__).parent / "params" / params_registry[parameters_key]["path"]
+        actual_checksum = hashlib.md5(parameters_file_path.read_bytes()).hexdigest()
+        expected_checksum = params_registry[parameters_key]["checksum"]
+        if actual_checksum != expected_checksum:
+            message = (
+                f"Checksum mismatch for parameters file '{parameters_file_path.name}': "
+                f"expected {expected_checksum!r}, got {actual_checksum!r}. "
+                "The file may have been modified. Update the `checksum` in `params/registered_params.json` "
+                "to reflect the new file contents."
+            )
+            raise ValueError(message)
+        params_id = actual_checksum[0:7]
+    else:
+        params_id = hashlib.md5(parameters_file_path.read_bytes()).hexdigest()[0:7]
     config_id = hashlib.md5(config_file_path.read_bytes()).hexdigest()[0:7] if config_file_path else "default"
 
     dandi_compute_dir = pathlib.Path("/orcd/data/dandi/001/dandi-compute")

@@ -1,5 +1,4 @@
 import pathlib
-import typing
 
 import click
 
@@ -72,7 +71,7 @@ def _aind_group() -> None:
     "parameters_key",
     help="The name of the parameters to use.",
     required=False,
-    type=click.Choice(["default", "no+motion"], case_sensitive=False),
+    type=str,
     default="default",
 )
 @click.option(
@@ -94,7 +93,7 @@ def _aind_prepare_command(
     config_file_path: pathlib.Path | None = None,
     pipeline_directory: pathlib.Path | None = None,
     pipeline_version: str = "v1.0.0-fixes",
-    parameters_key: typing.Literal["default", "no+motion"] = "default",
+    parameters_key: str = "default",
     submit: bool = False,
     silent: bool = False,
 ) -> None:

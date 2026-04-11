@@ -34,7 +34,16 @@ Non-code files for the AIND ephys pipeline are organized under the following sub
   Add a new `.txt` template here and reference it via `_globals.py` or a new globals module.
 
 - **`params/`** — JSON parameter files passed to the pipeline (e.g., `default_parameters.json`, `no_motion_parameters.json`).
-  Add a new `[id]_parameters.json` file here and expose it through the `parameters_key` argument in `_prepare_job.py`.
+  To add a new parameters file:
+  1. Add the `[id]_parameters.json` file to this directory.
+  2. Register it in `params/registered_params.json` by adding an entry with the short name as the key, and its relative `path` and full MD5 `checksum` as values, e.g.:
+     ```json
+     "my+params": {
+       "path": "my_params_parameters.json",
+       "checksum": "<md5 hash of the file>"
+     }
+     ```
+  The short name can then be passed via the `parameters_key` argument in `_prepare_job.py` or via `--params` on the CLI.
 
 - **`configs/`** — Nextflow configuration files for a specific compute environment (e.g., `mit_engaging.config`).
   Add a new `[environment].config` file here. Users can pass the path explicitly via the `--config` CLI option or the `config_file_path` argument in `_prepare_job.py`.
