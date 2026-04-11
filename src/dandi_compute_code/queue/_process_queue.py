@@ -140,7 +140,7 @@ def _determine_running() -> bool:
         True if at least one AIND job is currently running, False otherwise.
     """
     command = ["squeue", "--me", "--format=%j"]
-    result = subprocess.run(command, capture_output=True, text=True, check=True)
+    result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0 and result.stderr:
         message = f"command: {command}\nstdout: {result.stdout}\nstderr: {result.stderr}"
         raise RuntimeError(message)
@@ -237,7 +237,7 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
         submission_params,
         "--submit",
     ]
-    result = subprocess.run(command, capture_output=True, text=True, check=True)
+    result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0 and result.stderr:
         message = f"command: {command}\nstdout: {result.stdout}\nstderr: {result.stderr}"
         raise RuntimeError(message)
