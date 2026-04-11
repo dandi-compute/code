@@ -24,7 +24,7 @@ from ._handle_template import generate_aind_ephys_submission_script
 def prepare_aind_ephys_job(
     content_id: str,
     config_file_path: pathlib.Path | None = None,
-    parameters_key: typing.Literal["default", "no-motion", "custom"] = "default",
+    parameters_key: typing.Literal["default", "no+motion", "custom"] = "default",
     parameters_file_path: pathlib.Path | None = None,
     pipeline_directory: pathlib.Path | None = None,
     pipeline_version: str = "v1.0.0-fixes",
@@ -39,7 +39,7 @@ def prepare_aind_ephys_job(
         The content ID for the data to be processed.
     config_file_path : pathlib.Path, optional
         Path to the configuration file.
-    parameters_key : one of "default", "no-motion", or "custom".
+    parameters_key : one of "default", "no+motion", or "custom".
         The name of the parameters to use.
         If "custom" is selected, `parameters_file_path` must be provided.
     parameters_file_path : pathlib.Path, optional
@@ -78,7 +78,7 @@ def prepare_aind_ephys_job(
 
     if parameters_key == "default":
         parameters_file_path = pathlib.Path(__file__).parent / "params" / "default_parameters.json"
-    elif parameters_key == "no-motion":
+    elif parameters_key == "no+motion":
         parameters_file_path = pathlib.Path(__file__).parent / "params" / "no_motion_parameters.json"
     params_id = hashlib.md5(parameters_file_path.read_bytes()).hexdigest()[0:7]
     config_id = hashlib.md5(config_file_path.read_bytes()).hexdigest()[0:7] if config_file_path else "default"
