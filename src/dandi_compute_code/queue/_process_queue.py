@@ -143,7 +143,7 @@ def _determine_running() -> bool:
     result = subprocess.run(command, capture_output=True, text=True, check=True)
     if result.returncode != 0 and result.stderr:
         message = f"command: {command}\nstdout: {result.stdout}\nstderr: {result.stderr}"
-        raise RunTimeError(message)
+        raise RuntimeError(message)
     if result.stderr:
         print(result.stderr)
     for line in result.stdout.splitlines():
@@ -240,7 +240,7 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
     result = subprocess.run(command, capture_output=True, text=True, check=True)
     if result.returncode != 0 and result.stderr:
         message = f"command: {command}\nstdout: {result.stdout}\nstderr: {result.stderr}"
-        raise RunTimeError(message)
+        raise RuntimeError(message)
     waiting_file.write_text(data="\n".join(lines) + ("\n" if lines else ""))
     with submitted_file.open(mode="a") as file_stream:
         file_stream.write(
