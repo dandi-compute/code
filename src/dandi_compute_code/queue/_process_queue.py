@@ -139,13 +139,16 @@ def _determine_running() -> bool:
     bool
         True if at least one AIND job is currently running, False otherwise.
     """
+    command = ["squeue", "--me", "--format=%j"]
     result = subprocess.run(
-        ["squeue", "--format=%j"],
+        command,
         capture_output=True,
         text=True,
-        check=True,
+        check=True
     )
-    print(result.stdout)
+    if result.returncode != 0 and result.stderr:
+        message = f"command: {command}\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        raise RunTimeError(message)
     if result.stderr:
         print(result.stderr)
     for line in result.stdout.splitlines():
@@ -227,26 +230,27 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
     submission_params = params
 
     print(f"Submitting content ID: {content_id}")
+    command = [
+        "dandicompute",
+        "aind",
+        "prepare",
+        "--id",
+        content_id,
+        "--version",
+        submission_version,
+        "--params",
+        submission_params,
+        "--submit",
+    ]
     result = subprocess.run(
-        [
-            "dandicompute",
-            "aind",
-            "prepare",
-            "--id",
-            content_id,
-            "--version",
-            submission_version,
-            "--params",
-            submission_params,
-            "--submit",
-        ],
+        command,
         capture_output=True,
         text=True,
-        check=True,
+        check=True
     )
-    print(result.stdout)
-    if result.stderr:
-        print(result.stderr)
+    if result.returncode != 0 and result.stderr:
+        message = f"command: {command}\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        raise RunTimeError(message)
     waiting_file.write_text(data="\n".join(lines) + ("\n" if lines else ""))
     with submitted_file.open(mode="a") as file_stream:
         file_stream.write(
