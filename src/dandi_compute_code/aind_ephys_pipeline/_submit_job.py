@@ -21,4 +21,4 @@ def submit_aind_ephys_job(script_file_path: pathlib.Path) -> None:
     )
     if result.returncode != 0 and result.stderr:
         message = f"command: {command}\nstdout: {result.stdout}\nstderr: {result.stderr}"
-        raise RunTimeError(message)
+        raise RuntimeError(message)
