@@ -145,6 +145,9 @@ def _determine_running() -> bool:
         text=True,
         check=True,
     )
+    print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
     for line in result.stdout.splitlines():
         if "AIND" in line:
             return True
@@ -224,7 +227,7 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
     submission_params = params
 
     print(f"Submitting content ID: {content_id}")
-    subprocess.run(
+    result = subprocess.run(
         [
             "dandicompute",
             "aind",
@@ -237,8 +240,13 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
             submission_params,
             "--submit",
         ],
+        capture_output=True,
+        text=True,
         check=True,
     )
+    print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
     waiting_file.write_text(data="\n".join(lines) + ("\n" if lines else ""))
     with submitted_file.open(mode="a") as file_stream:
         file_stream.write(
