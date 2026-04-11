@@ -231,7 +231,7 @@ def test_fill_waiting_respects_max_attempts(tmp_path: pathlib.Path) -> None:
 def test_determine_running_true_when_aind_job_present() -> None:
     """_determine_running returns True when an AIND job appears in squeue output."""
     with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(stdout="JOBNAME\nAIND_ephys_job\nother_job\n")
+        mock_run.return_value = mock.MagicMock(stdout="JOBNAME\nAIND_ephys_job\nother_job\n", stderr="")
         assert _determine_running() is True
 
 
@@ -239,7 +239,7 @@ def test_determine_running_true_when_aind_job_present() -> None:
 def test_determine_running_false_when_no_aind_jobs() -> None:
     """_determine_running returns False when no AIND jobs are in squeue output."""
     with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(stdout="JOBNAME\nsome_other_job\n")
+        mock_run.return_value = mock.MagicMock(stdout="JOBNAME\nsome_other_job\n", stderr="")
         assert _determine_running() is False
 
 
@@ -272,7 +272,7 @@ def test_submit_next_pops_entry_and_records_submission(tmp_path: pathlib.Path) -
     )
 
     with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(returncode=0)
+        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
         result = _submit_next(cwd=queue_dir)
 
     assert result is True
@@ -308,7 +308,7 @@ def test_submit_next_skips_exhausted_entries(tmp_path: pathlib.Path) -> None:
     )
 
     with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(returncode=0)
+        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
         result = _submit_next(cwd=queue_dir)
 
     assert result is True
