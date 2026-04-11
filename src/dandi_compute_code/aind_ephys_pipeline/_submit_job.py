@@ -12,12 +12,13 @@ def submit_aind_ephys_job(script_file_path: pathlib.Path) -> None:
         message = "`DANDI_API_KEY` environment variable is not set."
         raise RuntimeError(message)
 
+    command = ["sbatch", str(script_file_path)]
     result = subprocess.run(
-        ["sbatch", str(script_file_path)],
+        command,
         capture_output=True,
         text=True,
         check=True,
     )
-    print(result.stdout)
-    if result.stderr:
-        print(result.stderr)
+    if result.returncode != 0 and result.stderr:
+        message = f"command: {command}\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        raise RunTimeError(message)
