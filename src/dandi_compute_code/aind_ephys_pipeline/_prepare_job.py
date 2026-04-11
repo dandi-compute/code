@@ -69,7 +69,7 @@ def prepare_aind_ephys_job(
             "Version `v1.0.0` is incompatible with the new parameters file usage." "Please use `v1.0.0-fixes` instead."
         )
         raise ValueError(message)
-    config_file_path = config_file_path or pathlib.Path(__file__).parent / "mit_engaging.config"
+    config_file_path = config_file_path or pathlib.Path(__file__).parent / "configs" / "mit_engaging.config"
 
     # TODO: remove the API key use once Dandiset is public
     if "DANDI_API_KEY" not in os.environ:
@@ -77,9 +77,9 @@ def prepare_aind_ephys_job(
         raise RuntimeError(message)
 
     if parameters_key == "default":
-        parameters_file_path = pathlib.Path(__file__).parent / "default_parameters.json"
+        parameters_file_path = pathlib.Path(__file__).parent / "params" / "default_parameters.json"
     elif parameters_key == "no-motion":
-        parameters_file_path = pathlib.Path(__file__).parent / "no_motion_parameters.json"
+        parameters_file_path = pathlib.Path(__file__).parent / "params" / "no_motion_parameters.json"
     params_id = hashlib.md5(parameters_file_path.read_bytes()).hexdigest()[0:7]
     config_id = hashlib.md5(config_file_path.read_bytes()).hexdigest()[0:7] if config_file_path else "default"
 
