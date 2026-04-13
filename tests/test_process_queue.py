@@ -415,7 +415,12 @@ def _make_attempt_dir(
     """
     Create a mock attempt directory inside a fake 001697 clone rooted at *base*.
 
-    A directory path ``derivatives/dandiset-{dandiset_id}/sub-test/pipeline-aind+ephys/version-{version}/params-{params_id}_config-{config_id}_attempt-{attempt_number}/`` is created.  *with_code* and *with_output* control whether the ``code/`` and ``output/`` subdirectories are created.
+    A directory path 
+    
+    ``derivatives/dandiset-{dandiset_id}/sub-test/pipeline-aind+ephys/``
+    ``version-{version}/params-{params_id}_config-{config_id}_attempt-{attempt_number}/``
+    
+    is created.  *with_code* and *with_output* control whether the ``code/`` and ``output/`` subdirectories are created.
     """
     attempt_dir = (
         base
