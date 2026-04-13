@@ -1,9 +1,129 @@
 import collections
 import gzip
+import hashlib
 import json
 import pathlib
+import re
 import subprocess
 import urllib.request
+
+import yaml
+
+_DANDI_COMPUTE_DIR = pathlib.Path("/orcd/data/dandi/001/dandi-compute")
+_CONTENT_ID_TO_DANDISET_PATH_FILE = (
+    _DANDI_COMPUTE_DIR
+    / "dandi-cache"
+    / "content-id-to-unique-dandiset-path"
+    / "derivatives"
+    / "content_id_to_unique_dandiset_path.yaml"
+)
+_AIND_EPHYS_PIPELINE_DIR = pathlib.Path(__file__).parent.parent / "aind_ephys_pipeline"
+
+
+def _get_params_id(params: str) -> str:
+    """
+    Return the 7-character MD5 hash prefix that identifies the params file for *params*.
+
+    Parameters
+    ----------
+    params : str
+        The short params name (e.g., 'default') as it appears in ``queue_config.json``.
+
+    Returns
+    -------
+    str
+        The 7-character hexadecimal MD5 prefix used as ``params_id`` in output directory names.
+    """
+    params_registry_path = _AIND_EPHYS_PIPELINE_DIR / "registries" / "registered_params.json"
+    params_registry = json.loads(params_registry_path.read_text())
+    params_file = _AIND_EPHYS_PIPELINE_DIR / "params" / params_registry[params]["path"]
+    return hashlib.md5(params_file.read_bytes()).hexdigest()[:7]
+
+
+def _get_default_config_id() -> str:
+    """
+    Return the 7-character MD5 hash prefix for the default configuration file.
+
+    Returns
+    -------
+    str
+        The 7-character hexadecimal MD5 prefix used as ``config_id`` in output directory names.
+    """
+    config_file = _AIND_EPHYS_PIPELINE_DIR / "configs" / "mit_engaging.config"
+    return hashlib.md5(config_file.read_bytes()).hexdigest()[:7]
+
+
+def _load_content_id_to_dandiset_path() -> dict:
+    """
+    Load and return the content-ID-to-dandiset-path mapping from the cluster YAML file.
+
+    Returns
+    -------
+    dict
+        Mapping of content_id → {dandiset_id: dandiset_path}.
+    """
+    with _CONTENT_ID_TO_DANDISET_PATH_FILE.open() as file_stream:
+        return yaml.safe_load(file_stream)
+
+
+def _count_dandiset_failures(
+    *,
+    dandiset_directory: pathlib.Path,
+    dandiset_id: str,
+    version: str,
+    params_id: str,
+    config_id: str,
+) -> int:
+    """
+    Count failure attempt directories for a specific (dandiset, version, params, config) combination.
+
+    A failure is defined as a directory whose name ends with ``_attempt-<number>`` that contains
+    a ``code`` directory but does **not** contain an ``output`` directory.
+
+    Failures are counted separately per unique ``params-[id]``, ``config-[id]``,
+    ``version-[id]`` directory — i.e., only directories matching the exact
+    *version*, *params_id*, and *config_id* are included in the count.
+
+    Parameters
+    ----------
+    dandiset_directory : pathlib.Path
+        Path to the local clone of the 001697 dandiset repository.
+    dandiset_id : str
+        The source AIND dandiset ID (e.g., ``'000045'``).
+    version : str
+        The BIDS-encoded pipeline version string as stored in the directory name
+        (e.g., ``'v1.0.0+fixes+47bd492'``).
+    params_id : str
+        The 7-character MD5 hash prefix identifying the params file.
+    config_id : str
+        The 7-character MD5 hash prefix identifying the config file.
+
+    Returns
+    -------
+    int
+        Number of failed attempt directories for the given combination.
+    """
+    dandiset_path = dandiset_directory / "derivatives" / f"dandiset-{dandiset_id}"
+    if not dandiset_path.is_dir():
+        return 0
+
+    failure_count = 0
+    attempt_re = re.compile(
+        rf"^params-{re.escape(params_id)}_config-{re.escape(config_id)}_attempt-\d+$"
+    )
+    version_dir_name = f"version-{version}"
+
+    for attempt_dir in dandiset_path.rglob(f"params-{params_id}_config-{config_id}_attempt-*"):
+        if not attempt_dir.is_dir():
+            continue
+        if not attempt_re.match(attempt_dir.name):
+            continue
+        if attempt_dir.parent.name != version_dir_name:
+            continue
+        if (attempt_dir / "code").is_dir() and not (attempt_dir / "output").is_dir():
+            failure_count += 1
+
+    return failure_count
 
 
 def _fetch_counts(
@@ -152,17 +272,23 @@ def _determine_running() -> bool:
     return False
 
 
-def _submit_next(*, cwd: pathlib.Path) -> bool:
+def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path | None = None) -> bool:
     """
     Pop the next valid entry from ``waiting.jsonl`` and submit it.
 
     An entry is considered invalid and skipped if it has already reached its
-    maximum allowed attempt count (as defined in ``queue_config.json``).
+    maximum allowed attempt count (as defined in ``queue_config.json``), or if the
+    corresponding dandiset has accumulated too many failures (when *dandiset_directory*
+    is provided and ``max_fail_per_dandiset`` is set in the pipeline config).
 
     Parameters
     ----------
     cwd : pathlib.Path
         Path to the queue root directory (must be named 'queue').
+    dandiset_directory : pathlib.Path, optional
+        Path to a local clone of the 001697 dandiset repository.  When provided,
+        failure directories are counted per dandiset and entries whose dandiset has
+        reached ``max_fail_per_dandiset`` failures are skipped.
 
     Returns
     -------
@@ -179,6 +305,11 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
         return False
 
     queue_config = json.loads((cwd / "queue_config.json").read_text())
+
+    # Pre-load the content-ID→dandiset mapping once if failure counting is needed.
+    content_id_to_dandiset_path: dict | None = None
+    if dandiset_directory is not None:
+        content_id_to_dandiset_path = _load_content_id_to_dandiset_path()
 
     entry = None
     while lines:
@@ -210,6 +341,25 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
             asset_override := asset_overrides.get(content_id, global_max_attempts)
         ) is not None and submitted_counter.get(content_id, 0) >= asset_override:
             continue
+
+        # Skip if the dandiset has accumulated too many failures.
+        if dandiset_directory is not None and content_id_to_dandiset_path is not None:
+            max_fail = pipeline_cfg.get("max_fail_per_dandiset")
+            if max_fail is not None:
+                dandiset_entry = content_id_to_dandiset_path.get(content_id)
+                if dandiset_entry is not None:
+                    dandiset_id = next(iter(dandiset_entry.keys()))
+                    params_id = _get_params_id(params)
+                    config_id = _get_default_config_id()
+                    failure_count = _count_dandiset_failures(
+                        dandiset_directory=dandiset_directory,
+                        dandiset_id=dandiset_id,
+                        version=version,
+                        params_id=params_id,
+                        config_id=config_id,
+                    )
+                    if failure_count >= max_fail:
+                        continue
 
         entry = (pipeline, version, params, content_id)
         break
@@ -257,7 +407,7 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
     return True
 
 
-def process_queue(*, cwd: pathlib.Path) -> None:
+def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path | None = None) -> None:
     """
     Process the current state of the queue.
 
@@ -276,6 +426,10 @@ def process_queue(*, cwd: pathlib.Path) -> None:
     ----------
     cwd : pathlib.Path
         Path to the queue root directory.  The directory must be named ``'queue'``.
+    dandiset_directory : pathlib.Path, optional
+        Path to a local clone of the 001697 dandiset repository.  When provided,
+        failure directories are counted per dandiset and entries whose dandiset has
+        reached ``max_fail_per_dandiset`` failures are skipped during submission.
 
     Raises
     ------
@@ -307,4 +461,4 @@ def process_queue(*, cwd: pathlib.Path) -> None:
 
     any_running = _determine_running()
     if not any_running:
-        _submit_next(cwd=cwd)
+        _submit_next(cwd=cwd, dandiset_directory=dandiset_directory)
