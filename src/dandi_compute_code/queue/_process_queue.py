@@ -108,9 +108,7 @@ def _count_dandiset_failures(
         return 0
 
     failure_count = 0
-    attempt_re = re.compile(
-        rf"^params-{re.escape(params_id)}_config-{re.escape(config_id)}_attempt-\d+$"
-    )
+    attempt_re = re.compile(rf"^params-{re.escape(params_id)}_config-{re.escape(config_id)}_attempt-\d+$")
     version_dir_name = f"version-{version}"
 
     for attempt_dir in dandiset_path.rglob(f"params-{params_id}_config-{config_id}_attempt-*"):
