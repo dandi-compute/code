@@ -446,8 +446,6 @@ def test_count_dandiset_failures_returns_zero_when_no_dandiset_dir(tmp_path: pat
         dandiset_directory=tmp_path,
         dandiset_id="000001",
         version="v1.0",
-        params_id="abc1234",
-        config_id="def5678",
     )
     assert result == 0
 
@@ -464,8 +462,6 @@ def test_count_dandiset_failures_counts_failed_attempts(tmp_path: pathlib.Path) 
         dandiset_directory=tmp_path,
         dandiset_id="000001",
         version="v1.0",
-        params_id="abc1234",
-        config_id="def5678",
     )
     assert result == 2
 
@@ -481,29 +477,25 @@ def test_count_dandiset_failures_ignores_different_version(tmp_path: pathlib.Pat
         dandiset_directory=tmp_path,
         dandiset_id="000001",
         version="v1.0",
-        params_id="abc1234",
-        config_id="def5678",
     )
     assert result == 1
 
 
 @pytest.mark.ai_generated
-def test_count_dandiset_failures_ignores_different_params_or_config(tmp_path: pathlib.Path) -> None:
-    """_count_dandiset_failures ignores attempt directories with different params_id or config_id."""
+def test_count_dandiset_failures_counts_all_params_config_combos(tmp_path: pathlib.Path) -> None:
+    """_count_dandiset_failures counts failures across all params/config combinations for the given version."""
     _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 1, with_code=True, with_output=False)
-    # Different params_id – should NOT be counted
+    # Different params_id – also counted (no filtering by params/config)
     _make_attempt_dir(tmp_path, "000001", "v1.0", "zzz9999", "def5678", 1, with_code=True, with_output=False)
-    # Different config_id – should NOT be counted
+    # Different config_id – also counted
     _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "yyy8888", 1, with_code=True, with_output=False)
 
     result = _count_dandiset_failures(
         dandiset_directory=tmp_path,
         dandiset_id="000001",
         version="v1.0",
-        params_id="abc1234",
-        config_id="def5678",
     )
-    assert result == 1
+    assert result == 3
 
 
 @pytest.mark.ai_generated
@@ -517,8 +509,6 @@ def test_count_dandiset_failures_ignores_different_dandiset(tmp_path: pathlib.Pa
         dandiset_directory=tmp_path,
         dandiset_id="000001",
         version="v1.0",
-        params_id="abc1234",
-        config_id="def5678",
     )
     assert result == 1
 
@@ -533,7 +523,7 @@ _FAKE_CONTENT_ID_TO_DANDISET_PATH = {
     "asset-ccc": {"000002": "derivatives/dandiset-000002/sub-test/sub-test_ecephys.nwb"},
 }
 
-#: params_id and config_id returned by the mocked helper functions.
+#: params_id and config_id used when building fake attempt directories.
 _FAKE_PARAMS_ID = "abc1234"
 _FAKE_CONFIG_ID = "def5678"
 
@@ -562,14 +552,6 @@ def test_submit_next_skips_entry_when_dandiset_exceeds_max_fail(tmp_path: pathli
         mock.patch(
             "dandi_compute_code.queue._process_queue._load_content_id_to_dandiset_path",
             return_value=_FAKE_CONTENT_ID_TO_DANDISET_PATH,
-        ),
-        mock.patch(
-            "dandi_compute_code.queue._process_queue._get_params_id",
-            return_value=_FAKE_PARAMS_ID,
-        ),
-        mock.patch(
-            "dandi_compute_code.queue._process_queue._get_default_config_id",
-            return_value=_FAKE_CONFIG_ID,
         ),
     ):
         mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
@@ -603,14 +585,6 @@ def test_submit_next_allows_entry_when_dandiset_failures_below_max(tmp_path: pat
         mock.patch(
             "dandi_compute_code.queue._process_queue._load_content_id_to_dandiset_path",
             return_value=_FAKE_CONTENT_ID_TO_DANDISET_PATH,
-        ),
-        mock.patch(
-            "dandi_compute_code.queue._process_queue._get_params_id",
-            return_value=_FAKE_PARAMS_ID,
-        ),
-        mock.patch(
-            "dandi_compute_code.queue._process_queue._get_default_config_id",
-            return_value=_FAKE_CONFIG_ID,
         ),
     ):
         mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
