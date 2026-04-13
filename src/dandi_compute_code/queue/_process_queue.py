@@ -1,9 +1,15 @@
 import collections
 import gzip
+import hashlib
 import json
 import pathlib
+import re
 import subprocess
 import urllib.request
+
+_ATTEMPT_DIR_PATTERN = re.compile(r"^(.+)_attempt-\d+$")
+
+_AIND_EPHYS_PIPELINE_DIR = pathlib.Path(__file__).parent.parent / "aind_ephys_pipeline"
 
 
 def _fetch_counts(
@@ -44,6 +50,55 @@ def _fetch_counts(
         if content_id:
             content_ids.append(content_id)
     return collections.Counter(content_ids)
+
+
+def _count_dandiset_failures(dandiset_dir: pathlib.Path) -> collections.Counter:
+    """
+    Count failure attempts in a local clone of the output Dandiset.
+
+    A failure is defined as a directory ending in ``attempt-{N}`` that has at least
+    a ``code`` subdirectory but no ``output`` subdirectory.
+
+    Failures are counted separately per unique ``(version_dir_name, params_config_prefix)``
+    combination, where ``version_dir_name`` is the name of a ``version-*`` ancestor
+    directory and ``params_config_prefix`` is the part of the attempt directory name
+    before ``_attempt-{N}`` (e.g. ``params-abc1234_config-def5678``).
+
+    Parameters
+    ----------
+    dandiset_dir : pathlib.Path
+        Path to the root of the local clone of the output Dandiset (e.g. a clone
+        of https://github.com/dandi-compute/001697).
+
+    Returns
+    -------
+    collections.Counter
+        A Counter mapping ``(version_dir_name, params_config_prefix)`` tuples to
+        the number of failures for that combination.
+    """
+    failure_counter: collections.Counter = collections.Counter()
+    for path in dandiset_dir.rglob("*"):
+        if not path.is_dir():
+            continue
+        match = _ATTEMPT_DIR_PATTERN.match(path.name)
+        if not match:
+            continue
+        # Failure condition: has code/ subdirectory but no output/ subdirectory
+        if not (path / "code").is_dir():
+            continue
+        if (path / "output").is_dir():
+            continue
+        # Find the nearest version-* ancestor directory
+        version_dir_name = None
+        for parent in path.parents:
+            if parent.name.startswith("version-"):
+                version_dir_name = parent.name
+                break
+        if version_dir_name is None:
+            continue
+        params_config_prefix = match.group(1)
+        failure_counter[(version_dir_name, params_config_prefix)] += 1
+    return failure_counter
 
 
 def _fill_waiting(*, cwd: pathlib.Path, pipeline: str, version: str, params: str) -> None:
@@ -152,17 +207,62 @@ def _determine_running() -> bool:
     return False
 
 
-def _submit_next(*, cwd: pathlib.Path) -> bool:
+def _compute_params_id(params: str) -> str | None:
+    """
+    Compute the 7-character MD5-based params ID for a registered params key.
+
+    Parameters
+    ----------
+    params : str
+        The params key as it appears in ``registered_params.json`` and in the queue
+        (e.g. ``'default'`` or ``'no+motion'``).
+
+    Returns
+    -------
+    str or None
+        The first 7 hex characters of the MD5 digest of the params file, or ``None``
+        if the key is not found in the registry.
+    """
+    params_registry_path = _AIND_EPHYS_PIPELINE_DIR / "registries" / "registered_params.json"
+    params_registry = json.loads(params_registry_path.read_text())
+    if params not in params_registry:
+        return None
+    params_file = _AIND_EPHYS_PIPELINE_DIR / "params" / params_registry[params]["path"]
+    return hashlib.md5(params_file.read_bytes()).hexdigest()[0:7]
+
+
+def _compute_default_config_id() -> str:
+    """
+    Compute the 7-character MD5-based config ID for the default configuration file.
+
+    Returns
+    -------
+    str
+        The first 7 hex characters of the MD5 digest of the default config file.
+    """
+    default_config_path = _AIND_EPHYS_PIPELINE_DIR / "configs" / "mit_engaging.config"
+    return hashlib.md5(default_config_path.read_bytes()).hexdigest()[0:7]
+
+
+def _submit_next(*, cwd: pathlib.Path, dandiset_dir: pathlib.Path | None = None) -> bool:
     """
     Pop the next valid entry from ``waiting.jsonl`` and submit it.
 
     An entry is considered invalid and skipped if it has already reached its
-    maximum allowed attempt count (as defined in ``queue_config.json``).
+    maximum allowed attempt count (as defined in ``queue_config.json``) or if
+    the number of failures recorded in the output Dandiset clone for its
+    ``(version, params, config)`` combination meets or exceeds
+    ``max_fail_per_dandiset``.
 
     Parameters
     ----------
     cwd : pathlib.Path
         Path to the queue root directory (must be named 'queue').
+    dandiset_dir : pathlib.Path, optional
+        Path to a local clone of the output Dandiset repository (e.g. a clone
+        of https://github.com/dandi-compute/001697).  When provided, each
+        entry is also checked against ``max_fail_per_dandiset`` in
+        ``queue_config.json`` before submission.
 
     Returns
     -------
@@ -179,6 +279,8 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
         return False
 
     queue_config = json.loads((cwd / "queue_config.json").read_text())
+
+    failure_counter = _count_dandiset_failures(dandiset_dir) if dandiset_dir is not None else None
 
     entry = None
     while lines:
@@ -210,6 +312,23 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
             asset_override := asset_overrides.get(content_id, global_max_attempts)
         ) is not None and submitted_counter.get(content_id, 0) >= asset_override:
             continue
+
+        if failure_counter is not None:
+            max_fail_per_dandiset = pipeline_cfg.get("max_fail_per_dandiset")
+            if max_fail_per_dandiset is not None:
+                params_id = _compute_params_id(params)
+                config_id = _compute_default_config_id()
+                if params_id is not None and config_id is not None:
+                    version_dir_name = f"version-{version}"
+                    params_config_prefix = f"params-{params_id}_config-{config_id}"
+                    if failure_counter.get((version_dir_name, params_config_prefix), 0) >= max_fail_per_dandiset:
+                        print(
+                            f"Skipping content ID {content_id}: "
+                            f"{failure_counter[(version_dir_name, params_config_prefix)]} failures "
+                            f"already recorded for {version_dir_name}/{params_config_prefix} "
+                            f"(max_fail_per_dandiset={max_fail_per_dandiset})."
+                        )
+                        continue
 
         entry = (pipeline, version, params, content_id)
         break
@@ -257,7 +376,7 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
     return True
 
 
-def process_queue(*, cwd: pathlib.Path) -> None:
+def process_queue(*, cwd: pathlib.Path, dandiset_dir: pathlib.Path | None = None) -> None:
     """
     Process the current state of the queue.
 
@@ -276,6 +395,11 @@ def process_queue(*, cwd: pathlib.Path) -> None:
     ----------
     cwd : pathlib.Path
         Path to the queue root directory.  The directory must be named ``'queue'``.
+    dandiset_dir : pathlib.Path, optional
+        Path to a local clone of the output Dandiset repository (e.g. a clone of
+        https://github.com/dandi-compute/001697).  When provided, job submissions are
+        additionally gated by ``max_fail_per_dandiset`` defined per pipeline in
+        ``queue_config.json``.
 
     Raises
     ------
@@ -307,4 +431,4 @@ def process_queue(*, cwd: pathlib.Path) -> None:
 
     any_running = _determine_running()
     if not any_running:
-        _submit_next(cwd=cwd)
+        _submit_next(cwd=cwd, dandiset_dir=dandiset_dir)

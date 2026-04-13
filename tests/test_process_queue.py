@@ -15,6 +15,9 @@ from unittest import mock
 import pytest
 
 from dandi_compute_code.queue._process_queue import (
+    _compute_default_config_id,
+    _compute_params_id,
+    _count_dandiset_failures,
     _determine_running,
     _fetch_counts,
     _fill_waiting,
@@ -370,7 +373,7 @@ def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> N
     ):
         process_queue(cwd=queue_dir)
 
-    mock_submit.assert_called_once_with(cwd=queue_dir)
+    mock_submit.assert_called_once_with(cwd=queue_dir, dandiset_dir=None)
 
 
 @pytest.mark.ai_generated
@@ -392,3 +395,280 @@ def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path)
         process_queue(cwd=queue_dir)
 
     mock_submit.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Tests for _count_dandiset_failures
+# ---------------------------------------------------------------------------
+
+
+def _make_attempt_dir(
+    dandiset_dir: pathlib.Path,
+    *,
+    version: str,
+    params_config_prefix: str,
+    attempt_number: int,
+    has_code: bool = True,
+    has_output: bool = False,
+) -> pathlib.Path:
+    """Build a mock attempt directory under *dandiset_dir*."""
+    attempt_dir = (
+        dandiset_dir
+        / "derivatives"
+        / "dandiset-000123"
+        / "sub-001"
+        / "pipeline-aind+ephys"
+        / f"version-{version}"
+        / f"{params_config_prefix}_attempt-{attempt_number}"
+    )
+    attempt_dir.mkdir(parents=True, exist_ok=True)
+    if has_code:
+        (attempt_dir / "code").mkdir()
+    if has_output:
+        (attempt_dir / "output").mkdir()
+    return attempt_dir
+
+
+@pytest.mark.ai_generated
+def test_count_dandiset_failures_empty_dir(tmp_path: pathlib.Path) -> None:
+    """_count_dandiset_failures returns an empty Counter for an empty directory."""
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    result = _count_dandiset_failures(dandiset_dir)
+
+    assert result == collections.Counter()
+
+
+@pytest.mark.ai_generated
+def test_count_dandiset_failures_detects_failure(tmp_path: pathlib.Path) -> None:
+    """_count_dandiset_failures counts a directory with code/ but no output/ as a failure."""
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    _make_attempt_dir(dandiset_dir, version="v1.0", params_config_prefix="params-abc_config-def", attempt_number=1)
+
+    result = _count_dandiset_failures(dandiset_dir)
+
+    assert result[("version-v1.0", "params-abc_config-def")] == 1
+
+
+@pytest.mark.ai_generated
+def test_count_dandiset_failures_ignores_successes(tmp_path: pathlib.Path) -> None:
+    """_count_dandiset_failures does NOT count attempt directories that have an output/ directory."""
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    # One success (has output/)
+    _make_attempt_dir(
+        dandiset_dir,
+        version="v1.0",
+        params_config_prefix="params-abc_config-def",
+        attempt_number=1,
+        has_output=True,
+    )
+
+    result = _count_dandiset_failures(dandiset_dir)
+
+    assert result == collections.Counter()
+
+
+@pytest.mark.ai_generated
+def test_count_dandiset_failures_ignores_missing_code(tmp_path: pathlib.Path) -> None:
+    """_count_dandiset_failures does NOT count attempt directories that lack a code/ directory."""
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    _make_attempt_dir(
+        dandiset_dir,
+        version="v1.0",
+        params_config_prefix="params-abc_config-def",
+        attempt_number=1,
+        has_code=False,
+    )
+
+    result = _count_dandiset_failures(dandiset_dir)
+
+    assert result == collections.Counter()
+
+
+@pytest.mark.ai_generated
+def test_count_dandiset_failures_groups_by_version_and_params_config(tmp_path: pathlib.Path) -> None:
+    """_count_dandiset_failures groups failures by (version_dir, params_config_prefix)."""
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    # Two failures under (v1.0, params-abc_config-def)
+    _make_attempt_dir(dandiset_dir, version="v1.0", params_config_prefix="params-abc_config-def", attempt_number=1)
+    _make_attempt_dir(dandiset_dir, version="v1.0", params_config_prefix="params-abc_config-def", attempt_number=2)
+    # One failure under a different params_config combination
+    _make_attempt_dir(dandiset_dir, version="v1.0", params_config_prefix="params-xyz_config-uvw", attempt_number=1)
+    # One failure under a different version
+    _make_attempt_dir(dandiset_dir, version="v2.0", params_config_prefix="params-abc_config-def", attempt_number=1)
+    # One success (has output/) – must not be counted
+    _make_attempt_dir(
+        dandiset_dir,
+        version="v1.0",
+        params_config_prefix="params-abc_config-def",
+        attempt_number=3,
+        has_output=True,
+    )
+
+    result = _count_dandiset_failures(dandiset_dir)
+
+    assert result[("version-v1.0", "params-abc_config-def")] == 2
+    assert result[("version-v1.0", "params-xyz_config-uvw")] == 1
+    assert result[("version-v2.0", "params-abc_config-def")] == 1
+
+
+# ---------------------------------------------------------------------------
+# Tests for _submit_next with dandiset_dir / max_fail_per_dandiset
+# ---------------------------------------------------------------------------
+
+#: Queue config that includes max_fail_per_dandiset.
+_QUEUE_CONFIG_WITH_MAX_FAIL = {
+    "pipelines": {
+        "test": {
+            "version_priority": ["v1.0"],
+            "params_priority": ["default"],
+            "max_attempts_per_asset": 5,
+            "max_fail_per_dandiset": 2,
+        }
+    }
+}
+
+
+def _make_queue_dir_with_max_fail(tmp_path: pathlib.Path) -> pathlib.Path:
+    """Build a queue directory whose config includes max_fail_per_dandiset."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "waiting.jsonl").write_text("")
+    (queue_dir / "submitted.jsonl").write_text("")
+    (queue_dir / "queue_config.json").write_text(json.dumps(_QUEUE_CONFIG_WITH_MAX_FAIL))
+    return queue_dir
+
+
+@pytest.mark.ai_generated
+def test_submit_next_skips_when_max_fail_exceeded(tmp_path: pathlib.Path) -> None:
+    """_submit_next skips an entry when failure count in dandiset_dir >= max_fail_per_dandiset."""
+    queue_dir = _make_queue_dir_with_max_fail(tmp_path)
+
+    params_id = _compute_params_id("default")
+    config_id = _compute_default_config_id()
+    assert params_id is not None
+
+    version = "v1.0"
+    params_config_prefix = f"params-{params_id}_config-{config_id}"
+
+    # Pre-populate waiting queue with one entry
+    _write_jsonl(
+        queue_dir / "waiting.jsonl",
+        [{"pipeline": "test", "version": version, "params": "default", "content_id": "asset-bbb"}],
+    )
+
+    # Create dandiset dir with failures equal to max_fail_per_dandiset (= 2)
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+    _make_attempt_dir(
+        dandiset_dir, version=version, params_config_prefix=params_config_prefix, attempt_number=1
+    )
+    _make_attempt_dir(
+        dandiset_dir, version=version, params_config_prefix=params_config_prefix, attempt_number=2
+    )
+
+    result = _submit_next(cwd=queue_dir, dandiset_dir=dandiset_dir)
+
+    # No job should have been submitted
+    assert result is False
+    # The waiting file should be empty (entry was consumed as invalid)
+    remaining = [
+        json.loads(line)
+        for line in (queue_dir / "waiting.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert len(remaining) == 0
+    # submitted.jsonl must not have gained any new entries
+    submitted = [
+        json.loads(line)
+        for line in (queue_dir / "submitted.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert len(submitted) == 0
+
+
+@pytest.mark.ai_generated
+def test_submit_next_allows_when_below_max_fail(tmp_path: pathlib.Path) -> None:
+    """_submit_next does NOT skip an entry when failure count is below max_fail_per_dandiset."""
+    queue_dir = _make_queue_dir_with_max_fail(tmp_path)
+
+    params_id = _compute_params_id("default")
+    config_id = _compute_default_config_id()
+    assert params_id is not None
+
+    version = "v1.0"
+    params_config_prefix = f"params-{params_id}_config-{config_id}"
+
+    _write_jsonl(
+        queue_dir / "waiting.jsonl",
+        [{"pipeline": "test", "version": version, "params": "default", "content_id": "asset-bbb"}],
+    )
+
+    # Create dandiset dir with only one failure (below max of 2)
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+    _make_attempt_dir(
+        dandiset_dir, version=version, params_config_prefix=params_config_prefix, attempt_number=1
+    )
+
+    with mock.patch("subprocess.run") as mock_run:
+        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+        result = _submit_next(cwd=queue_dir, dandiset_dir=dandiset_dir)
+
+    assert result is True
+    submitted = [
+        json.loads(line)
+        for line in (queue_dir / "submitted.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert len(submitted) == 1
+    assert submitted[0]["content_id"] == "asset-bbb"
+
+
+@pytest.mark.ai_generated
+def test_submit_next_without_dandiset_dir_ignores_failures(tmp_path: pathlib.Path) -> None:
+    """_submit_next does not check failures when dandiset_dir is not provided."""
+    queue_dir = _make_queue_dir_with_max_fail(tmp_path)
+
+    _write_jsonl(
+        queue_dir / "waiting.jsonl",
+        [{"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-bbb"}],
+    )
+
+    with mock.patch("subprocess.run") as mock_run:
+        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+        result = _submit_next(cwd=queue_dir, dandiset_dir=None)
+
+    assert result is True
+
+
+@pytest.mark.ai_generated
+def test_process_queue_passes_dandiset_dir_to_submit_next(tmp_path: pathlib.Path) -> None:
+    """process_queue forwards dandiset_dir to _submit_next."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    qualifying_ids = ["asset-bbb"]
+    mock_response = mock.MagicMock()
+    mock_response.read.return_value = gzip.compress(json.dumps(qualifying_ids).encode())
+    mock_response.__enter__ = lambda s: s
+    mock_response.__exit__ = mock.MagicMock(return_value=False)
+
+    with (
+        mock.patch("urllib.request.urlopen", return_value=mock_response),
+        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
+        mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
+    ):
+        process_queue(cwd=queue_dir, dandiset_dir=dandiset_dir)
+
+    mock_submit.assert_called_once_with(cwd=queue_dir, dandiset_dir=dandiset_dir)

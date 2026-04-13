@@ -153,6 +153,15 @@ def _queue_group() -> None:
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
     default=None,
 )
-def _queue_process_command(directory: pathlib.Path | None = None) -> None:
+@click.option(
+    "--dandiset-directory",
+    "dandiset_dir",
+    help="Path to a local clone of the output Dandiset repository (e.g. a clone of https://github.com/dandi-compute/001697). "
+    "When provided, job submissions are additionally gated by max_fail_per_dandiset defined per pipeline in queue_config.json.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+def _queue_process_command(directory: pathlib.Path | None = None, dandiset_dir: pathlib.Path | None = None) -> None:
     cwd = directory if directory is not None else pathlib.Path.cwd()
-    process_queue(cwd=cwd)
+    process_queue(cwd=cwd, dandiset_dir=dandiset_dir)
