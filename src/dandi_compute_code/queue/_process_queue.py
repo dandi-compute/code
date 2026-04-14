@@ -2,8 +2,63 @@ import collections
 import gzip
 import json
 import pathlib
+import re
 import subprocess
 import urllib.request
+
+
+def _count_dandiset_failures(
+    *,
+    dandiset_directory: pathlib.Path,
+    version: str,
+) -> int:
+    """
+    Count failure attempt directories across all source dandisets for a given version.
+
+    Scans every ``derivatives/dandiset-*`` sub-directory inside *dandiset_directory*
+    (i.e. the local clone of the 001697 dandiset repository) and counts attempt
+    directories that contain a ``code/`` subdirectory but **no** ``output/``
+    subdirectory — the signature of a failed run.
+
+    A directory is considered an attempt if its name ends with ``_attempt-<number>``
+    and its immediate parent is named ``version-{version}``.
+
+    Parameters
+    ----------
+    dandiset_directory : pathlib.Path
+        Path to the local clone of the 001697 dandiset repository.
+    version : str
+        The BIDS-encoded pipeline version string as stored in the directory name
+        (e.g., ``'v1.0.0+fixes+47bd492'``).
+
+    Returns
+    -------
+    int
+        Total number of failed attempt directories across all source dandisets for
+        the given *version*.
+    """
+    derivatives = dandiset_directory / "derivatives"
+    if not derivatives.is_dir():
+        return 0
+
+    failure_count = 0
+    attempt_re = re.compile(r"_attempt-\d+$")
+    version_dir_name = f"version-{version}"
+
+    for dandiset_path in derivatives.iterdir():
+        if not dandiset_path.is_dir() or not dandiset_path.name.startswith("dandiset-"):
+            continue
+        for attempt_dir in dandiset_path.rglob("*_attempt-*"):
+            if not attempt_dir.is_dir():
+                continue
+            if not attempt_re.search(attempt_dir.name):
+                continue
+            if attempt_dir.parent.name != version_dir_name:
+                continue
+            if (attempt_dir / "code").is_dir() and not (attempt_dir / "output").is_dir():
+                failure_count += 1
+
+    return failure_count
 
 
 def _fetch_counts(
@@ -152,17 +207,23 @@ def _determine_running() -> bool:
     return False
 
 
-def _submit_next(*, cwd: pathlib.Path) -> bool:
+def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool:
     """
     Pop the next valid entry from ``waiting.jsonl`` and submit it.
 
     An entry is considered invalid and skipped if it has already reached its
-    maximum allowed attempt count (as defined in ``queue_config.json``).
+    maximum allowed attempt count (as defined in ``queue_config.json``), or if the
+    total number of failures in *dandiset_directory* for the entry's version has
+    reached ``max_fail_per_dandiset`` (when that field is set in the pipeline config).
 
     Parameters
     ----------
     cwd : pathlib.Path
         Path to the queue root directory (must be named 'queue').
+    dandiset_directory : pathlib.Path
+        Path to a local clone of the 001697 dandiset repository.  Failure
+        directories are counted across all source dandisets and entries are
+        skipped when the total reaches ``max_fail_per_dandiset``.
 
     Returns
     -------
@@ -211,6 +272,16 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
         ) is not None and submitted_counter.get(content_id, 0) >= asset_override:
             continue
 
+        # Skip if the total failure count across all dandisets has reached the limit.
+        max_fail = pipeline_cfg.get("max_fail_per_dandiset")
+        if max_fail is not None:
+            failure_count = _count_dandiset_failures(
+                dandiset_directory=dandiset_directory,
+                version=version,
+            )
+            if failure_count >= max_fail:
+                continue
+
         entry = (pipeline, version, params, content_id)
         break
 
@@ -257,7 +328,7 @@ def _submit_next(*, cwd: pathlib.Path) -> bool:
     return True
 
 
-def process_queue(*, cwd: pathlib.Path) -> None:
+def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
     """
     Process the current state of the queue.
 
@@ -276,6 +347,10 @@ def process_queue(*, cwd: pathlib.Path) -> None:
     ----------
     cwd : pathlib.Path
         Path to the queue root directory.  The directory must be named ``'queue'``.
+    dandiset_directory : pathlib.Path
+        Path to a local clone of the 001697 dandiset repository.  Failure
+        directories are counted across all source dandisets and entries are
+        skipped when the total reaches ``max_fail_per_dandiset``.
 
     Raises
     ------
@@ -307,4 +382,4 @@ def process_queue(*, cwd: pathlib.Path) -> None:
 
     any_running = _determine_running()
     if not any_running:
-        _submit_next(cwd=cwd)
+        _submit_next(cwd=cwd, dandiset_directory=dandiset_directory)

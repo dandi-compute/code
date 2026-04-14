@@ -153,6 +153,16 @@ def _queue_group() -> None:
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
     default=None,
 )
-def _queue_process_command(directory: pathlib.Path | None = None) -> None:
+@click.option(
+    "--dandiset-directory",
+    "dandiset_directory",
+    help="Path to a local clone of the 001697 dandiset repository, used to count failures per dandiset.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+def _queue_process_command(
+    directory: pathlib.Path | None = None,
+    dandiset_directory: pathlib.Path = pathlib.Path("."),
+) -> None:
     cwd = directory if directory is not None else pathlib.Path.cwd()
-    process_queue(cwd=cwd)
+    process_queue(cwd=cwd, dandiset_directory=dandiset_directory)
