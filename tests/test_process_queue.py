@@ -69,6 +69,14 @@ def _write_jsonl(file_path: pathlib.Path, entries: list[dict]) -> None:
     file_path.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
 
 
+def _mock_urlopen_response(payload: object) -> mock.MagicMock:
+    mock_response = mock.MagicMock()
+    mock_response.read.return_value = gzip.compress(json.dumps(payload).encode())
+    mock_response.__enter__.return_value = mock_response
+    mock_response.__exit__.return_value = False
+    return mock_response
+
+
 # ---------------------------------------------------------------------------
 # Tests for _fetch_counts
 # ---------------------------------------------------------------------------
@@ -148,20 +156,21 @@ def test_fetch_counts_ignores_blank_lines(tmp_path: pathlib.Path) -> None:
 def test_fill_waiting_adds_entries(tmp_path: pathlib.Path) -> None:
     """_fill_waiting appends qualifying content IDs to waiting.jsonl."""
     queue_dir = _make_queue_dir(tmp_path)
+    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}, "asset-ccc": {"311001": "pathin/another_dandiset"}}
 
     qualifying_ids = ["asset-bbb", "asset-ccc"]
     with mock.patch("urllib.request.urlopen") as mock_urlopen:
-        mock_response = mock.MagicMock()
-        mock_response.read.return_value = gzip.compress(json.dumps(qualifying_ids).encode())
-        mock_response.__enter__ = lambda s: s
-        mock_response.__exit__ = mock.MagicMock(return_value=False)
-        mock_urlopen.return_value = mock_response
+        mock_urlopen.side_effect = [
+            _mock_urlopen_response(qualifying_ids),
+            _mock_urlopen_response(mock_dandiset_map),
+        ]
 
         _fill_waiting(
             cwd=queue_dir,
             pipeline="test",
             version="v1.0",
             params="default",
+            dandiset_directory=tmp_path,
         )
 
     lines = [line for line in (queue_dir / "waiting.jsonl").read_text().splitlines() if line.strip()]
@@ -184,6 +193,7 @@ def test_fill_waiting_skips_when_already_populated(tmp_path: pathlib.Path) -> No
             pipeline="test",
             version="v1.0",
             params="default",
+            dandiset_directory=tmp_path,
         )
         mock_urlopen.assert_not_called()
 
@@ -203,18 +213,19 @@ def test_fill_waiting_respects_max_attempts(tmp_path: pathlib.Path) -> None:
     )
 
     qualifying_ids = ["asset-aaa", "asset-bbb"]
+    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
     with mock.patch("urllib.request.urlopen") as mock_urlopen:
-        mock_response = mock.MagicMock()
-        mock_response.read.return_value = gzip.compress(json.dumps(qualifying_ids).encode())
-        mock_response.__enter__ = lambda s: s
-        mock_response.__exit__ = mock.MagicMock(return_value=False)
-        mock_urlopen.return_value = mock_response
+        mock_urlopen.side_effect = [
+            _mock_urlopen_response(qualifying_ids),
+            _mock_urlopen_response(mock_dandiset_map),
+        ]
 
         _fill_waiting(
             cwd=queue_dir,
             pipeline="test",
             version="v1.0",
             params="default",
+            dandiset_directory=tmp_path,
         )
 
     lines = [line for line in (queue_dir / "waiting.jsonl").read_text().splitlines() if line.strip()]
@@ -362,13 +373,16 @@ def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> N
     dandiset_dir.mkdir()
 
     qualifying_ids = ["asset-bbb"]
-    mock_response = mock.MagicMock()
-    mock_response.read.return_value = gzip.compress(json.dumps(qualifying_ids).encode())
-    mock_response.__enter__ = lambda s: s
-    mock_response.__exit__ = mock.MagicMock(return_value=False)
+    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
 
     with (
-        mock.patch("urllib.request.urlopen", return_value=mock_response),
+        mock.patch(
+            "urllib.request.urlopen",
+            side_effect=[
+                _mock_urlopen_response(qualifying_ids),
+                _mock_urlopen_response(mock_dandiset_map),
+            ],
+        ),
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
@@ -385,13 +399,16 @@ def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path)
     dandiset_dir.mkdir()
 
     qualifying_ids = ["asset-bbb"]
-    mock_response = mock.MagicMock()
-    mock_response.read.return_value = gzip.compress(json.dumps(qualifying_ids).encode())
-    mock_response.__enter__ = lambda s: s
-    mock_response.__exit__ = mock.MagicMock(return_value=False)
+    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
 
     with (
-        mock.patch("urllib.request.urlopen", return_value=mock_response),
+        mock.patch(
+            "urllib.request.urlopen",
+            side_effect=[
+                _mock_urlopen_response(qualifying_ids),
+                _mock_urlopen_response(mock_dandiset_map),
+            ],
+        ),
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
@@ -582,13 +599,16 @@ def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathli
     dandiset_dir.mkdir()
 
     qualifying_ids = ["asset-bbb"]
-    mock_response = mock.MagicMock()
-    mock_response.read.return_value = gzip.compress(json.dumps(qualifying_ids).encode())
-    mock_response.__enter__ = lambda s: s
-    mock_response.__exit__ = mock.MagicMock(return_value=False)
+    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
 
     with (
-        mock.patch("urllib.request.urlopen", return_value=mock_response),
+        mock.patch(
+            "urllib.request.urlopen",
+            side_effect=[
+                _mock_urlopen_response(qualifying_ids),
+                _mock_urlopen_response(mock_dandiset_map),
+            ],
+        ),
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
