@@ -16,12 +16,3 @@ jobs:
     with:
       os_list: '["ubuntu-latest"]'
       python_list: '["3.13"]'
-
-  all-tests-passed:
-    if: always()
-    needs: [Tests]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: re-actors/alls-green@release/v1
-        with:
-          jobs: ${{ toJSON(needs) }}
