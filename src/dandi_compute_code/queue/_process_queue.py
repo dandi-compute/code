@@ -101,7 +101,14 @@ def _fetch_counts(
     return collections.Counter(content_ids)
 
 
-def _fill_waiting(*, cwd: pathlib.Path, pipeline: str, version: str, params: str) -> None:
+def _fill_waiting(
+    *,
+    cwd: pathlib.Path,
+    pipeline: str,
+    version: str,
+    params: str,
+    dandiset_directory: pathlib.Path,
+) -> None:
     """
     Fill the waiting queue with new entries for a given pipeline/version/params combination.
 
@@ -109,18 +116,23 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline: str, version: str, params: str
     without adding new entries.  Otherwise, it fetches qualifying AIND content IDs from the
     remote cache and adds those that have not yet exceeded their max attempt counts.
 
+    If ``max_fail_per_dandiset`` is set for the pipeline and the total number of failed
+    attempt directories across all source dandisets for this version has already reached
+    that limit, no new entries will be added.
+
     Parameters
     ----------
     cwd : pathlib.Path
         Path to the queue root directory (must be named 'queue').
     pipeline : str
-        Pipeline name as it appears in ``queue_config.json`` under ``pipelines``
-        (e.g., 'aind+ephys').
+        Pipeline name as it appears in ``queue_config.json`` under ``pipelines``.
     version : str
-        Version string as it appears in ``version_priority``
-        (e.g., 'v1.0.0+fixes+47bd492').
+        Version string as it appears in ``version_priority``.
     params : str
-        Params string as it appears in ``params_priority`` (e.g., 'default').
+        Params string as it appears in ``params_priority``.
+    dandiset_directory : pathlib.Path
+        Path to a local clone of the 001697 dandiset repository.  Used to count
+        failure directories for the given version.
     """
     waiting_file = cwd / "waiting.jsonl"
 
@@ -137,6 +149,23 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline: str, version: str, params: str
             " Waiting until all entries have run before re-filling."
         )
         return
+
+    queue_config = json.loads((cwd / "queue_config.json").read_text())
+    pipeline_cfg = queue_config["pipelines"][pipeline]
+
+    # Skip filling if the total failure count across all dandisets has reached the limit.
+    max_fail = pipeline_cfg.get("max_fail_per_dandiset")
+    if max_fail is not None:
+        failure_count = _count_dandiset_failures(
+            dandiset_directory=dandiset_directory,
+            version=version,
+        )
+        if failure_count >= max_fail:
+            print(
+                f"Skipping fill for {pipeline}/{version}/{params}: "
+                f"failure count ({failure_count}) has reached max_fail_per_dandiset ({max_fail})."
+            )
+            return
 
     submitted_file = cwd / "submitted.jsonl"
     done_counter = _fetch_counts(
@@ -160,9 +189,6 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline: str, version: str, params: str
     with urllib.request.urlopen(url=content_id_to_unique_dandiset_path_url) as response:
         content_id_to_unique_dandiset_path = json.loads(gzip.decompress(response.read()))
 
-    queue_config = json.loads((cwd / "queue_config.json").read_text())
-    pipeline_cfg = queue_config["pipelines"][pipeline]
-
     global_max_attempts = pipeline_cfg["max_attempts_per_asset"]
     asset_overrides = pipeline_cfg.get("asset_overrides") or {}
 
@@ -172,13 +198,12 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline: str, version: str, params: str
             content_id, 0
         ) >= asset_override:
             continue
-
         new_waiting.add(content_id)
 
-    dandiset_info = content_id_to_unique_dandiset_path.get(content_id, dict())
-    dandiset_id, dandiset_path = next(iter(dandiset_info.items()), (None, None))
     with waiting_file.open(mode="a") as file_stream:
         for content_id in sorted(new_waiting):
+            dandiset_info = content_id_to_unique_dandiset_path.get(content_id, dict())
+            dandiset_id, dandiset_path = next(iter(dandiset_info.items()), (None, None))
             file_stream.write(
                 json.dumps(
                     {
@@ -389,6 +414,7 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
                     pipeline=pipeline_name,
                     version=version,
                     params=params,
+                    dandiset_directory=dandiset_directory,
                 )
 
     any_running = _determine_running()
