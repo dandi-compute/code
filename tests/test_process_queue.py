@@ -156,13 +156,13 @@ def test_fetch_counts_ignores_blank_lines(tmp_path: pathlib.Path) -> None:
 def test_fill_waiting_adds_entries(tmp_path: pathlib.Path) -> None:
     """_fill_waiting appends qualifying content IDs to waiting.jsonl."""
     queue_dir = _make_queue_dir(tmp_path)
-    dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}, "asset-ccc": {"311001": "pathin/another_dandiset"}}
+    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}, "asset-ccc": {"311001": "pathin/another_dandiset"}}
 
     qualifying_ids = ["asset-bbb", "asset-ccc"]
     with mock.patch("urllib.request.urlopen") as mock_urlopen:
         mock_urlopen.side_effect = [
             _mock_urlopen_response(qualifying_ids),
-            _mock_urlopen_response(dandiset_map),
+            _mock_urlopen_response(mock_dandiset_map),
         ]
 
         _fill_waiting(
@@ -213,11 +213,11 @@ def test_fill_waiting_respects_max_attempts(tmp_path: pathlib.Path) -> None:
     )
 
     qualifying_ids = ["asset-aaa", "asset-bbb"]
-    dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
+    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
     with mock.patch("urllib.request.urlopen") as mock_urlopen:
         mock_urlopen.side_effect = [
             _mock_urlopen_response(qualifying_ids),
-            _mock_urlopen_response(dandiset_map),
+            _mock_urlopen_response(mock_dandiset_map),
         ]
 
         _fill_waiting(
@@ -373,14 +373,14 @@ def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> N
     dandiset_dir.mkdir()
 
     qualifying_ids = ["asset-bbb"]
-    dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
+    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
 
     with (
         mock.patch(
             "urllib.request.urlopen",
             side_effect=[
                 _mock_urlopen_response(qualifying_ids),
-                _mock_urlopen_response(dandiset_map),
+                _mock_urlopen_response(mock_dandiset_map),
             ],
         ),
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
@@ -399,14 +399,14 @@ def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path)
     dandiset_dir.mkdir()
 
     qualifying_ids = ["asset-bbb"]
-    dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
+    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
 
     with (
         mock.patch(
             "urllib.request.urlopen",
             side_effect=[
                 _mock_urlopen_response(qualifying_ids),
-                _mock_urlopen_response(dandiset_map),
+                _mock_urlopen_response(mock_dandiset_map),
             ],
         ),
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
@@ -599,14 +599,14 @@ def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathli
     dandiset_dir.mkdir()
 
     qualifying_ids = ["asset-bbb"]
-    dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
+    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
 
     with (
         mock.patch(
             "urllib.request.urlopen",
             side_effect=[
                 _mock_urlopen_response(qualifying_ids),
-                _mock_urlopen_response(dandiset_map),
+                _mock_urlopen_response(mock_dandiset_map),
             ],
         ),
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
