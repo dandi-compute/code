@@ -146,12 +146,19 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline: str, version: str, params: str
         params=params,
     )
 
-    url = (
+    qualifying_aind_content_ids_url = (
         "https://raw.githubusercontent.com/dandi-cache/qualifying-aind-content-ids/refs/heads/min/"
         "derivatives/qualifying_aind_content_ids.min.json.gz"
     )
-    with urllib.request.urlopen(url=url) as response:
+    with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
         qualifying_aind_content_ids = json.loads(gzip.decompress(response.read()))
+
+    content_id_to_unique_dandiset_path_url = (
+        "https://raw.githubusercontent.com/dandi-cache/content-id-to-unique-dandiset-path/refs/heads/min/"
+        "derivatives/content_id_to_unique_dandiset_path.min.json.gz"
+    )
+    with urllib.request.urlopen(url=content_id_to_unique_dandiset_path_url) as response:
+        content_id_to_unique_dandiset_path = json.loads(gzip.decompress(response.read()))
 
     queue_config = json.loads((cwd / "queue_config.json").read_text())
     pipeline_cfg = queue_config["pipelines"][pipeline]
@@ -168,6 +175,8 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline: str, version: str, params: str
 
         new_waiting.add(content_id)
 
+    dandiset_info = content_id_to_unique_dandiset_path.get(content_id, dict())
+    dandiset_id, dandiset_path = next(iter(dandiset_info.items()), (None, None))
     with waiting_file.open(mode="a") as file_stream:
         for content_id in sorted(new_waiting):
             file_stream.write(
@@ -177,6 +186,8 @@ def _fill_waiting(*, cwd: pathlib.Path, pipeline: str, version: str, params: str
                         "version": version,
                         "params": params,
                         "content_id": content_id,
+                        "dandiset_id": dandiset_id,
+                        "dandiset_path": dandiset_path,
                     }
                 )
                 + "\n"

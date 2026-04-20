@@ -21,7 +21,9 @@ from ._handle_template import generate_aind_ephys_submission_script
 
 @pydantic.validate_call
 def prepare_aind_ephys_job(
-    content_id: str,
+    content_id: str | None = None,
+    dandiset_id: str | None = None,
+    dandiset_path: str | None = None,
     config_file_path: pathlib.Path | None = None,
     parameters_key: str = "default",
     pipeline_directory: pathlib.Path | None = None,
@@ -35,6 +37,12 @@ def prepare_aind_ephys_job(
     ----------
     content_id : str
         The content ID for the data to be processed.
+    dandiset_id : str, optional
+        The Dandiset ID for the data to be processed. Required if `content_id`
+        is not provided and will be used to look up the content ID if `content_id` is not provided.
+    dandiset_path : str, optional
+        The local path to the Dandiset data to be processed. Required if `content_id
+        is not provided and will be used to look up the content ID if `content_id` is not provided.
     config_file_path : pathlib.Path, optional
         Path to the configuration file.
     parameters_key : str
@@ -53,6 +61,9 @@ def prepare_aind_ephys_job(
     script_file_path : pathlib.Path
         The path to the generated submission script.
     """
+    if not content_id and not (dandiset_id and dandiset_path):
+        message = "Either --id or both --dandiset and --dandipath must be provided."
+        raise ValueError(message)
     if pipeline_version == "v1.0.0":
         message = (
             "Version `v1.0.0` is incompatible with the new parameters file usage." "Please use `v1.0.0-fixes` instead."
@@ -60,10 +71,12 @@ def prepare_aind_ephys_job(
         raise ValueError(message)
     config_file_path = config_file_path or pathlib.Path(__file__).parent / "configs" / "mit_engaging.config"
 
-    # TODO: remove the API key use once Dandiset is public
-    if "DANDI_API_KEY" not in os.environ:
-        message = "`DANDI_API_KEY` environment variable is not set."
-        raise RuntimeError(message)
+    if content_id is None:
+        client = dandi.dandiapi.DandiAPIClient()
+        dandiset = client.get_dandiset(dandiset_id=dandiset_id)
+        asset = dandiset.get_asset_by_path(path=dandiset_path)
+        metadata = asset.get_raw_metadata()
+        content_id = metadata["contentUrl"][1].split("/")[-1]
 
     params_registry_path = pathlib.Path(__file__).parent / "registries" / "registered_params.json"
     params_registry = json.loads(params_registry_path.read_text())

@@ -1,3 +1,4 @@
+import os
 import pathlib
 
 import click
@@ -38,9 +39,25 @@ def _aind_group() -> None:
 @click.option(
     "--id",
     "content_id",
-    help="The content ID for the data to be processed.",
-    required=True,
+    help="The content ID for the data to be processed. Required if --dandiset and --dandipath are not provided.",
+    required=False,
+    type=None,
+)
+@click.option(
+    "--dandiset",
+    "dandiset_id",
+    help="The Dandiset ID for the data to be processed (e.g., '000409'). Required if --id is not provided.",
+    required=False,
     type=str,
+    default=None,
+)
+@click.option(
+    "--dandipath",
+    "dandiset_path",
+    help="The local path to the Dandiset data to be processed. Required if --id is not provided.",
+    required=False,
+    type=str,
+    default=None,
 )
 @click.option(
     "--config",
@@ -89,7 +106,9 @@ def _aind_group() -> None:
     default=False,
 )
 def _aind_prepare_command(
-    content_id: str,
+    content_id: str | None = None,
+    dandiset_id: str | None = None,
+    dandiset_path: pathlib.Path | None = None,
     config_file_path: pathlib.Path | None = None,
     pipeline_directory: pathlib.Path | None = None,
     pipeline_version: str = "v1.0.0-fixes",
@@ -97,8 +116,14 @@ def _aind_prepare_command(
     submit: bool = False,
     silent: bool = False,
 ) -> None:
+    if submit and "DANDI_API_KEY" not in os.environ:
+        message = "`DANDI_API_KEY` environment variable is not set."
+        raise RuntimeError(message)
+
     script_file_path = prepare_aind_ephys_job(
         content_id=content_id,
+        dandiset_id=dandiset_id,
+        dandiset_path=dandiset_path,
         config_file_path=config_file_path,
         pipeline_directory=pipeline_directory,
         pipeline_version=pipeline_version,
