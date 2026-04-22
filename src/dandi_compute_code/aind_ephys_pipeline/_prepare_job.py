@@ -64,6 +64,9 @@ def prepare_aind_ephys_job(
     if not content_id and not (dandiset_id and dandiset_path):
         message = "Either --id or both --dandiset and --dandipath must be provided."
         raise ValueError(message)
+    if pipeline_version == "":
+        message = f"Pipeline version passed for `{content_id=}` is empty!"
+        raise ValueError(message)
     if pipeline_version == "v1.0.0":
         message = (
             "Version `v1.0.0` is incompatible with the new parameters file usage." "Please use `v1.0.0-fixes` instead."
