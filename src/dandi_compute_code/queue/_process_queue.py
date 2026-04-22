@@ -328,7 +328,11 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
 
     pipeline, version, params, content_id = entry
 
-    submission_version = "+".join(version.split("+")[:-1])
+    version_parts = version.split("+")
+    if len(version_parts) > 1 and re.fullmatch(r"[0-9a-f]{7,40}", version_parts[-1]):
+        submission_version = "+".join(version_parts[:-1])
+    else:
+        submission_version = version
     submission_params = params
 
     print(f"Submitting content ID: {content_id}")
