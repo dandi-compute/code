@@ -300,6 +300,9 @@ def test_submit_next_pops_entry_and_records_submission(tmp_path: pathlib.Path) -
     assert len(submitted) == 1
     assert submitted[0]["content_id"] == "asset-bbb"
 
+    submitted_command = mock_run.call_args.args[0]
+    assert submitted_command[submitted_command.index("--version") + 1] == "v1.0"
+
 
 @pytest.mark.ai_generated
 def test_submit_next_skips_exhausted_entries(tmp_path: pathlib.Path) -> None:
@@ -331,6 +334,28 @@ def test_submit_next_skips_exhausted_entries(tmp_path: pathlib.Path) -> None:
     assert "asset-bbb" in submitted_ids
     # asset-aaa must not appear as a new submission
     assert submitted_ids.count("asset-aaa") == 1  # only the original pre-populated one
+
+
+@pytest.mark.ai_generated
+def test_submit_next_strips_commit_suffix_from_version(tmp_path: pathlib.Path) -> None:
+    """_submit_next removes only a trailing commit hash suffix from the queued version."""
+    queue_dir = _make_queue_dir(tmp_path)
+    queue_config = json.loads((queue_dir / "queue_config.json").read_text())
+    queue_config["pipelines"]["test"]["version_priority"] = ["v1.1.0+abcdef0"]
+    (queue_dir / "queue_config.json").write_text(json.dumps(queue_config))
+
+    _write_jsonl(
+        queue_dir / "waiting.jsonl",
+        [{"pipeline": "test", "version": "v1.1.0+abcdef0", "params": "default", "content_id": "asset-bbb"}],
+    )
+
+    with mock.patch("subprocess.run") as mock_run:
+        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+        result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
+
+    assert result is True
+    submitted_command = mock_run.call_args.args[0]
+    assert submitted_command[submitted_command.index("--version") + 1] == "v1.1.0"
 
 
 # ---------------------------------------------------------------------------
