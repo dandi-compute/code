@@ -289,6 +289,8 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
         version = entry_obj.get("version", "")
         params = entry_obj.get("params", "")
         content_id = entry_obj.get("content_id", "")
+        dandiset_id = entry_obj.get("dandiset_id", "")
+        dandiset_path = entry_obj.get("dandiset_path", "")
         if not all([pipeline, version, params, content_id]):
             continue
 
@@ -361,6 +363,8 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
                     "version": version,
                     "params": params,
                     "content_id": content_id,
+                    "dandiset_id": dandiset_id,
+                    "dandiset_path": dandiset_path,
                 }
             )
             + "\n"
