@@ -1,10 +1,13 @@
+import json
 import os
 import pathlib
+import sys
 
 import click
 
 from ._utils import _styled_echo, clean_work_directory
 from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_aind_ephys_job
+from .dandiset import scan_dandiset_directory, write_scan_jsonl
 from .queue import process_queue
 
 
@@ -191,3 +194,39 @@ def _queue_process_command(
 ) -> None:
     cwd = directory if directory is not None else pathlib.Path.cwd()
     process_queue(cwd=cwd, dandiset_directory=dandiset_directory)
+
+
+# dandicompute dandiset
+@_dandicompute_group.group(name="dandiset")
+def _dandiset_group() -> None:
+    pass
+
+
+# dandicompute dandiset scan [OPTIONS]
+@_dandiset_group.command(name="scan")
+@click.option(
+    "--directory",
+    "dandiset_directory",
+    help="Path to a local clone of the dandiset repository to scan.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+@click.option(
+    "--output",
+    "output_file",
+    help="Path to the output JSONL file. Defaults to stdout if not provided.",
+    required=False,
+    type=click.Path(dir_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+def _dandiset_scan_command(
+    dandiset_directory: pathlib.Path,
+    output_file: pathlib.Path | None = None,
+) -> None:
+    if output_file is None:
+        records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
+        for record in records:
+            sys.stdout.write(json.dumps(record) + "\n")
+    else:
+        write_scan_jsonl(dandiset_directory=dandiset_directory, output_file=output_file)
+        _styled_echo(text=f"\nScan complete! Output written to: {output_file}", color="green")
