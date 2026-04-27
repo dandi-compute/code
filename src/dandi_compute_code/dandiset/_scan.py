@@ -34,17 +34,17 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     version_dir = attempt_dir.parent
     if not version_dir.name.startswith("version-"):
         return None
-    version = version_dir.name[len("version-"):]
+    version = version_dir.name[len("version-") :]
 
     pipeline_dir = version_dir.parent
     if not pipeline_dir.name.startswith("pipeline-"):
         return None
-    pipeline = pipeline_dir.name[len("pipeline-"):]
+    pipeline = pipeline_dir.name[len("pipeline-") :]
 
     # The directory above pipeline-* is either ses-* or sub-*
     above_pipeline = pipeline_dir.parent
     if above_pipeline.name.startswith("ses-"):
-        session: str | None = above_pipeline.name[len("ses-"):]
+        session: str | None = above_pipeline.name[len("ses-") :]
         subject_dir = above_pipeline.parent
     else:
         session = None
@@ -52,12 +52,12 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
 
     if not subject_dir.name.startswith("sub-"):
         return None
-    subject = subject_dir.name[len("sub-"):]
+    subject = subject_dir.name[len("sub-") :]
 
     dandiset_dir = subject_dir.parent
     if not dandiset_dir.name.startswith("dandiset-"):
         return None
-    dandiset_id = dandiset_dir.name[len("dandiset-"):]
+    dandiset_id = dandiset_dir.name[len("dandiset-") :]
 
     has_code = (attempt_dir / "code").is_dir()
     has_output = (attempt_dir / "output").is_dir()

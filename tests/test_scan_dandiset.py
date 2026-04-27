@@ -72,8 +72,16 @@ def test_scan_empty_when_no_derivatives(tmp_path: pathlib.Path) -> None:
 def test_scan_single_failed_attempt(tmp_path: pathlib.Path) -> None:
     """Single attempt with code/ but no output/ is returned with correct fields."""
     _make_attempt_dir(
-        tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1,
-        with_code=True, with_output=False,
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        with_code=True,
+        with_output=False,
     )
     records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
@@ -94,8 +102,16 @@ def test_scan_single_failed_attempt(tmp_path: pathlib.Path) -> None:
 def test_scan_single_successful_attempt(tmp_path: pathlib.Path) -> None:
     """Single attempt with both code/ and output/ is returned with has_output=True."""
     _make_attempt_dir(
-        tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1,
-        with_code=True, with_output=True,
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        with_code=True,
+        with_output=True,
     )
     records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
@@ -107,8 +123,17 @@ def test_scan_single_successful_attempt(tmp_path: pathlib.Path) -> None:
 def test_scan_with_session_level(tmp_path: pathlib.Path) -> None:
     """Session-level directories are parsed correctly."""
     _make_attempt_dir(
-        tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1,
-        session="20230101", with_code=True, with_output=False,
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        session="20230101",
+        with_code=True,
+        with_output=False,
     )
     records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
@@ -156,8 +181,16 @@ def test_scan_ignores_non_dandiset_dirs(tmp_path: pathlib.Path) -> None:
 def test_scan_config_with_underscores(tmp_path: pathlib.Path) -> None:
     """Config IDs that contain underscores (e.g., 'abc_date-2024+01+01') are parsed correctly."""
     _make_attempt_dir(
-        tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678_date-2024+01+01", 1,
-        with_code=True, with_output=False,
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678_date-2024+01+01",
+        1,
+        with_code=True,
+        with_output=False,
     )
     records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
