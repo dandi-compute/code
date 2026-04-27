@@ -131,8 +131,16 @@ def test_scan_single_successful_attempt(tmp_path: pathlib.Path) -> None:
 def test_scan_has_logs_true_when_logs_dir_nonempty(tmp_path: pathlib.Path) -> None:
     """has_logs is True when a non-empty logs/ subdirectory exists."""
     _make_attempt_dir(
-        tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1,
-        with_logs=True, logs_empty=False,
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        with_logs=True,
+        logs_empty=False,
     )
     records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
@@ -143,8 +151,16 @@ def test_scan_has_logs_true_when_logs_dir_nonempty(tmp_path: pathlib.Path) -> No
 def test_scan_has_logs_false_when_logs_dir_empty(tmp_path: pathlib.Path) -> None:
     """has_logs is False when the logs/ directory exists but is empty."""
     _make_attempt_dir(
-        tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1,
-        with_logs=True, logs_empty=True,
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        with_logs=True,
+        logs_empty=True,
     )
     records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
@@ -155,7 +171,14 @@ def test_scan_has_logs_false_when_logs_dir_empty(tmp_path: pathlib.Path) -> None
 def test_scan_has_logs_false_when_no_logs_dir(tmp_path: pathlib.Path) -> None:
     """has_logs is False when no logs/ directory exists at all."""
     _make_attempt_dir(
-        tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1,
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
         with_logs=False,
     )
     records = scan_dandiset_directory(dandiset_directory=tmp_path)
