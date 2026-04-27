@@ -30,6 +30,8 @@ def _make_attempt_dir(
     session: str | None = None,
     with_code: bool = True,
     with_output: bool = False,
+    with_logs: bool = False,
+    logs_empty: bool = False,
 ) -> pathlib.Path:
     """
     Create a mock attempt directory inside a fake dandiset clone rooted at *base*.
@@ -53,6 +55,11 @@ def _make_attempt_dir(
         (attempt_dir / "code").mkdir()
     if with_output:
         (attempt_dir / "output").mkdir()
+    if with_logs:
+        logs_dir = attempt_dir / "logs"
+        logs_dir.mkdir()
+        if not logs_empty:
+            (logs_dir / "nextflow.log").write_text("log content")
     return attempt_dir
 
 
@@ -96,6 +103,7 @@ def test_scan_single_failed_attempt(tmp_path: pathlib.Path) -> None:
     assert r["attempt"] == 1
     assert r["has_code"] is True
     assert r["has_output"] is False
+    assert r["has_logs"] is False
 
 
 @pytest.mark.ai_generated
@@ -117,6 +125,42 @@ def test_scan_single_successful_attempt(tmp_path: pathlib.Path) -> None:
     assert len(records) == 1
     assert records[0]["has_code"] is True
     assert records[0]["has_output"] is True
+
+
+@pytest.mark.ai_generated
+def test_scan_has_logs_true_when_logs_dir_nonempty(tmp_path: pathlib.Path) -> None:
+    """has_logs is True when a non-empty logs/ subdirectory exists."""
+    _make_attempt_dir(
+        tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1,
+        with_logs=True, logs_empty=False,
+    )
+    records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    assert records[0]["has_logs"] is True
+
+
+@pytest.mark.ai_generated
+def test_scan_has_logs_false_when_logs_dir_empty(tmp_path: pathlib.Path) -> None:
+    """has_logs is False when the logs/ directory exists but is empty."""
+    _make_attempt_dir(
+        tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1,
+        with_logs=True, logs_empty=True,
+    )
+    records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    assert records[0]["has_logs"] is False
+
+
+@pytest.mark.ai_generated
+def test_scan_has_logs_false_when_no_logs_dir(tmp_path: pathlib.Path) -> None:
+    """has_logs is False when no logs/ directory exists at all."""
+    _make_attempt_dir(
+        tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1,
+        with_logs=False,
+    )
+    records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    assert records[0]["has_logs"] is False
 
 
 @pytest.mark.ai_generated

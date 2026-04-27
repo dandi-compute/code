@@ -61,6 +61,8 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
 
     has_code = (attempt_dir / "code").is_dir()
     has_output = (attempt_dir / "output").is_dir()
+    logs_dir = attempt_dir / "logs"
+    has_logs = logs_dir.is_dir() and any(logs_dir.iterdir())
 
     return {
         "dandiset_id": dandiset_id,
@@ -73,6 +75,7 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
         "attempt": int(attempt_match.group("attempt")),
         "has_code": has_code,
         "has_output": has_output,
+        "has_logs": has_logs,
     }
 
 
@@ -109,6 +112,7 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         * ``attempt``     – integer attempt number
         * ``has_code``    – ``True`` if a ``code/`` subdirectory is present
         * ``has_output``  – ``True`` if an ``output/`` subdirectory is present
+        * ``has_logs``    – ``True`` if a ``logs/`` subdirectory is present and non-empty
     """
     derivatives = dandiset_directory / "derivatives"
     if not derivatives.is_dir():
