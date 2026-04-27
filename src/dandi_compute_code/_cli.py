@@ -7,7 +7,7 @@ import click
 
 from ._utils import _styled_echo, clean_work_directory
 from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_aind_ephys_job
-from .dandiset import scan_dandiset_directory, write_scan_jsonl
+from .dandiset import delete_dandiset_version, scan_dandiset_directory, write_scan_jsonl
 from .queue import process_queue
 
 
@@ -230,3 +230,40 @@ def _dandiset_scan_command(
     else:
         write_scan_jsonl(dandiset_directory=dandiset_directory, output_file=output_file)
         _styled_echo(text=f"\nScan complete! Output written to: {output_file}", color="green")
+
+
+# dandicompute delete
+@_dandicompute_group.group(name="delete")
+def _delete_group() -> None:
+    pass
+
+
+# dandicompute delete version [OPTIONS]
+@_delete_group.command(name="version")
+@click.option(
+    "--directory",
+    "dandiset_directory",
+    help="Path to a local clone of the dandiset repository.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+@click.option(
+    "--version",
+    "version",
+    help="The version string to delete (e.g., 'v1.0').",
+    required=True,
+    type=str,
+)
+def _delete_version_command(dandiset_directory: pathlib.Path, version: str) -> None:
+    click.confirm(
+        f"This will permanently delete all 'version-{version}' directories "
+        f"from the DANDI archive and the local filesystem under '{dandiset_directory}'. Continue?",
+        abort=True,
+    )
+    deleted = delete_dandiset_version(dandiset_directory=dandiset_directory, version=version)
+    if deleted:
+        count = len(deleted)
+        noun = "directory" if count == 1 else "directories"
+        _styled_echo(text=f"\nDeleted {count} version {noun}.", color="green")
+    else:
+        _styled_echo(text=f"\nNo 'version-{version}' directories found.", color="yellow")
