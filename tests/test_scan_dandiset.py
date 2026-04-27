@@ -54,7 +54,7 @@ def _make_attempt_dir(
     if with_code:
         (attempt_dir / "code").mkdir()
     if with_output:
-        (attempt_dir / "output").mkdir()
+        (attempt_dir / "derivatives").mkdir()
     if with_logs:
         logs_dir = attempt_dir / "logs"
         logs_dir.mkdir()
@@ -77,7 +77,7 @@ def test_scan_empty_when_no_derivatives(tmp_path: pathlib.Path) -> None:
 
 @pytest.mark.ai_generated
 def test_scan_single_failed_attempt(tmp_path: pathlib.Path) -> None:
-    """Single attempt with code/ but no output/ is returned with correct fields."""
+    """Single attempt with code/ but no derivatives/ is returned with correct fields."""
     _make_attempt_dir(
         tmp_path,
         "000001",
@@ -108,7 +108,7 @@ def test_scan_single_failed_attempt(tmp_path: pathlib.Path) -> None:
 
 @pytest.mark.ai_generated
 def test_scan_single_successful_attempt(tmp_path: pathlib.Path) -> None:
-    """Single attempt with both code/ and output/ is returned with has_output=True."""
+    """Single attempt with both code/ and derivatives/ is returned with has_output=True."""
     _make_attempt_dir(
         tmp_path,
         "000001",
