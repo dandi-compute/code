@@ -245,6 +245,21 @@ def test_scan_ignores_non_dandiset_dirs(tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.ai_generated
+def test_scan_includes_created_at_timestamp(tmp_path: pathlib.Path) -> None:
+    """Each record includes a created_at field with a valid ISO 8601 UTC timestamp."""
+    import datetime
+
+    _make_attempt_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1)
+    records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    created_at = records[0]["created_at"]
+    assert isinstance(created_at, str)
+    # Must be parseable as an ISO 8601 datetime with timezone info
+    dt = datetime.datetime.fromisoformat(created_at)
+    assert dt.tzinfo is not None
+
+
+@pytest.mark.ai_generated
 def test_scan_config_with_underscores(tmp_path: pathlib.Path) -> None:
     """Config IDs that contain underscores (e.g., 'abc_date-2024+01+01') are parsed correctly."""
     _make_attempt_dir(
