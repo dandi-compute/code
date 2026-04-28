@@ -2,6 +2,7 @@
 Unit tests for delete_dandiset_version and the ``dandicompute delete version`` CLI command.
 """
 
+import os
 import pathlib
 from unittest.mock import patch
 
@@ -50,15 +51,25 @@ def _make_version_dir(
 @pytest.mark.ai_generated
 def test_delete_returns_empty_when_no_derivatives(tmp_path: pathlib.Path) -> None:
     """Returns an empty list when there is no derivatives/ directory."""
-    result = delete_dandiset_version(dandiset_directory=tmp_path, version="v1.0")
+    with patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        result = delete_dandiset_version(dandiset_directory=tmp_path, version="v1.0")
     assert result == []
+
+
+@pytest.mark.ai_generated
+def test_delete_raises_when_dandi_api_key_missing(tmp_path: pathlib.Path) -> None:
+    """Raises RuntimeError immediately when DANDI_API_KEY is not set."""
+    env_without_key = {k: v for k, v in os.environ.items() if k != "DANDI_API_KEY"}
+    with patch.dict(os.environ, env_without_key, clear=True):
+        with pytest.raises(RuntimeError, match="DANDI_API_KEY"):
+            delete_dandiset_version(dandiset_directory=tmp_path, version="v1.0")
 
 
 @pytest.mark.ai_generated
 def test_delete_returns_empty_when_version_not_found(tmp_path: pathlib.Path) -> None:
     """Returns an empty list when no directories match the requested version."""
     _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v2.0")
-    with patch("subprocess.run") as mock_run:
+    with patch("subprocess.run") as mock_run, patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         result = delete_dandiset_version(dandiset_directory=tmp_path, version="v1.0")
     assert result == []
     mock_run.assert_not_called()
@@ -70,7 +81,7 @@ def test_delete_single_version_dir(tmp_path: pathlib.Path) -> None:
     version_dir = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0")
     assert version_dir.is_dir()
 
-    with patch("subprocess.run") as mock_run:
+    with patch("subprocess.run") as mock_run, patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         result = delete_dandiset_version(dandiset_directory=tmp_path, version="v1.0")
 
     assert result == [version_dir]
@@ -88,7 +99,7 @@ def test_delete_multiple_version_dirs(tmp_path: pathlib.Path) -> None:
     dir1 = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0")
     dir2 = _make_version_dir(tmp_path, "000001", "mouse02", "aind+ephys", "v1.0")
 
-    with patch("subprocess.run") as mock_run:
+    with patch("subprocess.run") as mock_run, patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         result = delete_dandiset_version(dandiset_directory=tmp_path, version="v1.0")
 
     assert set(result) == {dir1, dir2}
@@ -103,7 +114,7 @@ def test_delete_ignores_other_versions(tmp_path: pathlib.Path) -> None:
     target = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0")
     other = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v2.0")
 
-    with patch("subprocess.run"):
+    with patch("subprocess.run"), patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         result = delete_dandiset_version(dandiset_directory=tmp_path, version="v1.0")
 
     assert result == [target]
@@ -115,7 +126,7 @@ def test_delete_ignores_other_versions(tmp_path: pathlib.Path) -> None:
 def test_delete_with_session_level(tmp_path: pathlib.Path) -> None:
     """Session-level directory structure is handled correctly."""
     version_dir = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", session="20230101")
-    with patch("subprocess.run") as mock_run:
+    with patch("subprocess.run") as mock_run, patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         result = delete_dandiset_version(dandiset_directory=tmp_path, version="v1.0")
 
     assert result == [version_dir]
@@ -135,7 +146,7 @@ def test_delete_ignores_non_dandiset_dirs(tmp_path: pathlib.Path) -> None:
     spurious = tmp_path / "derivatives" / "other-stuff" / "sub-x" / "pipeline-y" / "version-v1.0"
     spurious.mkdir(parents=True)
 
-    with patch("subprocess.run") as mock_run:
+    with patch("subprocess.run") as mock_run, patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         result = delete_dandiset_version(dandiset_directory=tmp_path, version="v1.0")
 
     assert result == [target]
@@ -168,7 +179,7 @@ def test_cli_delete_version_deletes_on_confirmation(tmp_path: pathlib.Path) -> N
     """dandicompute delete version deletes the directory when the user confirms."""
     version_dir = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0")
     runner = CliRunner()
-    with patch("subprocess.run"):
+    with patch("subprocess.run"), patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         result = runner.invoke(
             _dandicompute_group,
             ["delete", "version", "--directory", str(tmp_path), "--version", "v1.0"],
@@ -213,7 +224,7 @@ def test_cli_delete_version_hash_suffixed_version(tmp_path: pathlib.Path) -> Non
     version_str = "v1.0.0+fixes+20abeb6"
     version_dir = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", version_str)
     runner = CliRunner()
-    with patch("subprocess.run"):
+    with patch("subprocess.run"), patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         result = runner.invoke(
             _dandicompute_group,
             ["delete", "version", "--directory", str(tmp_path), "--version", version_str],
@@ -230,7 +241,7 @@ def test_cli_delete_version_plural_message(tmp_path: pathlib.Path) -> None:
     _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0")
     _make_version_dir(tmp_path, "000001", "mouse02", "aind+ephys", "v1.0")
     runner = CliRunner()
-    with patch("subprocess.run"):
+    with patch("subprocess.run"), patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         result = runner.invoke(
             _dandicompute_group,
             ["delete", "version", "--directory", str(tmp_path), "--version", "v1.0"],
@@ -287,7 +298,7 @@ def test_cli_delete_version_base_matches_suffixed(tmp_path: pathlib.Path) -> Non
     exact = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0.0")
     suffixed = _make_version_dir(tmp_path, "000001", "mouse02", "aind+ephys", "v1.0.0+fixes+20abeb6")
     runner = CliRunner()
-    with patch("subprocess.run"):
+    with patch("subprocess.run"), patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         result = runner.invoke(
             _dandicompute_group,
             ["delete", "version", "--directory", str(tmp_path), "--version", "v1.0.0"],

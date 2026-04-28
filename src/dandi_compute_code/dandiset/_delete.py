@@ -1,3 +1,4 @@
+import os
 import pathlib
 import shutil
 import subprocess
@@ -68,6 +69,10 @@ def delete_dandiset_version(dandiset_directory: pathlib.Path, version: str) -> l
     list[pathlib.Path]
         A list of version directories that were deleted, in sorted order.
     """
+    if "DANDI_API_KEY" not in os.environ:
+        message = "`DANDI_API_KEY` environment variable is not set."
+        raise RuntimeError(message)
+
     version_dirs = scan_version_directories(dandiset_directory=dandiset_directory, version=version)
 
     for version_dir in version_dirs:
