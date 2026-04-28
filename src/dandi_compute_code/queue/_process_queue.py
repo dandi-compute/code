@@ -365,7 +365,7 @@ def prepare_queue(
     config_file_path: pathlib.Path | None = None,
 ) -> None:
     """
-    En-mass preparation of all qualifying assets based on the current queue config.
+    En-masse preparation of all qualifying assets based on the current queue config.
 
     For every pipeline/version/params combination declared in ``queue_config.json``
     this function fetches the qualifying AIND content IDs, applies attempt-limit
