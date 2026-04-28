@@ -64,9 +64,7 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     has_output = (attempt_dir / "derivatives").is_dir()
     logs_dir = attempt_dir / "logs"
     has_logs = logs_dir.is_dir() and any(logs_dir.iterdir())
-    created_at = datetime.datetime.fromtimestamp(
-        attempt_dir.stat().st_ctime, tz=datetime.timezone.utc
-    ).isoformat()
+    created_at = datetime.datetime.fromtimestamp(attempt_dir.stat().st_ctime, tz=datetime.timezone.utc).isoformat()
 
     return {
         "dandiset_id": dandiset_id,
