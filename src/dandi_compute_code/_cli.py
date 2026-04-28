@@ -7,7 +7,12 @@ import click
 
 from ._utils import _styled_echo, clean_work_directory
 from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_aind_ephys_job
-from .dandiset import delete_dandiset_version, scan_dandiset_directory, scan_version_directories, write_scan_jsonl, scan_dandiset_directory, write_scan_jsonl
+from .dandiset import (
+    delete_dandiset_version,
+    scan_dandiset_directory,
+    scan_version_directories,
+    write_scan_jsonl,
+)
 from .queue import prepare_queue, process_queue
 
 
