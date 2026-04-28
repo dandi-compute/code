@@ -20,6 +20,7 @@ from dandi_compute_code.queue._process_queue import (
     _fetch_counts,
     _fill_waiting,
     _submit_next,
+    prepare_queue,
     process_queue,
 )
 
@@ -640,3 +641,142 @@ def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathli
         process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
     mock_submit.assert_called_once_with(cwd=queue_dir, dandiset_directory=dandiset_dir)
+
+
+# ---------------------------------------------------------------------------
+# Tests for prepare_queue
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_raises_for_wrong_dir_name(tmp_path: pathlib.Path) -> None:
+    """prepare_queue raises ValueError when the directory is not named 'queue'."""
+    wrong_dir = tmp_path / "not_queue"
+    wrong_dir.mkdir()
+
+    with pytest.raises(ValueError, match="must be 'queue'"):
+        prepare_queue(cwd=wrong_dir, dandiset_directory=tmp_path)
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_calls_prepare_for_each_qualifying_asset(tmp_path: pathlib.Path) -> None:
+    """prepare_queue calls prepare_aind_ephys_job for every qualifying content ID."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    qualifying_ids = ["asset-bbb", "asset-ccc"]
+
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+    ):
+        mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
+        prepare_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+
+    assert mock_prepare.call_count == 2
+    prepared_ids = {call.kwargs["content_id"] for call in mock_prepare.call_args_list}
+    assert prepared_ids == {"asset-bbb", "asset-ccc"}
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_respects_max_attempts(tmp_path: pathlib.Path) -> None:
+    """prepare_queue skips content IDs that have already reached max_attempts_per_asset."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    # asset-aaa has an override limit of 1; pre-populate submitted with one entry for it.
+    _write_jsonl(
+        queue_dir / "submitted.jsonl",
+        [{"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-aaa"}],
+    )
+
+    qualifying_ids = ["asset-aaa", "asset-bbb"]
+
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+    ):
+        mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
+        prepare_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+
+    prepared_ids = {call.kwargs["content_id"] for call in mock_prepare.call_args_list}
+    assert "asset-aaa" not in prepared_ids
+    assert "asset-bbb" in prepared_ids
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_skips_when_failures_reach_max(tmp_path: pathlib.Path) -> None:
+    """prepare_queue skips all assets when the failure count reaches max_fail_per_dandiset."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "001697"
+    # Create 2 failed attempt dirs (== max_fail_per_dandiset from _EXAMPLE_QUEUE_CONFIG).
+    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 1)
+    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 2)
+
+    qualifying_ids = ["asset-bbb", "asset-ccc"]
+
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+    ):
+        mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
+        prepare_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+
+    mock_prepare.assert_not_called()
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_strips_commit_suffix_from_version(tmp_path: pathlib.Path) -> None:
+    """prepare_queue passes the version without its trailing commit-hash to prepare_aind_ephys_job."""
+    queue_dir = _make_queue_dir(tmp_path)
+    queue_config = json.loads((queue_dir / "queue_config.json").read_text())
+    queue_config["pipelines"]["test"]["version_priority"] = ["v1.1.0+abcdef0"]
+    (queue_dir / "queue_config.json").write_text(json.dumps(queue_config))
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    qualifying_ids = ["asset-bbb"]
+
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+    ):
+        mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
+        prepare_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+
+    assert mock_prepare.call_count == 1
+    assert mock_prepare.call_args.kwargs["pipeline_version"] == "v1.1.0"
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_passes_optional_args_through(tmp_path: pathlib.Path) -> None:
+    """prepare_queue forwards pipeline_directory and config_file_path to prepare_aind_ephys_job."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    fake_pipeline_dir = tmp_path / "pipeline"
+    fake_pipeline_dir.mkdir()
+    fake_config = tmp_path / "test.config"
+    fake_config.write_text("config")
+
+    qualifying_ids = ["asset-bbb"]
+
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+    ):
+        mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
+        prepare_queue(
+            cwd=queue_dir,
+            dandiset_directory=dandiset_dir,
+            pipeline_directory=fake_pipeline_dir,
+            config_file_path=fake_config,
+        )
+
+    assert mock_prepare.call_count == 1
+    call_kwargs = mock_prepare.call_args.kwargs
+    assert call_kwargs["pipeline_directory"] == fake_pipeline_dir
+    assert call_kwargs["config_file_path"] == fake_config

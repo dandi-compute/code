@@ -7,8 +7,8 @@ import click
 
 from ._utils import _styled_echo, clean_work_directory
 from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_aind_ephys_job
-from .dandiset import delete_dandiset_version, scan_dandiset_directory, write_scan_jsonl
-from .queue import process_queue
+from .dandiset import delete_dandiset_version, scan_dandiset_directory, scan_version_directories, write_scan_jsonl
+from .queue import prepare_queue, process_queue
 
 
 # dandicompute
@@ -196,6 +196,54 @@ def _queue_process_command(
     process_queue(cwd=cwd, dandiset_directory=dandiset_directory)
 
 
+# dandicompute queue prepare [OPTIONS]
+@_queue_group.command(name="prepare")
+@click.option(
+    "--directory",
+    "directory",
+    help="Path to the queue root directory (must be named 'queue'). Defaults to the current working directory.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--dandiset-directory",
+    "dandiset_directory",
+    help="Path to a local clone of the 001697 dandiset repository, used to count failures per dandiset.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+@click.option(
+    "--pipeline",
+    "pipeline_directory",
+    help="Local path to the AIND pipeline repository.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--config",
+    "config_file_path",
+    help="Path to the configuration file.",
+    required=False,
+    type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+def _queue_prepare_command(
+    directory: pathlib.Path | None = None,
+    dandiset_directory: pathlib.Path = pathlib.Path("."),
+    pipeline_directory: pathlib.Path | None = None,
+    config_file_path: pathlib.Path | None = None,
+) -> None:
+    cwd = directory if directory is not None else pathlib.Path.cwd()
+    prepare_queue(
+        cwd=cwd,
+        dandiset_directory=dandiset_directory,
+        pipeline_directory=pipeline_directory,
+        config_file_path=config_file_path,
+    )
+
+
 # dandicompute dandiset
 @_dandicompute_group.group(name="dandiset")
 def _dandiset_group() -> None:
@@ -250,20 +298,30 @@ def _delete_group() -> None:
 @click.option(
     "--version",
     "version",
-    help="The version string to delete (e.g., 'v1.0').",
+    help=(
+        "The version string to delete. Accepts plain semantic versions (e.g., 'v1.0.0') "
+        "as well as versions with appended commit hashes (e.g., 'v1.0.0+fixes+20abeb6' or "
+        "'v1.1.2+abcd123+def4567')."
+    ),
     required=True,
     type=str,
 )
 def _delete_version_command(dandiset_directory: pathlib.Path, version: str) -> None:
+    version_dirs = scan_version_directories(dandiset_directory=dandiset_directory, version=version)
+    if not version_dirs:
+        _styled_echo(text=f"\nNo 'version-{version}' directories found.", color="yellow")
+        return
+
+    count = len(version_dirs)
+    noun = "directory" if count == 1 else "directories"
+    examples = version_dirs[:3]
+    example_lines = "\n".join(f"  {p}" for p in examples)
+    suffix = f"\n  ... and {count - 3} more" if count > 3 else ""
     click.confirm(
-        f"This will permanently delete all 'version-{version}' directories "
-        f"from the DANDI archive and the local filesystem under '{dandiset_directory}'. Continue?",
+        f"This will permanently delete {count} 'version-{version}' {noun} "
+        f"from the DANDI archive and the local filesystem under '{dandiset_directory}'.\n"
+        f"Directories to be deleted:\n{example_lines}{suffix}\n\nContinue?",
         abort=True,
     )
     deleted = delete_dandiset_version(dandiset_directory=dandiset_directory, version=version)
-    if deleted:
-        count = len(deleted)
-        noun = "directory" if count == 1 else "directories"
-        _styled_echo(text=f"\nDeleted {count} version {noun}.", color="green")
-    else:
-        _styled_echo(text=f"\nNo 'version-{version}' directories found.", color="yellow")
+    _styled_echo(text=f"\nDeleted {len(deleted)} version {noun}.", color="green")

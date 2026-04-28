@@ -9,7 +9,7 @@ import pytest
 from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
-from dandi_compute_code.dandiset import delete_dandiset_version
+from dandi_compute_code.dandiset import delete_dandiset_version, scan_version_directories
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -114,9 +114,7 @@ def test_delete_ignores_other_versions(tmp_path: pathlib.Path) -> None:
 @pytest.mark.ai_generated
 def test_delete_with_session_level(tmp_path: pathlib.Path) -> None:
     """Session-level directory structure is handled correctly."""
-    version_dir = _make_version_dir(
-        tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", session="20230101"
-    )
+    version_dir = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", session="20230101")
     with patch("subprocess.run") as mock_run:
         result = delete_dandiset_version(dandiset_directory=tmp_path, version="v1.0")
 
@@ -183,15 +181,47 @@ def test_cli_delete_version_deletes_on_confirmation(tmp_path: pathlib.Path) -> N
 
 @pytest.mark.ai_generated
 def test_cli_delete_version_reports_none_found(tmp_path: pathlib.Path) -> None:
-    """dandicompute delete version reports when no directories match."""
+    """dandicompute delete version reports when no directories match (no prompt shown)."""
     runner = CliRunner()
     result = runner.invoke(
         _dandicompute_group,
         ["delete", "version", "--directory", str(tmp_path), "--version", "v99.0"],
-        input="y\n",
     )
     assert result.exit_code == 0, result.output
     assert "No 'version-v99.0' directories found" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_delete_version_prompt_shows_count(tmp_path: pathlib.Path) -> None:
+    """The confirmation prompt includes the count of directories to be deleted."""
+    _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0")
+    _make_version_dir(tmp_path, "000001", "mouse02", "aind+ephys", "v1.0")
+    runner = CliRunner()
+    with patch("subprocess.run"):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["delete", "version", "--directory", str(tmp_path), "--version", "v1.0"],
+            input="n\n",
+        )
+    assert "2" in result.output
+    assert "version-v1.0" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_delete_version_hash_suffixed_version(tmp_path: pathlib.Path) -> None:
+    """Version strings with appended commit hashes are handled correctly."""
+    version_str = "v1.0.0+fixes+20abeb6"
+    version_dir = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", version_str)
+    runner = CliRunner()
+    with patch("subprocess.run"):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["delete", "version", "--directory", str(tmp_path), "--version", version_str],
+            input="y\n",
+        )
+    assert result.exit_code == 0, result.output
+    assert "Deleted 1 version directory" in result.output
+    assert not version_dir.exists()
 
 
 @pytest.mark.ai_generated
@@ -208,3 +238,32 @@ def test_cli_delete_version_plural_message(tmp_path: pathlib.Path) -> None:
         )
     assert result.exit_code == 0, result.output
     assert "Deleted 2 version directories" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Tests for scan_version_directories
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.ai_generated
+def test_scan_version_directories_returns_empty_when_no_derivatives(tmp_path: pathlib.Path) -> None:
+    """Returns an empty list when there is no derivatives/ directory."""
+    assert scan_version_directories(dandiset_directory=tmp_path, version="v1.0") == []
+
+
+@pytest.mark.ai_generated
+def test_scan_version_directories_finds_matching_dirs(tmp_path: pathlib.Path) -> None:
+    """Returns all matching version dirs, ignoring other versions."""
+    target = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0")
+    _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v2.0")
+    result = scan_version_directories(dandiset_directory=tmp_path, version="v1.0")
+    assert result == [target]
+
+
+@pytest.mark.ai_generated
+def test_scan_version_directories_hash_suffixed_version(tmp_path: pathlib.Path) -> None:
+    """Version strings with appended commit hashes are resolved correctly."""
+    version_str = "v1.1.2+abcd123+def4567"
+    target = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", version_str)
+    result = scan_version_directories(dandiset_directory=tmp_path, version=version_str)
+    assert result == [target]
