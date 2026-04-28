@@ -15,10 +15,10 @@ from unittest import mock
 import pytest
 
 from dandi_compute_code.queue._process_queue import (
+    _build_processing_order,
     _count_dandiset_failures,
     _determine_running,
     _fetch_counts,
-    _fill_waiting,
     _submit_next,
     prepare_queue,
     process_queue,
@@ -52,14 +52,12 @@ def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
     Structure
     ---------
     queue/
-        waiting.jsonl
         submitted.jsonl
         queue_config.json   (single consolidated config for all pipelines/versions/params)
     """
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
 
-    (queue_dir / "waiting.jsonl").write_text("")
     (queue_dir / "submitted.jsonl").write_text("")
     (queue_dir / "queue_config.json").write_text(json.dumps(_EXAMPLE_QUEUE_CONFIG))
 
@@ -76,6 +74,73 @@ def _mock_urlopen_response(payload: object) -> mock.MagicMock:
     mock_response.__enter__.return_value = mock_response
     mock_response.__exit__.return_value = False
     return mock_response
+
+
+def _make_state_entry(
+    *,
+    dandiset_id: str = "000001",
+    subject: str = "mouse01",
+    session: str | None = None,
+    pipeline: str = "test",
+    version: str = "v1.0",
+    params: str = "default",
+    config: str = "abc123",
+    attempt: int = 1,
+    has_code: bool = True,
+    has_output: bool = False,
+    has_logs: bool = False,
+    created_at: str = "2024-01-01T00:00:00+00:00",
+) -> dict:
+    """Build a minimal state.jsonl entry."""
+    return {
+        "dandiset_id": dandiset_id,
+        "subject": subject,
+        "session": session,
+        "pipeline": pipeline,
+        "version": version,
+        "params": params,
+        "config": config,
+        "attempt": attempt,
+        "has_code": has_code,
+        "has_output": has_output,
+        "has_logs": has_logs,
+        "created_at": created_at,
+    }
+
+
+def _make_attempt_dir_with_script(
+    base: pathlib.Path,
+    dandiset_id: str,
+    subject: str,
+    pipeline: str,
+    version: str,
+    params: str,
+    config: str,
+    attempt: int,
+    *,
+    session: str | None = None,
+    with_script: bool = True,
+) -> pathlib.Path:
+    """
+    Create a fake attempt directory with an optional submit.sh under *base*.
+
+    Returns the attempt directory path.
+    """
+    attempt_dir = base / "derivatives" / f"dandiset-{dandiset_id}" / f"sub-{subject}"
+    if session:
+        attempt_dir = attempt_dir / f"ses-{session}"
+    attempt_dir = (
+        attempt_dir
+        / f"pipeline-{pipeline}"
+        / f"version-{version}"
+        / f"params-{params}_config-{config}_attempt-{attempt}"
+    )
+    attempt_dir.mkdir(parents=True)
+    code_dir = attempt_dir / "code"
+    code_dir.mkdir()
+    if with_script:
+        (code_dir / "submit.sh").write_text("#!/bin/bash\necho hello\n")
+    return attempt_dir
 
 
 # ---------------------------------------------------------------------------
@@ -149,91 +214,143 @@ def test_fetch_counts_ignores_blank_lines(tmp_path: pathlib.Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests for _fill_waiting
+# Tests for _build_processing_order
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.ai_generated
-def test_fill_waiting_adds_entries(tmp_path: pathlib.Path) -> None:
-    """_fill_waiting appends qualifying content IDs to waiting.jsonl."""
-    queue_dir = _make_queue_dir(tmp_path)
-    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}, "asset-ccc": {"311001": "pathin/another_dandiset"}}
-
-    qualifying_ids = ["asset-bbb", "asset-ccc"]
-    with mock.patch("urllib.request.urlopen") as mock_urlopen:
-        mock_urlopen.side_effect = [
-            _mock_urlopen_response(qualifying_ids),
-            _mock_urlopen_response(mock_dandiset_map),
-        ]
-
-        _fill_waiting(
-            cwd=queue_dir,
-            pipeline="test",
-            version="v1.0",
-            params="default",
-            dandiset_directory=tmp_path,
-        )
-
-    lines = [line for line in (queue_dir / "waiting.jsonl").read_text().splitlines() if line.strip()]
-    assert len(lines) == 2
-    written_ids = {json.loads(line)["content_id"] for line in lines}
-    assert written_ids == {"asset-bbb", "asset-ccc"}
+def test_build_processing_order_empty_state() -> None:
+    """_build_processing_order returns an empty list when state_entries is empty."""
+    result = _build_processing_order(state_entries=[], queue_config=_EXAMPLE_QUEUE_CONFIG)
+    assert result == []
 
 
 @pytest.mark.ai_generated
-def test_fill_waiting_skips_when_already_populated(tmp_path: pathlib.Path) -> None:
-    """_fill_waiting does not add entries when the waiting queue already has entries for this combination."""
-    queue_dir = _make_queue_dir(tmp_path)
-
-    existing_entry = {"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-bbb"}
-    _write_jsonl(queue_dir / "waiting.jsonl", [existing_entry])
-
-    with mock.patch("urllib.request.urlopen") as mock_urlopen:
-        _fill_waiting(
-            cwd=queue_dir,
-            pipeline="test",
-            version="v1.0",
-            params="default",
-            dandiset_directory=tmp_path,
-        )
-        mock_urlopen.assert_not_called()
-
-    lines = [line for line in (queue_dir / "waiting.jsonl").read_text().splitlines() if line.strip()]
-    assert len(lines) == 1
+def test_build_processing_order_filters_out_entries_with_output() -> None:
+    """_build_processing_order excludes entries that already have output."""
+    entries = [
+        _make_state_entry(has_code=True, has_output=True, has_logs=False),
+        _make_state_entry(has_code=True, has_output=False, has_logs=False, dandiset_id="000002"),
+    ]
+    result = _build_processing_order(state_entries=entries, queue_config=_EXAMPLE_QUEUE_CONFIG)
+    assert len(result) == 1
+    assert result[0]["dandiset_id"] == "000002"
 
 
 @pytest.mark.ai_generated
-def test_fill_waiting_respects_max_attempts(tmp_path: pathlib.Path) -> None:
-    """_fill_waiting excludes content IDs that have already reached max_attempts_per_asset."""
-    queue_dir = _make_queue_dir(tmp_path)
+def test_build_processing_order_filters_out_entries_with_logs() -> None:
+    """_build_processing_order excludes entries that already have logs (running or failed)."""
+    entries = [
+        _make_state_entry(has_code=True, has_output=False, has_logs=True),
+        _make_state_entry(has_code=True, has_output=False, has_logs=False, dandiset_id="000002"),
+    ]
+    result = _build_processing_order(state_entries=entries, queue_config=_EXAMPLE_QUEUE_CONFIG)
+    assert len(result) == 1
+    assert result[0]["dandiset_id"] == "000002"
 
-    # asset-aaa has asset_overrides max of 1; mark it as already submitted once
-    _write_jsonl(
-        queue_dir / "submitted.jsonl",
-        [{"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-aaa"}],
-    )
 
-    qualifying_ids = ["asset-aaa", "asset-bbb"]
-    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
-    with mock.patch("urllib.request.urlopen") as mock_urlopen:
-        mock_urlopen.side_effect = [
-            _mock_urlopen_response(qualifying_ids),
-            _mock_urlopen_response(mock_dandiset_map),
-        ]
+@pytest.mark.ai_generated
+def test_build_processing_order_filters_out_entries_without_code() -> None:
+    """_build_processing_order excludes entries that have no code directory yet."""
+    entries = [
+        _make_state_entry(has_code=False, has_output=False, has_logs=False),
+        _make_state_entry(has_code=True, has_output=False, has_logs=False, dandiset_id="000002"),
+    ]
+    result = _build_processing_order(state_entries=entries, queue_config=_EXAMPLE_QUEUE_CONFIG)
+    assert len(result) == 1
+    assert result[0]["dandiset_id"] == "000002"
 
-        _fill_waiting(
-            cwd=queue_dir,
-            pipeline="test",
-            version="v1.0",
-            params="default",
-            dandiset_directory=tmp_path,
-        )
 
-    lines = [line for line in (queue_dir / "waiting.jsonl").read_text().splitlines() if line.strip()]
-    written_ids = {json.loads(line)["content_id"] for line in lines}
-    # asset-aaa has hit its override limit of 1 and must not appear
-    assert "asset-aaa" not in written_ids
-    assert "asset-bbb" in written_ids
+@pytest.mark.ai_generated
+def test_build_processing_order_respects_version_priority() -> None:
+    """_build_processing_order returns entries for higher-priority versions first."""
+    config = {
+        "pipelines": {
+            "test": {
+                "version_priority": ["v2.0", "v1.0"],
+                "params_priority": ["default"],
+            }
+        }
+    }
+    entries = [
+        _make_state_entry(version="v1.0", dandiset_id="000001"),
+        _make_state_entry(version="v2.0", dandiset_id="000001"),
+    ]
+    result = _build_processing_order(state_entries=entries, queue_config=config)
+    assert len(result) == 2
+    assert result[0]["version"] == "v2.0"
+    assert result[1]["version"] == "v1.0"
+
+
+@pytest.mark.ai_generated
+def test_build_processing_order_respects_params_priority() -> None:
+    """_build_processing_order iterates params in params_priority order for each dandiset."""
+    config = {
+        "pipelines": {
+            "test": {
+                "version_priority": ["v1.0"],
+                "params_priority": ["fast", "slow"],
+            }
+        }
+    }
+    entries = [
+        _make_state_entry(params="slow", dandiset_id="000001"),
+        _make_state_entry(params="fast", dandiset_id="000001"),
+    ]
+    result = _build_processing_order(state_entries=entries, queue_config=config)
+    assert len(result) == 2
+    assert result[0]["params"] == "fast"
+    assert result[1]["params"] == "slow"
+
+
+@pytest.mark.ai_generated
+def test_build_processing_order_sorts_dandisets_by_created_at() -> None:
+    """_build_processing_order processes dandiset instances in earliest-created-first order."""
+    entries = [
+        _make_state_entry(dandiset_id="000002", created_at="2024-01-02T00:00:00+00:00"),
+        _make_state_entry(dandiset_id="000001", created_at="2024-01-01T00:00:00+00:00"),
+    ]
+    result = _build_processing_order(state_entries=entries, queue_config=_EXAMPLE_QUEUE_CONFIG)
+    assert len(result) == 2
+    assert result[0]["dandiset_id"] == "000001"
+    assert result[1]["dandiset_id"] == "000002"
+
+
+@pytest.mark.ai_generated
+def test_build_processing_order_zipper_all_params_per_dandiset_before_next() -> None:
+    """All params for a dandiset instance appear consecutively before the next dandiset."""
+    config = {
+        "pipelines": {
+            "test": {
+                "version_priority": ["v1.0"],
+                "params_priority": ["p1", "p2"],
+            }
+        }
+    }
+    # Two dandisets, two params each
+    entries = [
+        _make_state_entry(dandiset_id="000001", params="p1", created_at="2024-01-01T00:00:00+00:00"),
+        _make_state_entry(dandiset_id="000001", params="p2", created_at="2024-01-01T00:00:00+00:00"),
+        _make_state_entry(dandiset_id="000002", params="p1", created_at="2024-01-02T00:00:00+00:00"),
+        _make_state_entry(dandiset_id="000002", params="p2", created_at="2024-01-02T00:00:00+00:00"),
+    ]
+    result = _build_processing_order(state_entries=entries, queue_config=config)
+    assert len(result) == 4
+    ids = [(e["dandiset_id"], e["params"]) for e in result]
+    # Expect: 000001/p1, 000001/p2, 000002/p1, 000002/p2
+    assert ids == [("000001", "p1"), ("000001", "p2"), ("000002", "p1"), ("000002", "p2")]
+
+
+@pytest.mark.ai_generated
+def test_build_processing_order_ignores_unknown_pipeline() -> None:
+    """_build_processing_order ignores state entries whose pipeline is not in queue_config."""
+    entries = [
+        _make_state_entry(pipeline="unknown", dandiset_id="000001"),
+        _make_state_entry(pipeline="test", dandiset_id="000002"),
+    ]
+    result = _build_processing_order(state_entries=entries, queue_config=_EXAMPLE_QUEUE_CONFIG)
+    assert len(result) == 1
+    assert result[0]["dandiset_id"] == "000002"
 
 
 # ---------------------------------------------------------------------------
@@ -263,8 +380,8 @@ def test_determine_running_false_when_no_aind_jobs() -> None:
 
 
 @pytest.mark.ai_generated
-def test_submit_next_returns_false_when_empty(tmp_path: pathlib.Path) -> None:
-    """_submit_next returns False and leaves files intact when waiting.jsonl is empty."""
+def test_submit_next_returns_false_when_no_state_file(tmp_path: pathlib.Path) -> None:
+    """_submit_next returns False when state.jsonl is absent from the queue directory."""
     queue_dir = _make_queue_dir(tmp_path)
 
     result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
@@ -273,90 +390,110 @@ def test_submit_next_returns_false_when_empty(tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.ai_generated
-def test_submit_next_pops_entry_and_records_submission(tmp_path: pathlib.Path) -> None:
-    """_submit_next removes the popped entry from waiting and appends it to submitted."""
+def test_submit_next_returns_false_when_no_pending_entries(tmp_path: pathlib.Path) -> None:
+    """_submit_next returns False when state.jsonl contains no pending entries."""
     queue_dir = _make_queue_dir(tmp_path)
 
+    # All entries have output → nothing to submit
     _write_jsonl(
-        queue_dir / "waiting.jsonl",
-        [
-            {"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-bbb"},
-            {"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-ccc"},
-        ],
+        queue_dir / "state.jsonl",
+        [_make_state_entry(has_code=True, has_output=True, has_logs=False)],
     )
 
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
-        result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
+    result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
 
-    assert result is True
-
-    # First entry should have been consumed
-    remaining = [json.loads(line) for line in (queue_dir / "waiting.jsonl").read_text().splitlines() if line.strip()]
-    assert len(remaining) == 1
-    assert remaining[0]["content_id"] == "asset-ccc"
-
-    # First entry should have been written to submitted.jsonl
-    submitted = [json.loads(line) for line in (queue_dir / "submitted.jsonl").read_text().splitlines() if line.strip()]
-    assert len(submitted) == 1
-    assert submitted[0]["content_id"] == "asset-bbb"
-
-    submitted_command = mock_run.call_args.args[0]
-    assert submitted_command[submitted_command.index("--version") + 1] == "v1.0"
+    assert result is False
 
 
 @pytest.mark.ai_generated
-def test_submit_next_skips_exhausted_entries(tmp_path: pathlib.Path) -> None:
-    """_submit_next skips entries that have already reached their max attempt count."""
+def test_submit_next_submits_first_entry_in_order(tmp_path: pathlib.Path) -> None:
+    """_submit_next submits the first pending entry according to the processing order."""
     queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
 
-    # asset-aaa has override limit of 1; pre-populate submitted with one entry for it
-    _write_jsonl(
-        queue_dir / "submitted.jsonl",
-        [{"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-aaa"}],
+    entry = _make_state_entry(
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
     )
-    # Put asset-aaa first in the waiting queue; asset-bbb is the valid next entry
-    _write_jsonl(
-        queue_dir / "waiting.jsonl",
-        [
-            {"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-aaa"},
-            {"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-bbb"},
-        ],
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
+
+    _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
     )
 
     with mock.patch("subprocess.run") as mock_run:
         mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
-        result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
-
-    assert result is True
-
-    submitted = [json.loads(line) for line in (queue_dir / "submitted.jsonl").read_text().splitlines() if line.strip()]
-    submitted_ids = [e["content_id"] for e in submitted]
-    assert "asset-bbb" in submitted_ids
-    # asset-aaa must not appear as a new submission
-    assert submitted_ids.count("asset-aaa") == 1  # only the original pre-populated one
-
-
-@pytest.mark.ai_generated
-def test_submit_next_strips_commit_suffix_from_version(tmp_path: pathlib.Path) -> None:
-    """_submit_next removes only a trailing commit hash suffix from the queued version."""
-    queue_dir = _make_queue_dir(tmp_path)
-    queue_config = json.loads((queue_dir / "queue_config.json").read_text())
-    queue_config["pipelines"]["test"]["version_priority"] = ["v1.1.0+abcdef0"]
-    (queue_dir / "queue_config.json").write_text(json.dumps(queue_config))
-
-    _write_jsonl(
-        queue_dir / "waiting.jsonl",
-        [{"pipeline": "test", "version": "v1.1.0+abcdef0", "params": "default", "content_id": "asset-bbb"}],
-    )
-
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
-        result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
+        result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
     submitted_command = mock_run.call_args.args[0]
-    assert submitted_command[submitted_command.index("--version") + 1] == "v1.1.0"
+    assert "submit" in submitted_command
+    assert "--script" in submitted_command
+
+
+@pytest.mark.ai_generated
+def test_submit_next_returns_false_when_script_missing(tmp_path: pathlib.Path) -> None:
+    """_submit_next returns False when the submit.sh for the first entry does not exist."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+
+    entry = _make_state_entry(dandiset_id="000001", pipeline="test", version="v1.0", params="default")
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
+    # Deliberately do NOT create the attempt directory / submit.sh
+
+    with mock.patch("subprocess.run"):
+        result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
+
+    assert result is False
+
+
+@pytest.mark.ai_generated
+def test_submit_next_uses_session_in_path_when_present(tmp_path: pathlib.Path) -> None:
+    """_submit_next constructs the correct path when the entry has a session field."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+
+    entry = _make_state_entry(
+        dandiset_id="000001",
+        subject="mouse01",
+        session="ses01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
+
+    _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000001",
+        subject="mouse01",
+        session="ses01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+
+    with mock.patch("subprocess.run") as mock_run:
+        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+        result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
+
+    assert result is True
 
 
 # ---------------------------------------------------------------------------
@@ -375,40 +512,25 @@ def test_process_queue_raises_for_wrong_dir_name(tmp_path: pathlib.Path) -> None
 
 
 @pytest.mark.ai_generated
-def test_process_queue_creates_missing_jsonl_files(tmp_path: pathlib.Path) -> None:
-    """process_queue creates waiting.jsonl and submitted.jsonl if they don't exist."""
+def test_process_queue_raises_when_state_file_missing(tmp_path: pathlib.Path) -> None:
+    """process_queue raises FileNotFoundError when state.jsonl is absent."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
 
-    with (
-        mock.patch("dandi_compute_code.queue._process_queue._fill_waiting"),
-        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
-    ):
+    with pytest.raises(FileNotFoundError, match="state.jsonl"):
         process_queue(cwd=queue_dir, dandiset_directory=tmp_path)
-
-    assert (queue_dir / "waiting.jsonl").exists()
-    assert (queue_dir / "submitted.jsonl").exists()
 
 
 @pytest.mark.ai_generated
 def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> None:
     """process_queue calls _submit_next when no AIND jobs are running."""
     queue_dir = _make_queue_dir(tmp_path)
+    (queue_dir / "state.jsonl").write_text("")
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
-    qualifying_ids = ["asset-bbb"]
-    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
-
     with (
-        mock.patch(
-            "urllib.request.urlopen",
-            side_effect=[
-                _mock_urlopen_response(qualifying_ids),
-                _mock_urlopen_response(mock_dandiset_map),
-            ],
-        ),
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
@@ -421,26 +543,34 @@ def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> N
 def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path) -> None:
     """process_queue does NOT call _submit_next when AIND jobs are currently running."""
     queue_dir = _make_queue_dir(tmp_path)
+    (queue_dir / "state.jsonl").write_text("")
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
-    qualifying_ids = ["asset-bbb"]
-    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
-
     with (
-        mock.patch(
-            "urllib.request.urlopen",
-            side_effect=[
-                _mock_urlopen_response(qualifying_ids),
-                _mock_urlopen_response(mock_dandiset_map),
-            ],
-        ),
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
         process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
     mock_submit.assert_not_called()
+
+
+@pytest.mark.ai_generated
+def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathlib.Path) -> None:
+    """process_queue forwards dandiset_directory to _submit_next."""
+    queue_dir = _make_queue_dir(tmp_path)
+    (queue_dir / "state.jsonl").write_text("")
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    with (
+        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
+        mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
+    ):
+        process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+
+    mock_submit.assert_called_once_with(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -458,6 +588,7 @@ def _make_attempt_dir(
     *,
     with_code: bool = True,
     with_output: bool = False,
+    with_logs: bool = False,
 ) -> pathlib.Path:
     """
     Create a mock attempt directory inside a fake 001697 clone rooted at *base*.
@@ -467,7 +598,10 @@ def _make_attempt_dir(
     ``derivatives/dandiset-{dandiset_id}/sub-test/pipeline-aind+ephys/``
     ``version-{version}/params-{params_id}_config-{config_id}_attempt-{attempt_number}/``
 
-    is created.  *with_code* and *with_output* control whether the ``code/`` and ``output/`` subdirectories are created.
+    is created.  *with_code*, *with_output*, and *with_logs* control whether the
+    ``code/``, ``output/``, and ``logs/`` subdirectories are created.  When
+    *with_logs* is True a sentinel file is written inside ``logs/`` so it is
+    treated as non-empty by :func:`_count_dandiset_failures`.
     """
     attempt_dir = (
         base
@@ -483,6 +617,10 @@ def _make_attempt_dir(
         (attempt_dir / "code").mkdir()
     if with_output:
         (attempt_dir / "output").mkdir()
+    if with_logs:
+        logs_dir = attempt_dir / "logs"
+        logs_dir.mkdir()
+        (logs_dir / "run.log").write_text("job output\n")
     return attempt_dir
 
 
@@ -498,11 +636,13 @@ def test_count_dandiset_failures_returns_zero_when_no_derivatives_dir(tmp_path: 
 
 @pytest.mark.ai_generated
 def test_count_dandiset_failures_counts_failed_attempts(tmp_path: pathlib.Path) -> None:
-    """_count_dandiset_failures counts directories with code/ but no output/ as failures."""
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 1, with_code=True, with_output=False)
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 2, with_code=True, with_output=False)
+    """_count_dandiset_failures counts directories with code/ + non-empty logs/ but no output/ as failures."""
+    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 1, with_logs=True)
+    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 2, with_logs=True)
     # Successful run – must NOT be counted
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 3, with_code=True, with_output=True)
+    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 3, with_output=True)
+    # Pending entry (no logs) – must NOT be counted
+    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 4)
 
     result = _count_dandiset_failures(
         dandiset_directory=tmp_path,
@@ -514,9 +654,9 @@ def test_count_dandiset_failures_counts_failed_attempts(tmp_path: pathlib.Path) 
 @pytest.mark.ai_generated
 def test_count_dandiset_failures_ignores_different_version(tmp_path: pathlib.Path) -> None:
     """_count_dandiset_failures ignores attempt directories under a different version."""
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 1, with_code=True, with_output=False)
+    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 1, with_logs=True)
     # Different version – should NOT be counted
-    _make_attempt_dir(tmp_path, "000001", "v2.0", "abc1234", "def5678", 1, with_code=True, with_output=False)
+    _make_attempt_dir(tmp_path, "000001", "v2.0", "abc1234", "def5678", 1, with_logs=True)
 
     result = _count_dandiset_failures(
         dandiset_directory=tmp_path,
@@ -528,11 +668,11 @@ def test_count_dandiset_failures_ignores_different_version(tmp_path: pathlib.Pat
 @pytest.mark.ai_generated
 def test_count_dandiset_failures_counts_all_params_config_combos(tmp_path: pathlib.Path) -> None:
     """_count_dandiset_failures counts failures across all params/config combinations for the given version."""
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 1, with_code=True, with_output=False)
+    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 1, with_logs=True)
     # Different params_id – also counted (no filtering by params/config)
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "zzz9999", "def5678", 1, with_code=True, with_output=False)
+    _make_attempt_dir(tmp_path, "000001", "v1.0", "zzz9999", "def5678", 1, with_logs=True)
     # Different config_id – also counted
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "yyy8888", 1, with_code=True, with_output=False)
+    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "yyy8888", 1, with_logs=True)
 
     result = _count_dandiset_failures(
         dandiset_directory=tmp_path,
@@ -544,9 +684,9 @@ def test_count_dandiset_failures_counts_all_params_config_combos(tmp_path: pathl
 @pytest.mark.ai_generated
 def test_count_dandiset_failures_counts_across_all_dandisets(tmp_path: pathlib.Path) -> None:
     """_count_dandiset_failures counts failures across all source dandisets for the given version."""
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 1, with_code=True, with_output=False)
+    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 1, with_logs=True)
     # Different dandiset_id – also counted (no per-dandiset filtering)
-    _make_attempt_dir(tmp_path, "000002", "v1.0", "abc1234", "def5678", 1, with_code=True, with_output=False)
+    _make_attempt_dir(tmp_path, "000002", "v1.0", "abc1234", "def5678", 1, with_logs=True)
 
     result = _count_dandiset_failures(
         dandiset_directory=tmp_path,
@@ -568,18 +708,18 @@ _FAKE_CONFIG_ID = "def5678"
 def test_submit_next_skips_all_entries_when_total_failures_exceed_max(tmp_path: pathlib.Path) -> None:
     """_submit_next skips all entries when the total failure count reaches max_fail_per_dandiset."""
     queue_dir = _make_queue_dir(tmp_path)
-
-    # Create a fake 001697 clone with 2 failures for dandiset 000001 (== max_fail_per_dandiset)
     dandiset_dir = tmp_path / "001697"
-    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 1)
-    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 2)
 
-    # Queue: both entries for v1.0 – total failures == max_fail_per_dandiset, so all are skipped
+    # Create 2 failure attempt dirs for the dandiset (== max_fail_per_dandiset=2)
+    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 1, with_logs=True)
+    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 2, with_logs=True)
+
+    # state.jsonl: two pending entries – all should be skipped due to failure cap
     _write_jsonl(
-        queue_dir / "waiting.jsonl",
+        queue_dir / "state.jsonl",
         [
-            {"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-bbb"},
-            {"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-ccc"},
+            _make_state_entry(dandiset_id="000001", version="v1.0"),
+            _make_state_entry(dandiset_id="000002", version="v1.0"),
         ],
     )
 
@@ -587,24 +727,39 @@ def test_submit_next_skips_all_entries_when_total_failures_exceed_max(tmp_path: 
         mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
         result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
-    # All entries skipped → queue returns False (nothing submitted)
     assert result is False
-    submitted = [json.loads(line) for line in (queue_dir / "submitted.jsonl").read_text().splitlines() if line.strip()]
-    assert submitted == []
 
 
 @pytest.mark.ai_generated
 def test_submit_next_allows_entry_when_dandiset_failures_below_max(tmp_path: pathlib.Path) -> None:
     """_submit_next does NOT skip an entry when total failure count is below the limit."""
     queue_dir = _make_queue_dir(tmp_path)
-
-    # Only 1 total failure (< max_fail_per_dandiset=2) → entry should be submitted
     dandiset_dir = tmp_path / "001697"
-    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 1)
 
-    _write_jsonl(
-        queue_dir / "waiting.jsonl",
-        [{"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-bbb"}],
+    # Only 1 failure (< max_fail_per_dandiset=2) → entry should be submitted
+    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 1, with_logs=True)
+
+    entry = _make_state_entry(
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
+
+    # Create the submit script so _submit_next can proceed
+    _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
     )
 
     with mock.patch("subprocess.run") as mock_run:
@@ -612,35 +767,6 @@ def test_submit_next_allows_entry_when_dandiset_failures_below_max(tmp_path: pat
         result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
-
-    submitted = [json.loads(line) for line in (queue_dir / "submitted.jsonl").read_text().splitlines() if line.strip()]
-    assert submitted[0]["content_id"] == "asset-bbb"
-
-
-@pytest.mark.ai_generated
-def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathlib.Path) -> None:
-    """process_queue forwards dandiset_directory to _submit_next."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "001697"
-    dandiset_dir.mkdir()
-
-    qualifying_ids = ["asset-bbb"]
-    mock_dandiset_map = {"asset-bbb": {"311000": "pathin/dandiset"}}
-
-    with (
-        mock.patch(
-            "urllib.request.urlopen",
-            side_effect=[
-                _mock_urlopen_response(qualifying_ids),
-                _mock_urlopen_response(mock_dandiset_map),
-            ],
-        ),
-        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
-        mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
-    ):
-        process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
-
-    mock_submit.assert_called_once_with(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -712,8 +838,8 @@ def test_prepare_queue_skips_when_failures_reach_max(tmp_path: pathlib.Path) -> 
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "001697"
     # Create 2 failed attempt dirs (== max_fail_per_dandiset from _EXAMPLE_QUEUE_CONFIG).
-    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 1)
-    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 2)
+    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 1, with_logs=True)
+    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 2, with_logs=True)
 
     qualifying_ids = ["asset-bbb", "asset-ccc"]
 

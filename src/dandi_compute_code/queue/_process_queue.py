@@ -9,6 +9,81 @@ import urllib.request
 from dandi_compute_code.aind_ephys_pipeline import prepare_aind_ephys_job
 
 
+def _build_processing_order(
+    *,
+    state_entries: list[dict],
+    queue_config: dict,
+) -> list[dict]:
+    """
+    Build an ordered list of pending entries using zipper-style interleaving.
+
+    Filters *state_entries* to those that are prepared but not yet run
+    (``has_code=True``, ``has_logs=False``, ``has_output=False``).  For each
+    pipeline and version declared in ``queue_config``, dandiset instances
+    (identified by ``dandiset_id``, ``subject``, ``session``, and ``config``)
+    are sorted by their earliest ``created_at`` timestamp.  Within each
+    instance the entries are ordered by ``params_priority``, ensuring that all
+    parameterizations of a dandiset for a given version are queued before
+    moving on to the next dandiset or version.
+
+    Parameters
+    ----------
+    state_entries : list[dict]
+        Records produced by :func:`~dandi_compute_code.dandiset.scan_dandiset_directory`
+        (or loaded from a ``state.jsonl`` file).
+    queue_config : dict
+        Parsed contents of ``queue_config.json``.  Expected shape::
+
+            {
+                "pipelines": {
+                    "<pipeline_name>": {
+                        "version_priority": [...],
+                        "params_priority": [...]
+                    }
+                }
+            }
+
+    Returns
+    -------
+    list[dict]
+        Ordered list of pending entries ready to be submitted.
+    """
+    pending = [e for e in state_entries if e.get("has_code") and not e.get("has_output") and not e.get("has_logs")]
+
+    result: list[dict] = []
+    for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
+        version_priority = pipeline_data.get("version_priority", [])
+        params_priority = pipeline_data.get("params_priority", [])
+
+        for version in version_priority:
+            version_entries = [e for e in pending if e.get("pipeline") == pipeline_name and e.get("version") == version]
+
+            # Group by dandiset instance: (dandiset_id, subject, session, config)
+            instance_groups: dict[tuple, list[dict]] = {}
+            for entry in version_entries:
+                key = (
+                    entry.get("dandiset_id", ""),
+                    entry.get("subject", ""),
+                    entry.get("session") or "",
+                    entry.get("config", ""),
+                )
+                instance_groups.setdefault(key, []).append(entry)
+
+            # Sort instances by their earliest created_at timestamp
+            sorted_instances = sorted(
+                instance_groups.items(),
+                key=lambda kv: min(e.get("created_at", "") for e in kv[1]),
+            )
+
+            # Zipper: for each instance add entries in params_priority order
+            for _key, entries in sorted_instances:
+                for params in params_priority:
+                    matching = [e for e in entries if e.get("params") == params]
+                    result.extend(matching)
+
+    return result
+
+
 def _count_dandiset_failures(
     *,
     dandiset_directory: pathlib.Path,
@@ -19,8 +94,10 @@ def _count_dandiset_failures(
 
     Scans every ``derivatives/dandiset-*`` sub-directory inside *dandiset_directory*
     (i.e. the local clone of the 001697 dandiset repository) and counts attempt
-    directories that contain a ``code/`` subdirectory but **no** ``output/``
-    subdirectory — the signature of a failed run.
+    directories that contain a ``code/`` subdirectory, a non-empty ``logs/``
+    subdirectory, but **no** ``output/`` subdirectory — the signature of a job that
+    ran but did not produce output.  Pending entries (code present but logs empty or
+    absent) are not counted.
 
     A directory is considered an attempt if its name ends with ``_attempt-<number>``
     and its immediate parent is named ``version-{version}``.
@@ -57,7 +134,9 @@ def _count_dandiset_failures(
                 continue
             if attempt_dir.parent.name != version_dir_name:
                 continue
-            if (attempt_dir / "code").is_dir() and not (attempt_dir / "output").is_dir():
+            logs_dir = attempt_dir / "logs"
+            has_logs = logs_dir.is_dir() and any(logs_dir.iterdir())
+            if (attempt_dir / "code").is_dir() and has_logs and not (attempt_dir / "output").is_dir():
                 failure_count += 1
 
     return failure_count
@@ -103,124 +182,6 @@ def _fetch_counts(
     return collections.Counter(content_ids)
 
 
-def _fill_waiting(
-    *,
-    cwd: pathlib.Path,
-    pipeline: str,
-    version: str,
-    params: str,
-    dandiset_directory: pathlib.Path,
-) -> None:
-    """
-    Fill the waiting queue with new entries for a given pipeline/version/params combination.
-
-    If there are already waiting entries for this combination, this function will return early
-    without adding new entries.  Otherwise, it fetches qualifying AIND content IDs from the
-    remote cache and adds those that have not yet exceeded their max attempt counts.
-
-    If ``max_fail_per_dandiset`` is set for the pipeline and the total number of failed
-    attempt directories across all source dandisets for this version has already reached
-    that limit, no new entries will be added.
-
-    Parameters
-    ----------
-    cwd : pathlib.Path
-        Path to the queue root directory (must be named 'queue').
-    pipeline : str
-        Pipeline name as it appears in ``queue_config.json`` under ``pipelines``.
-    version : str
-        Version string as it appears in ``version_priority``.
-    params : str
-        Params string as it appears in ``params_priority``.
-    dandiset_directory : pathlib.Path
-        Path to a local clone of the 001697 dandiset repository.  Used to count
-        failure directories for the given version.
-    """
-    waiting_file = cwd / "waiting.jsonl"
-
-    previous_waiting = [
-        entry
-        for line in waiting_file.read_text().splitlines()
-        if line.strip()
-        for entry in [json.loads(line.strip())]
-        if entry.get("pipeline") == pipeline and entry.get("version") == version and entry.get("params") == params
-    ]
-    if previous_waiting:
-        print(
-            f"Queue already has entries for {pipeline}/{version}/{params}!"
-            " Waiting until all entries have run before re-filling."
-        )
-        return
-
-    queue_config = json.loads((cwd / "queue_config.json").read_text())
-    pipeline_cfg = queue_config["pipelines"][pipeline]
-
-    # Skip filling if the total failure count across all dandisets has reached the limit.
-    max_fail = pipeline_cfg.get("max_fail_per_dandiset")
-    if max_fail is not None:
-        failure_count = _count_dandiset_failures(
-            dandiset_directory=dandiset_directory,
-            version=version,
-        )
-        if failure_count >= max_fail:
-            print(
-                f"Skipping fill for {pipeline}/{version}/{params}: "
-                f"failure count ({failure_count}) has reached max_fail_per_dandiset ({max_fail})."
-            )
-            return
-
-    submitted_file = cwd / "submitted.jsonl"
-    done_counter = _fetch_counts(
-        file_path=submitted_file,
-        pipeline=pipeline,
-        version=version,
-        params=params,
-    )
-
-    qualifying_aind_content_ids_url = (
-        "https://raw.githubusercontent.com/dandi-cache/qualifying-aind-content-ids/refs/heads/min/"
-        "derivatives/qualifying_aind_content_ids.min.json.gz"
-    )
-    with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
-        qualifying_aind_content_ids = json.loads(gzip.decompress(response.read()))
-
-    content_id_to_unique_dandiset_path_url = (
-        "https://raw.githubusercontent.com/dandi-cache/content-id-to-unique-dandiset-path/refs/heads/min/"
-        "derivatives/content_id_to_unique_dandiset_path.min.json.gz"
-    )
-    with urllib.request.urlopen(url=content_id_to_unique_dandiset_path_url) as response:
-        content_id_to_unique_dandiset_path = json.loads(gzip.decompress(response.read()))
-
-    global_max_attempts = pipeline_cfg["max_attempts_per_asset"]
-    asset_overrides = pipeline_cfg.get("asset_overrides") or {}
-
-    new_waiting = set()
-    for content_id in qualifying_aind_content_ids:
-        if (asset_override := asset_overrides.get(content_id, global_max_attempts)) is not None and done_counter.get(
-            content_id, 0
-        ) >= asset_override:
-            continue
-        new_waiting.add(content_id)
-
-    with waiting_file.open(mode="a") as file_stream:
-        for content_id in sorted(new_waiting):
-            dandiset_info = content_id_to_unique_dandiset_path.get(content_id, dict())
-            dandiset_id, dandiset_path = next(iter(dandiset_info.items()), (None, None))
-            file_stream.write(
-                json.dumps(
-                    {
-                        "pipeline": pipeline,
-                        "version": version,
-                        "params": params,
-                        "content_id": content_id,
-                        "dandiset_id": dandiset_id,
-                        "dandiset_path": dandiset_path,
-                    }
-                )
-                + "\n"
-            )
-
-
 def _determine_running() -> bool:
     """
     Check whether any AIND jobs are currently running via the SLURM scheduler.
@@ -247,72 +208,53 @@ def _determine_running() -> bool:
 
 def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool:
     """
-    Pop the next valid entry from ``waiting.jsonl`` and submit it.
+    Submit the next pending entry from ``state.jsonl``.
 
-    An entry is considered invalid and skipped if it has already reached its
-    maximum allowed attempt count (as defined in ``queue_config.json``), or if the
-    total number of failures in *dandiset_directory* for the entry's version has
-    reached ``max_fail_per_dandiset`` (when that field is set in the pipeline config).
+    Reads ``state.jsonl`` from the queue directory, builds the processing order
+    via :func:`_build_processing_order`, and submits the first entry that is not
+    blocked by the ``max_fail_per_dandiset`` limit.
 
     Parameters
     ----------
     cwd : pathlib.Path
         Path to the queue root directory (must be named 'queue').
     dandiset_directory : pathlib.Path
-        Path to a local clone of the 001697 dandiset repository.  Failure
-        directories are counted across all source dandisets and entries are
-        skipped when the total reaches ``max_fail_per_dandiset``.
+        Path to a local clone of the 001697 dandiset repository.  Used to
+        locate prepared submission scripts and to count failure directories for
+        ``max_fail_per_dandiset`` enforcement.
 
     Returns
     -------
     bool
-        True if a job was submitted, False if the waiting queue is empty.
+        True if a job was submitted, False if there are no pending entries or
+        if the submit script cannot be found.
     """
-    waiting_file = cwd / "waiting.jsonl"
-    submitted_file = cwd / "submitted.jsonl"
-
-    lines = waiting_file.read_text().splitlines()
-    if not lines:
-        print(f"No more entries in `{waiting_file}`")
-        waiting_file.write_text(data="")
+    state_file = cwd / "state.jsonl"
+    if not state_file.exists():
+        print(f"No 'state.jsonl' found in `{cwd}`")
         return False
 
+    state_entries = [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
+
     queue_config = json.loads((cwd / "queue_config.json").read_text())
+    ordered = _build_processing_order(state_entries=state_entries, queue_config=queue_config)
 
+    if not ordered:
+        print(f"No pending entries in `{state_file}`")
+        return False
+
+    # Find the first entry not blocked by max_fail_per_dandiset
     entry = None
-    while lines:
-        line = lines.pop(0)
-        stripped = line.strip()
-        if not stripped:
+    for candidate in ordered:
+        pipeline = candidate.get("pipeline", "")
+        version = candidate.get("version", "")
+        if not pipeline or not version:
             continue
 
-        entry_obj = json.loads(stripped)
-        pipeline = entry_obj.get("pipeline", "")
-        version = entry_obj.get("version", "")
-        params = entry_obj.get("params", "")
-        content_id = entry_obj.get("content_id", "")
-        dandiset_id = entry_obj.get("dandiset_id", "")
-        dandiset_path = entry_obj.get("dandiset_path", "")
-        if not all([pipeline, version, params, content_id]):
+        pipeline_cfg = queue_config.get("pipelines", {}).get(pipeline)
+        if pipeline_cfg is None:
             continue
 
-        pipeline_cfg = queue_config["pipelines"][pipeline]
-        global_max_attempts = pipeline_cfg["max_attempts_per_asset"]
-        asset_overrides = pipeline_cfg.get("asset_overrides") or {}
-
-        submitted_counter = _fetch_counts(
-            file_path=submitted_file,
-            pipeline=pipeline,
-            version=version,
-            params=params,
-        )
-
-        if (
-            asset_override := asset_overrides.get(content_id, global_max_attempts)
-        ) is not None and submitted_counter.get(content_id, 0) >= asset_override:
-            continue
-
-        # Skip if the total failure count across all dandisets has reached the limit.
         max_fail = pipeline_cfg.get("max_fail_per_dandiset")
         if max_fail is not None:
             failure_count = _count_dandiset_failures(
@@ -322,55 +264,43 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
             if failure_count >= max_fail:
                 continue
 
-        entry = (pipeline, version, params, content_id)
+        entry = candidate
         break
 
     if entry is None:
-        print(f"No more entries in `{waiting_file}`")
-        waiting_file.write_text(data="")
+        print(f"No submittable entries in `{state_file}`")
         return False
 
-    pipeline, version, params, content_id = entry
+    dandiset_id = entry["dandiset_id"]
+    subject = entry["subject"]
+    session = entry.get("session")
+    pipeline = entry["pipeline"]
+    version = entry["version"]
+    params = entry["params"]
+    config = entry["config"]
+    attempt = entry["attempt"]
 
-    version_parts = version.split("+")
-    if len(version_parts) > 1 and re.fullmatch(r"[0-9a-f]{7,40}", version_parts[-1]):
-        submission_version = "+".join(version_parts[:-1])
-    else:
-        submission_version = version
-    submission_params = params
+    attempt_dir = dandiset_directory / "derivatives" / f"dandiset-{dandiset_id}" / f"sub-{subject}"
+    if session:
+        attempt_dir = attempt_dir / f"ses-{session}"
+    attempt_dir = (
+        attempt_dir
+        / f"pipeline-{pipeline}"
+        / f"version-{version}"
+        / f"params-{params}_config-{config}_attempt-{attempt}"
+    )
 
-    print(f"Submitting content ID: {content_id}")
-    command = [
-        "dandicompute",
-        "aind",
-        "prepare",
-        "--id",
-        content_id,
-        "--version",
-        submission_version,
-        "--params",
-        submission_params,
-        "--submit",
-    ]
+    script_file_path = attempt_dir / "code" / "submit.sh"
+    if not script_file_path.exists():
+        print(f"Submit script not found: {script_file_path}")
+        return False
+
+    print(f"Submitting: {attempt_dir.name}")
+    command = ["dandicompute", "aind", "submit", "--script", str(script_file_path)]
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0 and result.stderr:
         message = f"command: {command}\nstdout: {result.stdout}\nstderr: {result.stderr}"
         raise RuntimeError(message)
-    waiting_file.write_text(data="\n".join(lines) + ("\n" if lines else ""))
-    with submitted_file.open(mode="a") as file_stream:
-        file_stream.write(
-            json.dumps(
-                {
-                    "pipeline": pipeline,
-                    "version": version,
-                    "params": params,
-                    "content_id": content_id,
-                    "dandiset_id": dandiset_id,
-                    "dandiset_path": dandiset_path,
-                }
-            )
-            + "\n"
-        )
     return True
 
 
@@ -378,54 +308,49 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
     """
     Process the current state of the queue.
 
-    The queue is a single flat ``waiting.jsonl`` at the root of the queue directory.
-    Each line is a JSON object with fields: pipeline, version, params, and content_id.
+    Reads ``state.jsonl`` from the queue directory (this file must already
+    exist — generate it with ``dandicompute dandiset scan --output
+    <queue_dir>/state.jsonl``) to find entries that have been prepared
+    (``has_code=True``) but not yet run (``has_logs=False`` and
+    ``has_output=False``).
 
-    If there are no waiting entries for a pipeline/version/params combination, it will be
-    re-filled in accordance with ``queue_config.json`` and the current state of the
-    qualifying AIND cache.  The fill order follows the ``version_priority`` and
-    ``params_priority`` lists defined per pipeline in ``queue_config.json``.
+    The entries are ordered using zipper-style interleaving driven by the
+    ``version_priority`` and ``params_priority`` lists in ``queue_config.json``:
+    within each version, dandiset instances are sorted by earliest
+    ``created_at``, and all parameterizations for a single instance are queued
+    consecutively before moving to the next instance.
 
-    If there are no currently running jobs, the next entry in ``waiting.jsonl`` will be
-    popped and submitted according to the logic in ``submit_job.py``.
+    If no AIND jobs are currently running, the next valid entry in the ordered
+    list is submitted via ``dandicompute aind submit``.
 
     Parameters
     ----------
     cwd : pathlib.Path
-        Path to the queue root directory.  The directory must be named ``'queue'``.
+        Path to the queue root directory.  The directory must be named
+        ``'queue'``.
     dandiset_directory : pathlib.Path
-        Path to a local clone of the 001697 dandiset repository.  Failure
-        directories are counted across all source dandisets and entries are
-        skipped when the total reaches ``max_fail_per_dandiset``.
+        Path to a local clone of the 001697 dandiset repository.  Used to
+        locate prepared submission scripts and to count failure directories
+        for ``max_fail_per_dandiset`` enforcement.
 
     Raises
     ------
     ValueError
-        If the current working directory is not named ``'queue'``.
+        If *cwd* is not named ``'queue'``.
+    FileNotFoundError
+        If ``state.jsonl`` is not found in *cwd*.
     """
     if cwd.name != "queue":
         message = f"Current working directory must be 'queue', but is '{cwd.name}'"
         raise ValueError(message)
 
-    waiting_file = cwd / "waiting.jsonl"
-    submitted_file = cwd / "submitted.jsonl"
-    if not waiting_file.exists():
-        waiting_file.write_text("")
-    if not submitted_file.exists():
-        submitted_file.write_text("")
-
-    queue_config = json.loads((cwd / "queue_config.json").read_text())
-
-    for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
-        for version in pipeline_data.get("version_priority", []):
-            for params in pipeline_data.get("params_priority", []):
-                _fill_waiting(
-                    cwd=cwd,
-                    pipeline=pipeline_name,
-                    version=version,
-                    params=params,
-                    dandiset_directory=dandiset_directory,
-                )
+    state_file = cwd / "state.jsonl"
+    if not state_file.exists():
+        message = (
+            f"'state.jsonl' not found in '{cwd}'. "
+            "Generate it with: dandicompute dandiset scan --directory <dandiset_dir> --output <queue_dir>/state.jsonl"
+        )
+        raise FileNotFoundError(message)
 
     any_running = _determine_running()
     if not any_running:
@@ -443,8 +368,8 @@ def prepare_queue(
     En-mass preparation of all qualifying assets based on the current queue config.
 
     For every pipeline/version/params combination declared in ``queue_config.json``
-    this function fetches the qualifying AIND content IDs, applies the same
-    attempt-limit filtering used by :func:`_fill_waiting`, and calls
+    this function fetches the qualifying AIND content IDs, applies attempt-limit
+    filtering, and calls
     :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job` for each
     asset — generating the ``code/`` directory and its parent directories without
     submitting a job.
@@ -514,8 +439,7 @@ def prepare_queue(
                 global_max_attempts = pipeline_cfg["max_attempts_per_asset"]
                 asset_overrides = pipeline_cfg.get("asset_overrides") or {}
 
-                # Strip the trailing commit-hash suffix before passing to prepare_aind_ephys_job,
-                # mirroring the same logic used in _submit_next.
+                # Strip the trailing commit-hash suffix before passing to prepare_aind_ephys_job.
                 version_parts = version.split("+")
                 if len(version_parts) > 1 and re.fullmatch(r"[0-9a-f]{7,40}", version_parts[-1]):
                     submission_version = "+".join(version_parts[:-1])
