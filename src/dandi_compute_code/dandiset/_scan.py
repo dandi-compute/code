@@ -1,3 +1,4 @@
+import datetime
 import json
 import pathlib
 import re
@@ -63,6 +64,7 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     has_output = (attempt_dir / "derivatives").is_dir()
     logs_dir = attempt_dir / "logs"
     has_logs = logs_dir.is_dir() and any(logs_dir.iterdir())
+    created_at = datetime.datetime.fromtimestamp(attempt_dir.stat().st_ctime, tz=datetime.timezone.utc).isoformat()
 
     return {
         "dandiset_id": dandiset_id,
@@ -76,6 +78,7 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
         "has_code": has_code,
         "has_output": has_output,
         "has_logs": has_logs,
+        "created_at": created_at,
     }
 
 
@@ -113,6 +116,8 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         * ``has_code``    – ``True`` if a ``code/`` subdirectory is present
         * ``has_output``  – ``True`` if a ``derivatives/`` subdirectory is present
         * ``has_logs``    – ``True`` if a ``logs/`` subdirectory is present and non-empty
+        * ``created_at``  – ISO 8601 UTC timestamp derived from the attempt directory's ``st_ctime``
+          stat (last metadata-change time on Unix/Linux; creation time on Windows/macOS)
     """
     derivatives = dandiset_directory / "derivatives"
     if not derivatives.is_dir():
