@@ -6,6 +6,8 @@ import re
 import subprocess
 import urllib.request
 
+from dandi_compute_code.aind_ephys_pipeline import prepare_aind_ephys_job
+
 
 def _count_dandiset_failures(
     *,
@@ -428,3 +430,110 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
     any_running = _determine_running()
     if not any_running:
         _submit_next(cwd=cwd, dandiset_directory=dandiset_directory)
+
+
+def prepare_queue(
+    *,
+    cwd: pathlib.Path,
+    dandiset_directory: pathlib.Path,
+    pipeline_directory: pathlib.Path | None = None,
+    config_file_path: pathlib.Path | None = None,
+) -> None:
+    """
+    En-mass preparation of all qualifying assets based on the current queue config.
+
+    For every pipeline/version/params combination declared in ``queue_config.json``
+    this function fetches the qualifying AIND content IDs, applies the same
+    attempt-limit filtering used by :func:`_fill_waiting`, and calls
+    :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job` for each
+    asset — generating the ``code/`` directory and its parent directories without
+    submitting a job.
+
+    Parameters
+    ----------
+    cwd : pathlib.Path
+        Path to the queue root directory.  The directory must be named ``'queue'``.
+    dandiset_directory : pathlib.Path
+        Path to a local clone of the 001697 dandiset repository.  Failure
+        directories are counted across all source dandisets and entries are
+        skipped when the total reaches ``max_fail_per_dandiset``.
+    pipeline_directory : pathlib.Path, optional
+        Local path to the AIND pipeline repository.  Passed directly to
+        :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job`.
+    config_file_path : pathlib.Path, optional
+        Path to the job configuration file.  Passed directly to
+        :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job`.
+
+    Raises
+    ------
+    ValueError
+        If *cwd* is not named ``'queue'``.
+    """
+    if cwd.name != "queue":
+        message = f"Current working directory must be 'queue', but is '{cwd.name}'"
+        raise ValueError(message)
+
+    submitted_file = cwd / "submitted.jsonl"
+    if not submitted_file.exists():
+        submitted_file.write_text("")
+
+    queue_config = json.loads((cwd / "queue_config.json").read_text())
+
+    qualifying_aind_content_ids_url = (
+        "https://raw.githubusercontent.com/dandi-cache/qualifying-aind-content-ids/refs/heads/min/"
+        "derivatives/qualifying_aind_content_ids.min.json.gz"
+    )
+    with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
+        qualifying_aind_content_ids = json.loads(gzip.decompress(response.read()))
+
+    for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
+        for version in pipeline_data.get("version_priority", []):
+            for params in pipeline_data.get("params_priority", []):
+                pipeline_cfg = queue_config["pipelines"][pipeline_name]
+
+                # Respect the per-dandiset failure cap.
+                max_fail = pipeline_cfg.get("max_fail_per_dandiset")
+                if max_fail is not None:
+                    failure_count = _count_dandiset_failures(
+                        dandiset_directory=dandiset_directory,
+                        version=version,
+                    )
+                    if failure_count >= max_fail:
+                        print(
+                            f"Skipping preparation for {pipeline_name}/{version}/{params}: "
+                            f"failure count ({failure_count}) has reached max_fail_per_dandiset ({max_fail})."
+                        )
+                        continue
+
+                done_counter = _fetch_counts(
+                    file_path=submitted_file,
+                    pipeline=pipeline_name,
+                    version=version,
+                    params=params,
+                )
+                global_max_attempts = pipeline_cfg["max_attempts_per_asset"]
+                asset_overrides = pipeline_cfg.get("asset_overrides") or {}
+
+                # Strip the trailing commit-hash suffix before passing to prepare_aind_ephys_job,
+                # mirroring the same logic used in _submit_next.
+                version_parts = version.split("+")
+                if len(version_parts) > 1 and re.fullmatch(r"[0-9a-f]{7,40}", version_parts[-1]):
+                    submission_version = "+".join(version_parts[:-1])
+                else:
+                    submission_version = version
+
+                for content_id in sorted(qualifying_aind_content_ids):
+                    if (
+                        asset_override := asset_overrides.get(content_id, global_max_attempts)
+                    ) is not None and done_counter.get(content_id, 0) >= asset_override:
+                        continue
+
+                    print(f"Preparing content ID: {content_id}")
+                    prepare_aind_ephys_job(
+                        content_id=content_id,
+                        parameters_key=params,
+                        pipeline_version=submission_version,
+                        pipeline_directory=pipeline_directory,
+                        config_file_path=config_file_path,
+                        silent=True,
+                    )

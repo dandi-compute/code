@@ -8,7 +8,7 @@ import click
 from ._utils import _styled_echo, clean_work_directory
 from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_aind_ephys_job
 from .dandiset import scan_dandiset_directory, write_scan_jsonl
-from .queue import process_queue
+from .queue import prepare_queue, process_queue
 
 
 # dandicompute
@@ -194,6 +194,54 @@ def _queue_process_command(
 ) -> None:
     cwd = directory if directory is not None else pathlib.Path.cwd()
     process_queue(cwd=cwd, dandiset_directory=dandiset_directory)
+
+
+# dandicompute queue prepare [OPTIONS]
+@_queue_group.command(name="prepare")
+@click.option(
+    "--directory",
+    "directory",
+    help="Path to the queue root directory (must be named 'queue'). Defaults to the current working directory.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--dandiset-directory",
+    "dandiset_directory",
+    help="Path to a local clone of the 001697 dandiset repository, used to count failures per dandiset.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+@click.option(
+    "--pipeline",
+    "pipeline_directory",
+    help="Local path to the AIND pipeline repository.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--config",
+    "config_file_path",
+    help="Path to the configuration file.",
+    required=False,
+    type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+def _queue_prepare_command(
+    directory: pathlib.Path | None = None,
+    dandiset_directory: pathlib.Path = pathlib.Path("."),
+    pipeline_directory: pathlib.Path | None = None,
+    config_file_path: pathlib.Path | None = None,
+) -> None:
+    cwd = directory if directory is not None else pathlib.Path.cwd()
+    prepare_queue(
+        cwd=cwd,
+        dandiset_directory=dandiset_directory,
+        pipeline_directory=pipeline_directory,
+        config_file_path=config_file_path,
+    )
 
 
 # dandicompute dandiset
