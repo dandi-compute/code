@@ -66,6 +66,22 @@ def test_delete_raises_when_dandi_api_key_missing(tmp_path: pathlib.Path) -> Non
 
 
 @pytest.mark.ai_generated
+def test_delete_raises_when_dandi_api_key_empty(tmp_path: pathlib.Path) -> None:
+    """Raises RuntimeError immediately when DANDI_API_KEY is set to an empty string."""
+    with patch.dict(os.environ, {"DANDI_API_KEY": ""}, clear=False):
+        with pytest.raises(RuntimeError, match="DANDI_API_KEY"):
+            delete_dandiset_version(dandiset_directory=tmp_path, version="v1.0")
+
+
+@pytest.mark.ai_generated
+def test_delete_raises_when_dandi_api_key_blank(tmp_path: pathlib.Path) -> None:
+    """Raises RuntimeError immediately when DANDI_API_KEY is set to only whitespace."""
+    with patch.dict(os.environ, {"DANDI_API_KEY": "   "}, clear=False):
+        with pytest.raises(RuntimeError, match="DANDI_API_KEY"):
+            delete_dandiset_version(dandiset_directory=tmp_path, version="v1.0")
+
+
+@pytest.mark.ai_generated
 def test_delete_returns_empty_when_version_not_found(tmp_path: pathlib.Path) -> None:
     """Returns an empty list when no directories match the requested version."""
     _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v2.0")
