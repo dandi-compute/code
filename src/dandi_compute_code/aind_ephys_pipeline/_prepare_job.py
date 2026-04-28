@@ -21,13 +21,13 @@ from ._handle_template import generate_aind_ephys_submission_script
 
 @pydantic.validate_call
 def prepare_aind_ephys_job(
+    pipeline_version: str,
     content_id: str | None = None,
     dandiset_id: str | None = None,
     dandiset_path: str | None = None,
     config_file_path: pathlib.Path | None = None,
     parameters_key: str = "default",
     pipeline_directory: pathlib.Path | None = None,
-    pipeline_version: str = "v1.0.0-fixes",
     silent: bool = False,
 ) -> pathlib.Path:
     """
@@ -35,6 +35,8 @@ def prepare_aind_ephys_job(
 
     Parameters
     ----------
+    pipeline_version : str
+        The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.
     content_id : str
         The content ID for the data to be processed.
     dandiset_id : str, optional
@@ -49,9 +51,6 @@ def prepare_aind_ephys_job(
         The short name of the parameters to use. Must be a key registered in `registries/registered_params.json`.
     pipeline_directory : pathlib.Path, optional
         Local path to the AIND pipeline repository.
-    pipeline_version : str, optional
-        The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.
-        Default is "v1.0.0-fixes".
     silent : bool, optional
         Whether to suppress output messages from the DANDI client.
         Default is False.

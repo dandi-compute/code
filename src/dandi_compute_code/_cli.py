@@ -87,9 +87,8 @@ def _aind_group() -> None:
     "--version",
     "pipeline_version",
     help="The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.",
-    required=False,
+    required=True,
     type=str,
-    default="v1.0.0-fixes",
 )
 @click.option(
     "--params",
@@ -114,12 +113,12 @@ def _aind_group() -> None:
     default=False,
 )
 def _aind_prepare_command(
+    pipeline_version: str,
     content_id: str | None = None,
     dandiset_id: str | None = None,
     dandiset_path: pathlib.Path | None = None,
     config_file_path: pathlib.Path | None = None,
     pipeline_directory: pathlib.Path | None = None,
-    pipeline_version: str = "v1.0.0-fixes",
     parameters_key: str = "default",
     submit: bool = False,
     silent: bool = False,
