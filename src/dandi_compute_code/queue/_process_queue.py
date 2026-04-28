@@ -208,11 +208,14 @@ def _determine_running() -> bool:
 
 def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool:
     """
-    Submit the next pending entry from ``state.jsonl``.
+    Submit the next pending entry from ``waiting.jsonl``.
 
-    Reads ``state.jsonl`` from the queue directory, builds the processing order
-    via :func:`_build_processing_order`, and submits the first entry that is not
-    blocked by the ``max_fail_per_dandiset`` limit.
+    Reads ``waiting.jsonl`` from the queue directory — this file is written by
+    :func:`process_queue` and contains the priority-ordered list of pending
+    entries produced by :func:`_build_processing_order`.  The first entry that
+    is not blocked by the ``max_fail_per_dandiset`` limit is submitted and then
+    removed from ``waiting.jsonl``; the entry is simultaneously appended to
+    ``submitted.jsonl`` for auditing purposes.
 
     Parameters
     ----------
@@ -229,23 +232,23 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
         True if a job was submitted, False if there are no pending entries or
         if the submit script cannot be found.
     """
-    state_file = cwd / "state.jsonl"
-    if not state_file.exists():
-        print(f"No 'state.jsonl' found in `{cwd}`")
+    waiting_file = cwd / "waiting.jsonl"
+    if not waiting_file.exists():
+        print(f"No 'waiting.jsonl' found in `{cwd}`")
         return False
 
-    state_entries = [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
+    waiting_entries = [json.loads(line.strip()) for line in waiting_file.read_text().splitlines() if line.strip()]
+
+    if not waiting_entries:
+        print(f"No pending entries in `{waiting_file}`")
+        return False
 
     queue_config = json.loads((cwd / "queue_config.json").read_text())
-    ordered = _build_processing_order(state_entries=state_entries, queue_config=queue_config)
-
-    if not ordered:
-        print(f"No pending entries in `{state_file}`")
-        return False
 
     # Find the first entry not blocked by max_fail_per_dandiset
     entry = None
-    for candidate in ordered:
+    entry_idx = None
+    for idx, candidate in enumerate(waiting_entries):
         pipeline = candidate.get("pipeline", "")
         version = candidate.get("version", "")
         if not pipeline or not version:
@@ -265,10 +268,11 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
                 continue
 
         entry = candidate
+        entry_idx = idx
         break
 
     if entry is None:
-        print(f"No submittable entries in `{state_file}`")
+        print(f"No submittable entries in `{waiting_file}`")
         return False
 
     dandiset_id = entry["dandiset_id"]
@@ -301,6 +305,16 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     if result.returncode != 0 and result.stderr:
         message = f"command: {command}\nstdout: {result.stdout}\nstderr: {result.stderr}"
         raise RuntimeError(message)
+
+    # Pop the submitted entry from waiting.jsonl.
+    waiting_entries.pop(entry_idx)
+    waiting_file.write_text("".join(json.dumps(e) + "\n" for e in waiting_entries))
+
+    # Append to submitted.jsonl for auditing.
+    submitted_file = cwd / "submitted.jsonl"
+    with submitted_file.open("a") as f:
+        f.write(json.dumps(entry) + "\n")
+
     return True
 
 
@@ -318,10 +332,12 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
     ``version_priority`` and ``params_priority`` lists in ``queue_config.json``:
     within each version, dandiset instances are sorted by earliest
     ``created_at``, and all parameterizations for a single instance are queued
-    consecutively before moving to the next instance.
+    consecutively before moving to the next instance.  The resulting ordered
+    list is written to ``waiting.jsonl`` in *cwd* for visibility.
 
-    If no AIND jobs are currently running, the next valid entry in the ordered
-    list is submitted via ``dandicompute aind submit``.
+    If no AIND jobs are currently running, the next valid entry in
+    ``waiting.jsonl`` is submitted via ``dandicompute aind submit``, then
+    popped from ``waiting.jsonl`` and appended to ``submitted.jsonl``.
 
     Parameters
     ----------
@@ -351,6 +367,14 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
             "Generate it with: dandicompute dandiset scan --directory <dandiset_dir> --output <queue_dir>/state.jsonl"
         )
         raise FileNotFoundError(message)
+
+    # Rebuild waiting.jsonl from the current state so the priority order is
+    # always fresh and human-readable.
+    state_entries = [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
+    queue_config = json.loads((cwd / "queue_config.json").read_text())
+    ordered = _build_processing_order(state_entries=state_entries, queue_config=queue_config)
+    waiting_file = cwd / "waiting.jsonl"
+    waiting_file.write_text("".join(json.dumps(e) + "\n" for e in ordered))
 
     any_running = _determine_running()
     if not any_running:
