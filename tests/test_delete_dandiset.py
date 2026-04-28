@@ -176,11 +176,27 @@ def test_delete_ignores_non_dandiset_dirs(tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.ai_generated
+def test_cli_delete_version_fails_without_api_key(tmp_path: pathlib.Path) -> None:
+    """CLI errors immediately when DANDI_API_KEY is missing, empty, or blank."""
+    runner = CliRunner()
+    env_without_key = {k: v for k, v in os.environ.items() if k != "DANDI_API_KEY"}
+    for bad_value in [None, "", "   "]:
+        env = env_without_key if bad_value is None else {**env_without_key, "DANDI_API_KEY": bad_value}
+        with patch.dict(os.environ, env, clear=True):
+            result = runner.invoke(
+                _dandicompute_group,
+                ["delete", "version", "--directory", str(tmp_path), "--version", "v1.0"],
+            )
+        assert result.exit_code != 0
+        assert "DANDI_API_KEY" in result.output
+
+
+@pytest.mark.ai_generated
 def test_cli_delete_version_aborts_on_no_confirmation(tmp_path: pathlib.Path) -> None:
     """dandicompute delete version aborts when the user does not confirm."""
     _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0")
     runner = CliRunner()
-    with patch("subprocess.run") as mock_run:
+    with patch("subprocess.run") as mock_run, patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         result = runner.invoke(
             _dandicompute_group,
             ["delete", "version", "--directory", str(tmp_path), "--version", "v1.0"],
@@ -210,10 +226,11 @@ def test_cli_delete_version_deletes_on_confirmation(tmp_path: pathlib.Path) -> N
 def test_cli_delete_version_reports_none_found(tmp_path: pathlib.Path) -> None:
     """dandicompute delete version reports when no directories match (no prompt shown)."""
     runner = CliRunner()
-    result = runner.invoke(
-        _dandicompute_group,
-        ["delete", "version", "--directory", str(tmp_path), "--version", "v99.0"],
-    )
+    with patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["delete", "version", "--directory", str(tmp_path), "--version", "v99.0"],
+        )
     assert result.exit_code == 0, result.output
     assert "No 'version-v99.0' directories found" in result.output
 
@@ -224,7 +241,7 @@ def test_cli_delete_version_prompt_shows_count(tmp_path: pathlib.Path) -> None:
     _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0")
     _make_version_dir(tmp_path, "000001", "mouse02", "aind+ephys", "v1.0")
     runner = CliRunner()
-    with patch("subprocess.run"):
+    with patch("subprocess.run"), patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         result = runner.invoke(
             _dandicompute_group,
             ["delete", "version", "--directory", str(tmp_path), "--version", "v1.0"],

@@ -312,6 +312,8 @@ def _delete_group() -> None:
     type=str,
 )
 def _delete_version_command(dandiset_directory: pathlib.Path, version: str) -> None:
+    if not os.environ.get("DANDI_API_KEY", "").strip():
+        raise click.ClickException("`DANDI_API_KEY` environment variable is not set or is blank.")
     version_dirs = scan_version_directories(dandiset_directory=dandiset_directory, version=version)
     if not version_dirs:
         _styled_echo(text=f"\nNo 'version-{version}' directories found.", color="yellow")
