@@ -599,7 +599,7 @@ def _make_attempt_dir(
     ``version-{version}/params-{params_id}_config-{config_id}_attempt-{attempt_number}/``
 
     is created.  *with_code*, *with_output*, and *with_logs* control whether the
-    ``code/``, ``output/``, and ``logs/`` subdirectories are created.  When
+    ``code/``, ``derivatives/``, and ``logs/`` subdirectories are created.  When
     *with_logs* is True a sentinel file is written inside ``logs/`` so it is
     treated as non-empty by :func:`_count_dandiset_failures`.
     """
@@ -616,7 +616,7 @@ def _make_attempt_dir(
     if with_code:
         (attempt_dir / "code").mkdir()
     if with_output:
-        (attempt_dir / "output").mkdir()
+        (attempt_dir / "derivatives").mkdir()
     if with_logs:
         logs_dir = attempt_dir / "logs"
         logs_dir.mkdir()

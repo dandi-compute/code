@@ -95,7 +95,7 @@ def _count_dandiset_failures(
     Scans every ``derivatives/dandiset-*`` sub-directory inside *dandiset_directory*
     (i.e. the local clone of the 001697 dandiset repository) and counts attempt
     directories that contain a ``code/`` subdirectory, a non-empty ``logs/``
-    subdirectory, but **no** ``output/`` subdirectory — the signature of a job that
+    subdirectory, but **no** ``derivatives/`` subdirectory — the signature of a job that
     ran but did not produce output.  Pending entries (code present but logs empty or
     absent) are not counted.
 
@@ -136,7 +136,7 @@ def _count_dandiset_failures(
                 continue
             logs_dir = attempt_dir / "logs"
             has_logs = logs_dir.is_dir() and any(logs_dir.iterdir())
-            if (attempt_dir / "code").is_dir() and has_logs and not (attempt_dir / "output").is_dir():
+            if (attempt_dir / "code").is_dir() and has_logs and not (attempt_dir / "derivatives").is_dir():
                 failure_count += 1
 
     return failure_count
