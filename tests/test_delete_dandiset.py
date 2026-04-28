@@ -262,8 +262,38 @@ def test_scan_version_directories_finds_matching_dirs(tmp_path: pathlib.Path) ->
 
 @pytest.mark.ai_generated
 def test_scan_version_directories_hash_suffixed_version(tmp_path: pathlib.Path) -> None:
-    """Version strings with appended commit hashes are resolved correctly."""
+    """Exact hash-suffixed version string is resolved correctly."""
     version_str = "v1.1.2+abcd123+def4567"
     target = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", version_str)
     result = scan_version_directories(dandiset_directory=tmp_path, version=version_str)
     assert result == [target]
+
+
+@pytest.mark.ai_generated
+def test_scan_version_directories_base_version_matches_suffixed(tmp_path: pathlib.Path) -> None:
+    """Specifying the base version matches all hash-suffixed variants."""
+    exact = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0.0")
+    suffixed1 = _make_version_dir(tmp_path, "000001", "mouse02", "aind+ephys", "v1.0.0+fixes+20abeb6")
+    suffixed2 = _make_version_dir(tmp_path, "000002", "mouse01", "aind+ephys", "v1.0.0+abcd123+def4567")
+    # A different base version should NOT be matched
+    _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0.1")
+    result = scan_version_directories(dandiset_directory=tmp_path, version="v1.0.0")
+    assert set(result) == {exact, suffixed1, suffixed2}
+
+
+@pytest.mark.ai_generated
+def test_cli_delete_version_base_matches_suffixed(tmp_path: pathlib.Path) -> None:
+    """CLI: specifying the base version deletes exact and hash-suffixed variants."""
+    exact = _make_version_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0.0")
+    suffixed = _make_version_dir(tmp_path, "000001", "mouse02", "aind+ephys", "v1.0.0+fixes+20abeb6")
+    runner = CliRunner()
+    with patch("subprocess.run"):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["delete", "version", "--directory", str(tmp_path), "--version", "v1.0.0"],
+            input="y\n",
+        )
+    assert result.exit_code == 0, result.output
+    assert "Deleted 2 version directories" in result.output
+    assert not exact.exists()
+    assert not suffixed.exists()

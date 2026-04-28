@@ -5,19 +5,22 @@ import subprocess
 
 def scan_version_directories(dandiset_directory: pathlib.Path, version: str) -> list[pathlib.Path]:
     """
-    Find all ``version-{version}`` directories under *dandiset_directory*.
+    Find all ``version-{version}*`` directories under *dandiset_directory*.
 
     Scans ``{dandiset_directory}/derivatives/dandiset-*/`` and returns every
-    directory named ``version-{version}`` found at any depth, in sorted order.
-    Directories that are not inside a ``dandiset-*`` subtree are ignored.
+    directory whose name equals ``version-{version}`` or starts with
+    ``version-{version}+`` (to capture hash-suffixed variants such as
+    ``version-v1.0.0+fixes+20abeb6``).  Directories not inside a
+    ``dandiset-*`` subtree are ignored.
 
     Parameters
     ----------
     dandiset_directory : pathlib.Path
         Path to a local clone of the dandiset repository.
     version : str
-        The version string to search for (e.g. ``"v1.0.0"`` or
-        ``"v1.0.0+fixes+20abeb6"``).
+        The base version string to search for (e.g. ``"v1.0.0"``).
+        Matches the exact directory ``version-v1.0.0`` as well as any
+        hash-suffixed variant such as ``version-v1.0.0+fixes+20abeb6``.
 
     Returns
     -------
@@ -28,14 +31,15 @@ def scan_version_directories(dandiset_directory: pathlib.Path, version: str) -> 
     if not derivatives.is_dir():
         return []
 
-    version_dirname = f"version-{version}"
+    version_prefix = f"version-{version}"
     version_dirs: list[pathlib.Path] = []
 
     for dandiset_path in sorted(derivatives.iterdir()):
         if not dandiset_path.is_dir() or not dandiset_path.name.startswith("dandiset-"):
             continue
-        for candidate in sorted(dandiset_path.rglob(version_dirname)):
-            if candidate.is_dir() and candidate.name == version_dirname:
+        for candidate in sorted(dandiset_path.rglob(f"{version_prefix}*")):
+            name = candidate.name
+            if candidate.is_dir() and (name == version_prefix or name.startswith(version_prefix + "+")):
                 version_dirs.append(candidate)
 
     return version_dirs
@@ -55,9 +59,9 @@ def delete_dandiset_version(dandiset_directory: pathlib.Path, version: str) -> l
     dandiset_directory : pathlib.Path
         Path to a local clone of the dandiset repository.
     version : str
-        The version string to delete (e.g. ``"v1.0.0"`` or
-        ``"v1.0.0+fixes+20abeb6"``).  The function looks for directories named
-        ``version-{version}``.
+        The base version string to delete (e.g. ``"v1.0.0"``).  Matches the
+        exact directory ``version-v1.0.0`` as well as any hash-suffixed variant
+        such as ``version-v1.0.0+fixes+20abeb6``.
 
     Returns
     -------

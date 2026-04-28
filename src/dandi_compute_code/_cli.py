@@ -304,9 +304,9 @@ def _delete_group() -> None:
     "--version",
     "version",
     help=(
-        "The version string to delete. Accepts plain semantic versions (e.g., 'v1.0.0') "
-        "as well as versions with appended commit hashes (e.g., 'v1.0.0+fixes+20abeb6' or "
-        "'v1.1.2+abcd123+def4567')."
+        "The base version string to delete (e.g., 'v1.0.0'). "
+        "Matches the exact directory 'version-v1.0.0' as well as any hash-suffixed variants "
+        "such as 'v1.0.0+fixes+20abeb6' or 'v1.1.2+abcd123+def4567'."
     ),
     required=True,
     type=str,
