@@ -185,9 +185,17 @@ def _queue_group() -> None:
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
     default=None,
 )
-def _queue_order_command(directory: pathlib.Path | None = None) -> None:
+@click.option(
+    "--limit",
+    "limit",
+    help="Truncate waiting.jsonl to the first N entries. Useful for testing.",
+    required=False,
+    type=click.IntRange(min=1),
+    default=None,
+)
+def _queue_order_command(directory: pathlib.Path | None = None, limit: int | None = None) -> None:
     cwd = directory if directory is not None else pathlib.Path.cwd()
-    order_queue(cwd=cwd)
+    order_queue(cwd=cwd, limit=limit)
 
 
 # dandicompute queue process [OPTIONS]

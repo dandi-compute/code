@@ -318,7 +318,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     return True
 
 
-def order_queue(*, cwd: pathlib.Path) -> None:
+def order_queue(*, cwd: pathlib.Path, limit: int | None = None) -> None:
     """
     Build the priority-ordered waiting list from ``state.jsonl``.
 
@@ -333,6 +333,9 @@ def order_queue(*, cwd: pathlib.Path) -> None:
     cwd : pathlib.Path
         Path to the queue root directory.  The directory must be named
         ``'queue'``.
+    limit : int, optional
+        If provided, truncate ``waiting.jsonl`` to the first *limit* entries.
+        Useful for testing without submitting the full queue.
 
     Raises
     ------
@@ -356,6 +359,8 @@ def order_queue(*, cwd: pathlib.Path) -> None:
     state_entries = [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
     queue_config = json.loads((cwd / "queue_config.json").read_text())
     ordered = _build_processing_order(state_entries=state_entries, queue_config=queue_config)
+    if limit is not None:
+        ordered = ordered[:limit]
     waiting_file = cwd / "waiting.jsonl"
     waiting_file.write_text("".join(json.dumps(e) + "\n" for e in ordered))
 

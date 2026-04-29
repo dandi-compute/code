@@ -703,6 +703,22 @@ def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.P
     assert waiting_entries[0]["dandiset_id"] == "000001"
 
 
+@pytest.mark.ai_generated
+def test_order_queue_limit_truncates_waiting_jsonl(tmp_path: pathlib.Path) -> None:
+    """order_queue respects the limit parameter and truncates waiting.jsonl."""
+    queue_dir = _make_queue_dir(tmp_path)
+
+    entries = [
+        _make_state_entry(dandiset_id=f"00000{i}", has_code=True, has_output=False, has_logs=False) for i in range(1, 6)
+    ]
+    _write_jsonl(queue_dir / "state.jsonl", entries)
+
+    order_queue(cwd=queue_dir, limit=2)
+
+    waiting_entries = _read_jsonl(queue_dir / "waiting.jsonl")
+    assert len(waiting_entries) == 2
+
+
 # ---------------------------------------------------------------------------
 # Tests for _count_dandiset_failures
 # ---------------------------------------------------------------------------
