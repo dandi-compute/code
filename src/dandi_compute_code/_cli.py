@@ -13,7 +13,7 @@ from .dandiset import (
     scan_version_directories,
     write_scan_jsonl,
 )
-from .queue import prepare_queue, process_queue
+from .queue import order_queue, prepare_queue, process_queue
 
 
 # dandicompute
@@ -173,6 +173,21 @@ def _aind_submit_command(script_file_path: pathlib.Path) -> None:
 @_dandicompute_group.group(name="queue")
 def _queue_group() -> None:
     pass
+
+
+# dandicompute queue order [OPTIONS]
+@_queue_group.command(name="order")
+@click.option(
+    "--directory",
+    "directory",
+    help="Path to the queue root directory (must be named 'queue'). Defaults to the current working directory.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+def _queue_order_command(directory: pathlib.Path | None = None) -> None:
+    cwd = directory if directory is not None else pathlib.Path.cwd()
+    order_queue(cwd=cwd)
 
 
 # dandicompute queue process [OPTIONS]

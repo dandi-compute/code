@@ -20,6 +20,7 @@ from dandi_compute_code.queue._process_queue import (
     _determine_running,
     _fetch_counts,
     _submit_next,
+    order_queue,
     prepare_queue,
     process_queue,
 )
@@ -595,13 +596,12 @@ def test_process_queue_raises_for_wrong_dir_name(tmp_path: pathlib.Path) -> None
 
 
 @pytest.mark.ai_generated
-def test_process_queue_raises_when_state_file_missing(tmp_path: pathlib.Path) -> None:
-    """process_queue raises FileNotFoundError when state.jsonl is absent."""
+def test_process_queue_raises_when_waiting_file_missing(tmp_path: pathlib.Path) -> None:
+    """process_queue raises FileNotFoundError when waiting.jsonl is absent."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
 
-    with pytest.raises(FileNotFoundError, match="state.jsonl"):
+    with pytest.raises(FileNotFoundError, match="waiting.jsonl"):
         process_queue(cwd=queue_dir, dandiset_directory=tmp_path)
 
 
@@ -609,7 +609,7 @@ def test_process_queue_raises_when_state_file_missing(tmp_path: pathlib.Path) ->
 def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> None:
     """process_queue calls _submit_next when no AIND jobs are running."""
     queue_dir = _make_queue_dir(tmp_path)
-    (queue_dir / "state.jsonl").write_text("")
+    (queue_dir / "waiting.jsonl").write_text("")
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
@@ -626,7 +626,7 @@ def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> N
 def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path) -> None:
     """process_queue does NOT call _submit_next when AIND jobs are currently running."""
     queue_dir = _make_queue_dir(tmp_path)
-    (queue_dir / "state.jsonl").write_text("")
+    (queue_dir / "waiting.jsonl").write_text("")
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
@@ -643,7 +643,7 @@ def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path)
 def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathlib.Path) -> None:
     """process_queue forwards dandiset_directory to _submit_next."""
     queue_dir = _make_queue_dir(tmp_path)
-    (queue_dir / "state.jsonl").write_text("")
+    (queue_dir / "waiting.jsonl").write_text("")
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
@@ -656,12 +656,36 @@ def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathli
     mock_submit.assert_called_once_with(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
 
+# ---------------------------------------------------------------------------
+# Tests for order_queue
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.ai_generated
-def test_process_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.Path) -> None:
-    """process_queue rebuilds waiting.jsonl from state.jsonl on every run."""
+def test_order_queue_raises_for_wrong_dir_name(tmp_path: pathlib.Path) -> None:
+    """order_queue raises ValueError when the directory is not named 'queue'."""
+    wrong_dir = tmp_path / "not_queue"
+    wrong_dir.mkdir()
+
+    with pytest.raises(ValueError, match="must be 'queue'"):
+        order_queue(cwd=wrong_dir)
+
+
+@pytest.mark.ai_generated
+def test_order_queue_raises_when_state_file_missing(tmp_path: pathlib.Path) -> None:
+    """order_queue raises FileNotFoundError when state.jsonl is absent."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
+
+    with pytest.raises(FileNotFoundError, match="state.jsonl"):
+        order_queue(cwd=queue_dir)
+
+
+@pytest.mark.ai_generated
+def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.Path) -> None:
+    """order_queue writes waiting.jsonl containing only pending (prepared-but-unrun) entries."""
     queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "001697"
-    dandiset_dir.mkdir()
 
     entries = [
         _make_state_entry(dandiset_id="000001", has_code=True, has_output=False, has_logs=False),
@@ -670,11 +694,7 @@ def test_process_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib
     ]
     _write_jsonl(queue_dir / "state.jsonl", entries)
 
-    with (
-        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
-        mock.patch("dandi_compute_code.queue._process_queue._submit_next"),
-    ):
-        process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+    order_queue(cwd=queue_dir)
 
     waiting_file = queue_dir / "waiting.jsonl"
     assert waiting_file.exists()

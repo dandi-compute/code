@@ -318,36 +318,21 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     return True
 
 
-def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
+def order_queue(*, cwd: pathlib.Path) -> None:
     """
-    Process the current state of the queue.
+    Build the priority-ordered waiting list from ``state.jsonl``.
 
-    Reads ``state.jsonl`` from the queue directory (this file must already
-    exist — generate it with ``dandicompute dandiset scan --output
-    <queue_dir>/state.jsonl``) to find entries that have been prepared
-    (``has_code=True``) but not yet run (``has_logs=False`` and
-    ``has_output=False``).
-
-    The entries are ordered using zipper-style interleaving driven by the
-    ``version_priority`` and ``params_priority`` lists in ``queue_config.json``:
-    within each version, dandiset instances are sorted by earliest
-    ``created_at``, and all parameterizations for a single instance are queued
-    consecutively before moving to the next instance.  The resulting ordered
-    list is written to ``waiting.jsonl`` in *cwd* for visibility.
-
-    If no AIND jobs are currently running, the next valid entry in
-    ``waiting.jsonl`` is submitted via ``dandicompute aind submit``, then
-    popped from ``waiting.jsonl`` and appended to ``submitted.jsonl``.
+    Reads ``state.jsonl`` (produced by ``dandicompute dandiset scan``) to find
+    entries that are prepared (``has_code=True``) but not yet run
+    (``has_logs=False``, ``has_output=False``).  The entries are ordered
+    via :func:`_build_processing_order` and written to ``waiting.jsonl`` so
+    that subsequent calls to :func:`process_queue` can read them directly.
 
     Parameters
     ----------
     cwd : pathlib.Path
         Path to the queue root directory.  The directory must be named
         ``'queue'``.
-    dandiset_directory : pathlib.Path
-        Path to a local clone of the 001697 dandiset repository.  Used to
-        locate prepared submission scripts and to count failure directories
-        for ``max_fail_per_dandiset`` enforcement.
 
     Raises
     ------
@@ -368,13 +353,49 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
         )
         raise FileNotFoundError(message)
 
-    # Rebuild waiting.jsonl from the current state so the priority order is
-    # always fresh and human-readable.
     state_entries = [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
     queue_config = json.loads((cwd / "queue_config.json").read_text())
     ordered = _build_processing_order(state_entries=state_entries, queue_config=queue_config)
     waiting_file = cwd / "waiting.jsonl"
     waiting_file.write_text("".join(json.dumps(e) + "\n" for e in ordered))
+
+
+def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
+    """
+    Submit the next job from the priority-ordered ``waiting.jsonl``.
+
+    Checks whether any AIND jobs are currently running via SLURM; if not,
+    submits the next valid entry from ``waiting.jsonl`` (which must already
+    exist — generate it with ``dandicompute queue order``).
+
+    Parameters
+    ----------
+    cwd : pathlib.Path
+        Path to the queue root directory.  The directory must be named
+        ``'queue'``.
+    dandiset_directory : pathlib.Path
+        Path to a local clone of the 001697 dandiset repository.  Used to
+        locate prepared submission scripts and to count failure directories
+        for ``max_fail_per_dandiset`` enforcement.
+
+    Raises
+    ------
+    ValueError
+        If *cwd* is not named ``'queue'``.
+    FileNotFoundError
+        If ``waiting.jsonl`` is not found in *cwd*.
+    """
+    if cwd.name != "queue":
+        message = f"Current working directory must be 'queue', but is '{cwd.name}'"
+        raise ValueError(message)
+
+    waiting_file = cwd / "waiting.jsonl"
+    if not waiting_file.exists():
+        message = (
+            f"'waiting.jsonl' not found in '{cwd}'. "
+            "Generate it with: dandicompute queue order --directory <queue_dir>"
+        )
+        raise FileNotFoundError(message)
 
     any_running = _determine_running()
     if not any_running:
