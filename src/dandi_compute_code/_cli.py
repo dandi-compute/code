@@ -178,9 +178,9 @@ def _queue_group() -> None:
 # dandicompute queue order [OPTIONS]
 @_queue_group.command(name="order")
 @click.option(
-    "--directory",
+    "--queue-directory",
     "directory",
-    help="Path to the queue root directory (must be named 'queue'). Defaults to the current working directory.",
+    help="Path to the queue root directory. Defaults to the current working directory.",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
     default=None,
@@ -201,9 +201,9 @@ def _queue_order_command(directory: pathlib.Path | None = None, limit: int | Non
 # dandicompute queue process [OPTIONS]
 @_queue_group.command(name="process")
 @click.option(
-    "--directory",
+    "--queue-directory",
     "directory",
-    help="Path to the queue root directory (must be named 'queue'). Defaults to the current working directory.",
+    help="Path to the queue root directory. Defaults to the current working directory.",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
     default=None,
@@ -226,9 +226,9 @@ def _queue_process_command(
 # dandicompute queue prepare [OPTIONS]
 @_queue_group.command(name="prepare")
 @click.option(
-    "--directory",
+    "--queue-directory",
     "directory",
-    help="Path to the queue root directory (must be named 'queue'). Defaults to the current working directory.",
+    help="Path to the queue root directory. Defaults to the current working directory.",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
     default=None,
