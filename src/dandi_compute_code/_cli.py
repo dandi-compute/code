@@ -271,6 +271,8 @@ def _queue_prepare_command(
     config_file_path: pathlib.Path | None = None,
     limit: int | None = None,
 ) -> None:
+    if "DANDI_API_KEY" not in os.environ:
+        raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
     cwd = directory if directory is not None else pathlib.Path.cwd()
     prepare_queue(
         cwd=cwd,
