@@ -586,16 +586,6 @@ def test_submit_next_appends_submitted_entry_to_submitted_jsonl(tmp_path: pathli
 
 
 @pytest.mark.ai_generated
-def test_process_queue_raises_for_wrong_dir_name(tmp_path: pathlib.Path) -> None:
-    """process_queue raises ValueError when the directory is not named 'queue'."""
-    wrong_dir = tmp_path / "not_queue"
-    wrong_dir.mkdir()
-
-    with pytest.raises(ValueError, match="must be 'queue'"):
-        process_queue(cwd=wrong_dir, dandiset_directory=tmp_path)
-
-
-@pytest.mark.ai_generated
 def test_process_queue_raises_when_waiting_file_missing(tmp_path: pathlib.Path) -> None:
     """process_queue raises FileNotFoundError when waiting.jsonl is absent."""
     queue_dir = tmp_path / "queue"
@@ -659,16 +649,6 @@ def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathli
 # ---------------------------------------------------------------------------
 # Tests for order_queue
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.ai_generated
-def test_order_queue_raises_for_wrong_dir_name(tmp_path: pathlib.Path) -> None:
-    """order_queue raises ValueError when the directory is not named 'queue'."""
-    wrong_dir = tmp_path / "not_queue"
-    wrong_dir.mkdir()
-
-    with pytest.raises(ValueError, match="must be 'queue'"):
-        order_queue(cwd=wrong_dir)
 
 
 @pytest.mark.ai_generated
@@ -918,16 +898,6 @@ def test_submit_next_allows_entry_when_dandiset_failures_below_max(tmp_path: pat
 # ---------------------------------------------------------------------------
 # Tests for prepare_queue
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.ai_generated
-def test_prepare_queue_raises_for_wrong_dir_name(tmp_path: pathlib.Path) -> None:
-    """prepare_queue raises ValueError when the directory is not named 'queue'."""
-    wrong_dir = tmp_path / "not_queue"
-    wrong_dir.mkdir()
-
-    with pytest.raises(ValueError, match="must be 'queue'"):
-        prepare_queue(cwd=wrong_dir, dandiset_directory=tmp_path)
 
 
 @pytest.mark.ai_generated

@@ -220,7 +220,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     Parameters
     ----------
     cwd : pathlib.Path
-        Path to the queue root directory (must be named 'queue').
+        Path to the queue root directory.
     dandiset_directory : pathlib.Path
         Path to a local clone of the 001697 dandiset repository.  Used to
         locate prepared submission scripts and to count failure directories for
@@ -331,23 +331,16 @@ def order_queue(*, cwd: pathlib.Path, limit: int | None = None) -> None:
     Parameters
     ----------
     cwd : pathlib.Path
-        Path to the queue root directory.  The directory must be named
-        ``'queue'``.
+        Path to the queue root directory.
     limit : int, optional
         If provided, truncate ``waiting.jsonl`` to the first *limit* entries.
         Useful for testing without submitting the full queue.
 
     Raises
     ------
-    ValueError
-        If *cwd* is not named ``'queue'``.
     FileNotFoundError
         If ``state.jsonl`` is not found in *cwd*.
     """
-    if cwd.name != "queue":
-        message = f"Current working directory must be 'queue', but is '{cwd.name}'"
-        raise ValueError(message)
-
     state_file = cwd / "state.jsonl"
     if not state_file.exists():
         message = (
@@ -376,8 +369,7 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
     Parameters
     ----------
     cwd : pathlib.Path
-        Path to the queue root directory.  The directory must be named
-        ``'queue'``.
+        Path to the queue root directory.
     dandiset_directory : pathlib.Path
         Path to a local clone of the 001697 dandiset repository.  Used to
         locate prepared submission scripts and to count failure directories
@@ -385,15 +377,9 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
 
     Raises
     ------
-    ValueError
-        If *cwd* is not named ``'queue'``.
     FileNotFoundError
         If ``waiting.jsonl`` is not found in *cwd*.
     """
-    if cwd.name != "queue":
-        message = f"Current working directory must be 'queue', but is '{cwd.name}'"
-        raise ValueError(message)
-
     waiting_file = cwd / "waiting.jsonl"
     if not waiting_file.exists():
         message = (
@@ -428,7 +414,7 @@ def prepare_queue(
     Parameters
     ----------
     cwd : pathlib.Path
-        Path to the queue root directory.  The directory must be named ``'queue'``.
+        Path to the queue root directory.
     dandiset_directory : pathlib.Path
         Path to a local clone of the 001697 dandiset repository.  Failure
         directories are counted across all source dandisets and entries are
@@ -442,16 +428,7 @@ def prepare_queue(
     limit : int, optional
         If provided, stop after preparing *limit* assets in total (across all
         pipeline/version/params combinations).  Useful for testing.
-
-    Raises
-    ------
-    ValueError
-        If *cwd* is not named ``'queue'``.
     """
-    if cwd.name != "queue":
-        message = f"Current working directory must be 'queue', but is '{cwd.name}'"
-        raise ValueError(message)
-
     submitted_file = cwd / "submitted.jsonl"
     if not submitted_file.exists():
         submitted_file.write_text("")
