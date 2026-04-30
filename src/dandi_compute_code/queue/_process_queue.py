@@ -413,6 +413,7 @@ def prepare_queue(
     dandiset_directory: pathlib.Path,
     pipeline_directory: pathlib.Path | None = None,
     config_file_path: pathlib.Path | None = None,
+    limit: int | None = None,
 ) -> None:
     """
     En-masse preparation of all qualifying assets based on the current queue config.
@@ -438,6 +439,9 @@ def prepare_queue(
     config_file_path : pathlib.Path, optional
         Path to the job configuration file.  Passed directly to
         :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job`.
+    limit : int, optional
+        If provided, stop after preparing *limit* assets in total (across all
+        pipeline/version/params combinations).  Useful for testing.
 
     Raises
     ------
@@ -461,9 +465,16 @@ def prepare_queue(
     with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
         qualifying_aind_content_ids = json.loads(gzip.decompress(response.read()))
 
+    prepared_count = 0
     for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
+        if limit is not None and prepared_count >= limit:
+            break
         for version in pipeline_data.get("version_priority", []):
+            if limit is not None and prepared_count >= limit:
+                break
             for params in pipeline_data.get("params_priority", []):
+                if limit is not None and prepared_count >= limit:
+                    break
                 pipeline_cfg = queue_config["pipelines"][pipeline_name]
 
                 # Respect the per-dandiset failure cap.
@@ -497,6 +508,8 @@ def prepare_queue(
                     submission_version = version
 
                 for content_id in sorted(qualifying_aind_content_ids):
+                    if limit is not None and prepared_count >= limit:
+                        break
                     if (
                         asset_override := asset_overrides.get(content_id, global_max_attempts)
                     ) is not None and done_counter.get(content_id, 0) >= asset_override:
@@ -511,3 +524,4 @@ def prepare_queue(
                         config_file_path=config_file_path,
                         silent=True,
                     )
+                    prepared_count += 1

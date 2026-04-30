@@ -1052,3 +1052,22 @@ def test_prepare_queue_passes_optional_args_through(tmp_path: pathlib.Path) -> N
     call_kwargs = mock_prepare.call_args.kwargs
     assert call_kwargs["pipeline_directory"] == fake_pipeline_dir
     assert call_kwargs["config_file_path"] == fake_config
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_limit_stops_after_n_assets(tmp_path: pathlib.Path) -> None:
+    """prepare_queue stops after preparing exactly limit assets when limit is set."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    qualifying_ids = ["asset-aaa", "asset-bbb", "asset-ccc"]
+
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+    ):
+        mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
+        prepare_queue(cwd=queue_dir, dandiset_directory=dandiset_dir, limit=2)
+
+    assert mock_prepare.call_count == 2

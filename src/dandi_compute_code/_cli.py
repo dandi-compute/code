@@ -256,11 +256,20 @@ def _queue_process_command(
     type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
     default=None,
 )
+@click.option(
+    "--limit",
+    "limit",
+    help="Stop after preparing N assets in total. Useful for testing.",
+    required=False,
+    type=click.IntRange(min=1),
+    default=None,
+)
 def _queue_prepare_command(
     directory: pathlib.Path | None = None,
     dandiset_directory: pathlib.Path = pathlib.Path("."),
     pipeline_directory: pathlib.Path | None = None,
     config_file_path: pathlib.Path | None = None,
+    limit: int | None = None,
 ) -> None:
     cwd = directory if directory is not None else pathlib.Path.cwd()
     prepare_queue(
@@ -268,6 +277,7 @@ def _queue_prepare_command(
         dandiset_directory=dandiset_directory,
         pipeline_directory=pipeline_directory,
         config_file_path=config_file_path,
+        limit=limit,
     )
 
 
