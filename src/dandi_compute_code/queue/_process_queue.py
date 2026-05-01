@@ -12,6 +12,11 @@ _AIND_EPHYS_PARAMS_REGISTRY_PATH = (
     pathlib.Path(__file__).parent.parent / "aind_ephys_pipeline" / "registries" / "registered_params.json"
 )
 
+try:
+    _AIND_EPHYS_PARAMS_REGISTRY: dict = json.loads(_AIND_EPHYS_PARAMS_REGISTRY_PATH.read_text())
+except (OSError, json.JSONDecodeError):
+    _AIND_EPHYS_PARAMS_REGISTRY = {}
+
 
 def _resolve_params_key_to_id(pipeline: str, params_key: str) -> str:
     """
@@ -45,12 +50,9 @@ def _resolve_params_key_to_id(pipeline: str, params_key: str) -> str:
         itself if no mapping is found.
     """
     if pipeline == "aind+ephys":
-        try:
-            registry = json.loads(_AIND_EPHYS_PARAMS_REGISTRY_PATH.read_text())
-            if params_key in registry:
-                return registry[params_key]["checksum"][:7]
-        except (OSError, KeyError, json.JSONDecodeError):
-            pass
+        entry = _AIND_EPHYS_PARAMS_REGISTRY.get(params_key)
+        if entry:
+            return entry["checksum"][:7]
     return params_key
 
 
