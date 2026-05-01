@@ -19,6 +19,7 @@ from dandi_compute_code.queue._process_queue import (
     _count_dandiset_failures,
     _determine_running,
     _fetch_counts,
+    _resolve_params_key_to_id,
     _submit_next,
     order_queue,
     prepare_queue,
@@ -219,6 +220,34 @@ def test_fetch_counts_ignores_blank_lines(tmp_path: pathlib.Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Tests for _resolve_params_key_to_id
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.ai_generated
+def test_resolve_params_key_to_id_aind_ephys_default() -> None:
+    """_resolve_params_key_to_id returns the 7-char hash for a known aind+ephys key."""
+    result = _resolve_params_key_to_id("aind+ephys", "default")
+    # The 'default' params key maps to checksum starting with '98fd947'
+    assert result == "98fd947"
+
+
+@pytest.mark.ai_generated
+def test_resolve_params_key_to_id_unknown_pipeline_returns_key() -> None:
+    """_resolve_params_key_to_id returns the key unchanged for an unknown pipeline."""
+    result = _resolve_params_key_to_id("unknown-pipeline", "default")
+    assert result == "default"
+
+
+@pytest.mark.ai_generated
+def test_resolve_params_key_to_id_already_hash_passthrough() -> None:
+    """_resolve_params_key_to_id returns the value unchanged if it is already an ID (not a registered key)."""
+    result = _resolve_params_key_to_id("aind+ephys", "98fd947")
+    # '98fd947' is not a registered key name, so it is returned as-is
+    assert result == "98fd947"
+
+
+# ---------------------------------------------------------------------------
 # Tests for _build_processing_order
 # ---------------------------------------------------------------------------
 
@@ -356,6 +385,25 @@ def test_build_processing_order_ignores_unknown_pipeline() -> None:
     result = _build_processing_order(state_entries=entries, queue_config=_EXAMPLE_QUEUE_CONFIG)
     assert len(result) == 1
     assert result[0]["dandiset_id"] == "000002"
+
+
+@pytest.mark.ai_generated
+def test_build_processing_order_resolves_aind_ephys_params_key_to_id() -> None:
+    """_build_processing_order matches state entries whose params is a hash ID when queue_config uses the key name."""
+    # Simulates the real scenario: queue_config uses 'default' as the params key,
+    # but state.jsonl entries have the 7-char hash '98fd947' derived from the params file checksum.
+    config = {
+        "pipelines": {
+            "aind+ephys": {
+                "version_priority": ["v1.1.1+b268fd2"],
+                "params_priority": ["default"],
+            }
+        }
+    }
+    entry = _make_state_entry(pipeline="aind+ephys", version="v1.1.1+b268fd2", params="98fd947", dandiset_id="000233")
+    result = _build_processing_order(state_entries=[entry], queue_config=config)
+    assert len(result) == 1
+    assert result[0]["dandiset_id"] == "000233"
 
 
 # ---------------------------------------------------------------------------
