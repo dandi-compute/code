@@ -362,9 +362,9 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
     """
     Submit the next job from the priority-ordered ``waiting.jsonl``.
 
-    Checks whether any AIND jobs are currently running via SLURM; if not,
-    submits the next valid entry from ``waiting.jsonl`` (which must already
-    exist — generate it with ``dandicompute queue order``).
+    If ``waiting.jsonl`` is absent or empty, :func:`order_queue` is called
+    first to populate it from ``state.jsonl``.  Then, if no AIND jobs are
+    currently running via SLURM, the next valid entry is submitted.
 
     Parameters
     ----------
@@ -378,15 +378,12 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
     Raises
     ------
     FileNotFoundError
-        If ``waiting.jsonl`` is not found in *cwd*.
+        If ``waiting.jsonl`` is absent or empty and ``state.jsonl`` is not
+        found in *cwd* (raised by :func:`order_queue`).
     """
     waiting_file = cwd / "waiting.jsonl"
-    if not waiting_file.exists():
-        message = (
-            f"'waiting.jsonl' not found in '{cwd}'. "
-            "Generate it with: dandicompute queue order --directory <queue_dir>"
-        )
-        raise FileNotFoundError(message)
+    if not waiting_file.exists() or not waiting_file.read_text().strip():
+        order_queue(cwd=cwd)
 
     any_running = _determine_running()
     if not any_running:

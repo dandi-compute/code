@@ -586,20 +586,55 @@ def test_submit_next_appends_submitted_entry_to_submitted_jsonl(tmp_path: pathli
 
 
 @pytest.mark.ai_generated
-def test_process_queue_raises_when_waiting_file_missing(tmp_path: pathlib.Path) -> None:
-    """process_queue raises FileNotFoundError when waiting.jsonl is absent."""
+def test_process_queue_raises_when_state_file_missing(tmp_path: pathlib.Path) -> None:
+    """process_queue raises FileNotFoundError for state.jsonl when waiting.jsonl is absent."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
 
-    with pytest.raises(FileNotFoundError, match="waiting.jsonl"):
+    with pytest.raises(FileNotFoundError, match="state.jsonl"):
         process_queue(cwd=queue_dir, dandiset_directory=tmp_path)
+
+
+@pytest.mark.ai_generated
+def test_process_queue_calls_order_queue_when_waiting_empty(tmp_path: pathlib.Path) -> None:
+    """process_queue calls order_queue to fill waiting.jsonl when it is absent or empty."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    with (
+        mock.patch("dandi_compute_code.queue._process_queue.order_queue") as mock_order,
+        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
+    ):
+        process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+
+    mock_order.assert_called_once_with(cwd=queue_dir)
+
+
+@pytest.mark.ai_generated
+def test_process_queue_skips_order_queue_when_waiting_non_empty(tmp_path: pathlib.Path) -> None:
+    """process_queue does NOT call order_queue when waiting.jsonl already has entries."""
+    queue_dir = _make_queue_dir(tmp_path)
+    entry = _make_state_entry()
+    _write_jsonl(queue_dir / "waiting.jsonl", [entry])
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    with (
+        mock.patch("dandi_compute_code.queue._process_queue.order_queue") as mock_order,
+        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
+    ):
+        process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+
+    mock_order.assert_not_called()
 
 
 @pytest.mark.ai_generated
 def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> None:
     """process_queue calls _submit_next when no AIND jobs are running."""
     queue_dir = _make_queue_dir(tmp_path)
-    (queue_dir / "waiting.jsonl").write_text("")
+    _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
@@ -616,7 +651,7 @@ def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> N
 def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path) -> None:
     """process_queue does NOT call _submit_next when AIND jobs are currently running."""
     queue_dir = _make_queue_dir(tmp_path)
-    (queue_dir / "waiting.jsonl").write_text("")
+    _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
@@ -633,7 +668,7 @@ def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path)
 def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathlib.Path) -> None:
     """process_queue forwards dandiset_directory to _submit_next."""
     queue_dir = _make_queue_dir(tmp_path)
-    (queue_dir / "waiting.jsonl").write_text("")
+    _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
