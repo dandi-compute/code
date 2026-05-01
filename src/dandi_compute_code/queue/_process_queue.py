@@ -211,11 +211,14 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     Submit the next pending entry from ``waiting.jsonl``.
 
     Reads ``waiting.jsonl`` from the queue directory — this file is written by
-    :func:`process_queue` and contains the priority-ordered list of pending
-    entries produced by :func:`_build_processing_order`.  The first entry that
-    is not blocked by the ``max_fail_per_dandiset`` limit is submitted and then
-    removed from ``waiting.jsonl``; the entry is simultaneously appended to
-    ``submitted.jsonl`` for auditing purposes.
+    :func:`order_queue` and contains the priority-ordered list of pending
+    entries produced by :func:`_build_processing_order`.  If the file is absent
+    or empty, :func:`order_queue` is called once to attempt to repopulate it
+    from ``state.jsonl``.  If still empty after that, returns ``False``.
+
+    The first entry that is not blocked by the ``max_fail_per_dandiset`` limit
+    is submitted and then removed from ``waiting.jsonl``; the entry is
+    simultaneously appended to ``submitted.jsonl`` for auditing purposes.
 
     Parameters
     ----------
@@ -233,11 +236,18 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
         if the submit script cannot be found.
     """
     waiting_file = cwd / "waiting.jsonl"
-    if not waiting_file.exists():
-        print(f"No 'waiting.jsonl' found in `{cwd}`")
-        return False
 
-    waiting_entries = [json.loads(line.strip()) for line in waiting_file.read_text().splitlines() if line.strip()]
+    def _read_waiting() -> list[dict]:
+        if not waiting_file.exists():
+            return []
+        return [json.loads(line.strip()) for line in waiting_file.read_text().splitlines() if line.strip()]
+
+    waiting_entries = _read_waiting()
+
+    if not waiting_entries:
+        # Attempt to repopulate from state.jsonl before giving up.
+        order_queue(cwd=cwd)
+        waiting_entries = _read_waiting()
 
     if not waiting_entries:
         print(f"No pending entries in `{waiting_file}`")

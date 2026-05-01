@@ -386,25 +386,75 @@ def test_determine_running_false_when_no_aind_jobs() -> None:
 
 @pytest.mark.ai_generated
 def test_submit_next_returns_false_when_no_waiting_file(tmp_path: pathlib.Path) -> None:
-    """_submit_next returns False when waiting.jsonl is absent from the queue directory."""
+    """_submit_next returns False when waiting.jsonl is absent and order_queue finds nothing."""
     queue_dir = _make_queue_dir(tmp_path)
 
-    result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
+    # order_queue is called to try to fill waiting.jsonl, but produces nothing
+    with mock.patch("dandi_compute_code.queue._process_queue.order_queue") as mock_order:
+        result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
 
+    mock_order.assert_called_once_with(cwd=queue_dir)
     assert result is False
 
 
 @pytest.mark.ai_generated
 def test_submit_next_returns_false_when_no_pending_entries(tmp_path: pathlib.Path) -> None:
-    """_submit_next returns False when waiting.jsonl is empty."""
+    """_submit_next returns False when waiting.jsonl is empty and order_queue finds nothing."""
     queue_dir = _make_queue_dir(tmp_path)
 
-    # Empty waiting.jsonl → nothing to submit
+    # Empty waiting.jsonl → triggers order_queue retry, which also produces nothing
     (queue_dir / "waiting.jsonl").write_text("")
 
-    result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
+    with mock.patch("dandi_compute_code.queue._process_queue.order_queue") as mock_order:
+        result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
 
+    mock_order.assert_called_once_with(cwd=queue_dir)
     assert result is False
+
+
+@pytest.mark.ai_generated
+def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: pathlib.Path) -> None:
+    """_submit_next calls order_queue when waiting.jsonl is empty, then submits if entries appear."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+
+    entry = _make_state_entry(
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+
+    # Start with an empty waiting.jsonl
+    (queue_dir / "waiting.jsonl").write_text("")
+
+    _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+
+    def _fill_waiting(*, cwd: pathlib.Path) -> None:
+        # Simulate order_queue populating waiting.jsonl
+        _write_jsonl(cwd / "waiting.jsonl", [entry])
+
+    with (
+        mock.patch("dandi_compute_code.queue._process_queue.order_queue", side_effect=_fill_waiting) as mock_order,
+        mock.patch("subprocess.run") as mock_run,
+    ):
+        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+        result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
+
+    mock_order.assert_called_once_with(cwd=queue_dir)
+    assert result is True
 
 
 @pytest.mark.ai_generated
