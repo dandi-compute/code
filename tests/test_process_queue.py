@@ -441,7 +441,7 @@ def test_submit_next_returns_false_when_no_waiting_file(tmp_path: pathlib.Path) 
     with mock.patch("dandi_compute_code.queue._process_queue.order_queue") as mock_order:
         result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
 
-    mock_order.assert_called_once_with(cwd=queue_dir)
+    mock_order.assert_called_once_with(cwd=queue_dir, limit=3)
     assert result is False
 
 
@@ -456,7 +456,7 @@ def test_submit_next_returns_false_when_no_pending_entries(tmp_path: pathlib.Pat
     with mock.patch("dandi_compute_code.queue._process_queue.order_queue") as mock_order:
         result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
 
-    mock_order.assert_called_once_with(cwd=queue_dir)
+    mock_order.assert_called_once_with(cwd=queue_dir, limit=3)
     assert result is False
 
 
@@ -490,7 +490,7 @@ def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: 
         attempt=1,
     )
 
-    def _fill_waiting(*, cwd: pathlib.Path) -> None:
+    def _fill_waiting(*, cwd: pathlib.Path, limit: int | None = None) -> None:
         # Simulate order_queue populating waiting.jsonl
         _write_jsonl(cwd / "waiting.jsonl", [entry])
 
@@ -501,7 +501,7 @@ def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: 
         mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
         result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
-    mock_order.assert_called_once_with(cwd=queue_dir)
+    mock_order.assert_called_once_with(cwd=queue_dir, limit=3)
     assert result is True
 
 

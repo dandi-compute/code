@@ -294,7 +294,8 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
 
     if not waiting_entries:
         # Attempt to repopulate from state.jsonl before giving up.
-        order_queue(cwd=cwd)
+        # Use a small limit to avoid building a runaway queue.
+        order_queue(cwd=cwd, limit=3)
         waiting_entries = _read_waiting()
 
     if not waiting_entries:
