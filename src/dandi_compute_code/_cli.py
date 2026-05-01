@@ -13,7 +13,7 @@ from .dandiset import (
     scan_version_directories,
     write_scan_jsonl,
 )
-from .queue import prepare_queue, process_queue
+from .queue import order_queue, prepare_queue, process_queue
 
 
 # dandicompute
@@ -175,12 +175,35 @@ def _queue_group() -> None:
     pass
 
 
+# dandicompute queue order [OPTIONS]
+@_queue_group.command(name="order")
+@click.option(
+    "--queue-directory",
+    "directory",
+    help="Path to the queue root directory. Defaults to the current working directory.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--limit",
+    "limit",
+    help="Truncate waiting.jsonl to the first N entries. Useful for testing.",
+    required=False,
+    type=click.IntRange(min=1),
+    default=None,
+)
+def _queue_order_command(directory: pathlib.Path | None = None, limit: int | None = None) -> None:
+    cwd = directory if directory is not None else pathlib.Path.cwd()
+    order_queue(cwd=cwd, limit=limit)
+
+
 # dandicompute queue process [OPTIONS]
 @_queue_group.command(name="process")
 @click.option(
-    "--directory",
+    "--queue-directory",
     "directory",
-    help="Path to the queue root directory (must be named 'queue'). Defaults to the current working directory.",
+    help="Path to the queue root directory. Defaults to the current working directory.",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
     default=None,
@@ -203,9 +226,9 @@ def _queue_process_command(
 # dandicompute queue prepare [OPTIONS]
 @_queue_group.command(name="prepare")
 @click.option(
-    "--directory",
+    "--queue-directory",
     "directory",
-    help="Path to the queue root directory (must be named 'queue'). Defaults to the current working directory.",
+    help="Path to the queue root directory. Defaults to the current working directory.",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
     default=None,
@@ -233,18 +256,30 @@ def _queue_process_command(
     type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
     default=None,
 )
+@click.option(
+    "--limit",
+    "limit",
+    help="Stop after preparing N assets in total. Useful for testing.",
+    required=False,
+    type=click.IntRange(min=1),
+    default=None,
+)
 def _queue_prepare_command(
     directory: pathlib.Path | None = None,
     dandiset_directory: pathlib.Path = pathlib.Path("."),
     pipeline_directory: pathlib.Path | None = None,
     config_file_path: pathlib.Path | None = None,
+    limit: int | None = None,
 ) -> None:
+    if "DANDI_API_KEY" not in os.environ:
+        raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
     cwd = directory if directory is not None else pathlib.Path.cwd()
     prepare_queue(
         cwd=cwd,
         dandiset_directory=dandiset_directory,
         pipeline_directory=pipeline_directory,
         config_file_path=config_file_path,
+        limit=limit,
     )
 
 
