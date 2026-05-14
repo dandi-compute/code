@@ -1288,16 +1288,6 @@ def _make_full_attempt_dir(
     return attempt_dir
 
 
-def _make_state_jsonl(
-    *,
-    queue_dir: pathlib.Path,
-    entries: tuple[dict, ...],
-) -> None:
-    """Write a state.jsonl file to queue_dir with the given entries."""
-    lines = [json.dumps(e) for e in entries]
-    (queue_dir / "state.jsonl").write_text("\n".join(lines) + "\n" if lines else "")
-
-
 @pytest.mark.ai_generated
 def test_clean_unsubmitted_capsules_removes_queued_directories(tmp_path: pathlib.Path) -> None:
     """clean_unsubmitted_capsules removes capsule dirs that are queued (code, no logs, no output)."""
@@ -1307,24 +1297,6 @@ def test_clean_unsubmitted_capsules_removes_queued_directories(tmp_path: pathlib
 
     queued_dir = _make_full_attempt_dir(
         dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
-    )
-    _make_state_jsonl(
-        queue_dir=queue_dir,
-        entries=(
-            {
-                "dandiset_id": "000001",
-                "subject": "mouse01",
-                "session": None,
-                "pipeline": "aind+ephys",
-                "version": "v1.0",
-                "params": "abc1234",
-                "config": "def5678",
-                "attempt": 1,
-                "has_code": True,
-                "has_output": False,
-                "has_logs": False,
-            },
-        ),
     )
 
     removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
@@ -1352,24 +1324,6 @@ def test_clean_unsubmitted_capsules_skips_entries_with_output(tmp_path: pathlib.
         with_code=True,
         with_output=True,
     )
-    _make_state_jsonl(
-        queue_dir=queue_dir,
-        entries=(
-            {
-                "dandiset_id": "000001",
-                "subject": "mouse01",
-                "session": None,
-                "pipeline": "aind+ephys",
-                "version": "v1.0",
-                "params": "abc1234",
-                "config": "def5678",
-                "attempt": 1,
-                "has_code": True,
-                "has_output": True,
-                "has_logs": False,
-            },
-        ),
-    )
 
     removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
 
@@ -1396,29 +1350,39 @@ def test_clean_unsubmitted_capsules_skips_entries_with_logs(tmp_path: pathlib.Pa
         with_code=True,
         with_logs=True,
     )
-    _make_state_jsonl(
-        queue_dir=queue_dir,
-        entries=(
-            {
-                "dandiset_id": "000001",
-                "subject": "mouse01",
-                "session": None,
-                "pipeline": "aind+ephys",
-                "version": "v1.0",
-                "params": "abc1234",
-                "config": "def5678",
-                "attempt": 1,
-                "has_code": True,
-                "has_output": False,
-                "has_logs": True,
-            },
-        ),
-    )
 
     removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
 
     assert removed == []
     assert failed_dir.exists()
+
+
+@pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_removes_when_logs_dir_has_only_dataset_description(
+    tmp_path: pathlib.Path,
+) -> None:
+    """clean_unsubmitted_capsules removes a capsule whose logs/ dir contains only dataset_description.json.
+
+    When prepare_job uploads an empty logs/ directory to DANDI, a dataset_description.json
+    metadata file may be added inside it.  That file must not be treated as evidence of
+    actual job logs, so the capsule should still qualify for cleaning.
+    """
+    dandiset_dir = tmp_path / "dandiset"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+
+    queued_dir = _make_full_attempt_dir(
+        dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
+    )
+    # Simulate a logs/ directory that contains only a dataset_description.json metadata file.
+    logs_dir = queued_dir / "logs"
+    logs_dir.mkdir()
+    (logs_dir / "dataset_description.json").write_text("{}\n")
+
+    removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+
+    assert removed == [queued_dir]
+    assert not queued_dir.exists()
 
 
 @pytest.mark.ai_generated
@@ -1431,24 +1395,7 @@ def test_clean_unsubmitted_capsules_skips_last_submitted_entries(tmp_path: pathl
     queued_dir = _make_full_attempt_dir(
         dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
     )
-    _make_state_jsonl(
-        queue_dir=queue_dir,
-        entries=(
-            {
-                "dandiset_id": "000001",
-                "subject": "mouse01",
-                "session": None,
-                "pipeline": "aind+ephys",
-                "version": "v1.0",
-                "params": "abc1234",
-                "config": "def5678",
-                "attempt": 1,
-                "has_code": True,
-                "has_output": False,
-                "has_logs": False,
-            },
-        ),
-    )
+
     submitted_entry = {
         "dandiset_id": "000001",
         "subject": "mouse01",
@@ -1498,24 +1445,6 @@ def test_clean_unsubmitted_capsules_handles_session_in_path(tmp_path: pathlib.Pa
         session="ses001",
         with_code=True,
     )
-    _make_state_jsonl(
-        queue_dir=queue_dir,
-        entries=(
-            {
-                "dandiset_id": "000001",
-                "subject": "mouse01",
-                "session": "ses001",
-                "pipeline": "aind+ephys",
-                "version": "v1.0",
-                "params": "abc1234",
-                "config": "def5678",
-                "attempt": 1,
-                "has_code": True,
-                "has_output": False,
-                "has_logs": False,
-            },
-        ),
-    )
 
     removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
 
@@ -1537,37 +1466,6 @@ def test_clean_unsubmitted_capsules_removes_only_queued_not_submitted(tmp_path: 
     # Submitted (in last_submitted.jsonl – should be kept)
     submitted_dir = _make_full_attempt_dir(
         dandiset_dir, "000002", "mouse02", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
-    )
-    _make_state_jsonl(
-        queue_dir=queue_dir,
-        entries=(
-            {
-                "dandiset_id": "000001",
-                "subject": "mouse01",
-                "session": None,
-                "pipeline": "aind+ephys",
-                "version": "v1.0",
-                "params": "abc1234",
-                "config": "def5678",
-                "attempt": 1,
-                "has_code": True,
-                "has_output": False,
-                "has_logs": False,
-            },
-            {
-                "dandiset_id": "000002",
-                "subject": "mouse02",
-                "session": None,
-                "pipeline": "aind+ephys",
-                "version": "v1.0",
-                "params": "abc1234",
-                "config": "def5678",
-                "attempt": 1,
-                "has_code": True,
-                "has_output": False,
-                "has_logs": False,
-            },
-        ),
     )
 
     submitted_entry = {

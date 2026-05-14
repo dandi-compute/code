@@ -276,34 +276,34 @@ def clean_unsubmitted_capsules(
     """
     Remove all queued (unsubmitted) capsule directories from the dandiset tree.
 
-    A capsule is considered *queued* (prepared but not yet submitted) when
-    ``state.jsonl`` records ``has_code=True``, ``has_logs=False``, and
-    ``has_output=False`` for its entry, **and** the entry is not present in
-    ``last_submitted.jsonl`` (which tracks recently submitted in-flight jobs).
+    A capsule is considered *queued* (prepared but not yet submitted) when its
+    attempt directory has a ``code/`` subdirectory but neither a non-empty
+    ``logs/`` subdirectory nor a ``derivatives/`` subdirectory, **and** the
+    entry is not present in ``last_submitted.jsonl`` (which tracks recently
+    submitted in-flight jobs).
 
-    The function reads ``state.jsonl`` from *queue_directory* as the
-    authoritative source of capsule state, then deletes each matching attempt
-    directory tree from *dandiset_directory*.
+    The function scans *dandiset_directory* for all attempt directories using
+    the local filesystem as the ground truth, filters to the queued subset,
+    then deletes each matching attempt directory tree.
 
     Parameters
     ----------
     dandiset_directory : pathlib.Path
-        Path to a local clone of the dandiset repository.  Attempt directories
-        are deleted from ``{dandiset_directory}/derivatives/dandiset-*/``.
+        Path to a local clone of the dandiset repository.  The function scans
+        ``{dandiset_directory}/derivatives/dandiset-*/`` to locate attempt
+        directories.
     queue_directory : pathlib.Path
-        Path to the queue root directory.  ``state.jsonl`` is read from here
-        as the source of truth for capsule state, and ``last_submitted.jsonl``
-        is read to exclude in-flight submissions from deletion.
+        Path to the queue root directory.  ``last_submitted.jsonl`` is read
+        from here to exclude in-flight submissions from deletion.
 
     Returns
     -------
     list[pathlib.Path]
         List of attempt directory paths that were deleted.
     """
-    state_file = queue_directory / "state.jsonl"
-    if not state_file.exists():
-        return []
-    state_entries = [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
+    from ..dandiset import scan_dandiset_directory
+
+    state_entries = scan_dandiset_directory(dandiset_directory=dandiset_directory)
 
     # Build the set of identities that have been recently submitted (in-flight).
     last_submitted_file = queue_directory / "last_submitted.jsonl"
