@@ -1144,8 +1144,6 @@ def test_prepare_queue_passes_optional_args_through(tmp_path: pathlib.Path) -> N
 
     fake_pipeline_dir = tmp_path / "pipeline"
     fake_pipeline_dir.mkdir()
-    fake_config = tmp_path / "test.config"
-    fake_config.write_text("config")
 
     qualifying_ids = ["asset-bbb"]
 
@@ -1158,14 +1156,12 @@ def test_prepare_queue_passes_optional_args_through(tmp_path: pathlib.Path) -> N
             cwd=queue_dir,
             dandiset_directory=dandiset_dir,
             pipeline_directory=fake_pipeline_dir,
-            config_file_path=fake_config,
             config_key="mit+engaging+revision-1",
         )
 
     assert mock_prepare.call_count == 1
     call_kwargs = mock_prepare.call_args.kwargs
     assert call_kwargs["pipeline_directory"] == fake_pipeline_dir
-    assert call_kwargs["config_file_path"] == fake_config
     assert call_kwargs["config_key"] == "mit+engaging+revision-1"
 
 
@@ -1244,7 +1240,6 @@ def test_cli_prepare_test_calls_helper(tmp_path: pathlib.Path) -> None:
     mock_prepare_test_queue.assert_called_once_with(
         cwd=queue_dir,
         pipeline_directory=None,
-        config_file_path=None,
         config_key="default",
     )
 
@@ -1269,7 +1264,6 @@ def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
     mock_prepare_test_queue.assert_called_once_with(
         cwd=queue_dir,
         pipeline_directory=None,
-        config_file_path=None,
         config_key="mit+engaging+revision-1",
     )
 

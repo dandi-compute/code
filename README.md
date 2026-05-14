@@ -51,4 +51,4 @@ Non-code files for the AIND ephys pipeline are organized under the following sub
   To add a new config file:
   1. Add the `[environment].config` file to this directory.
   2. Register it in `registries/registered_configs.json` by adding an entry with the short name as the key, and its relative `path` and full MD5 `md5` as values.
-  Use `--config-key` / `config_key` to select a registered config (default: `default`), or pass a path explicitly via `--config` / `config_file_path` to override.
+  Use `--config-key` / `config_key` to select a registered config (default: `default`).
