@@ -224,7 +224,8 @@ def _queue_clean_command(
     if removed:
         for path in removed:
             _styled_echo(text=f"  Removed: {path}", color="yellow")
-        _styled_echo(text=f"\nCleaned {len(removed)} unsubmitted capsule(s).", color="green")
+        noun = "capsule" if len(removed) == 1 else "capsules"
+        _styled_echo(text=f"\nCleaned {len(removed)} unsubmitted {noun}.", color="green")
     else:
         _styled_echo(text="\nNo unsubmitted capsules found.", color="yellow")
 
