@@ -256,6 +256,35 @@ def _determine_running() -> bool:
     return False
 
 
+def _entry_identity(entry: dict) -> tuple:
+    """Return a stable tuple key for matching queue/state/last-submitted entries."""
+    return (
+        entry.get("dandiset_id"),
+        entry.get("subject"),
+        entry.get("session"),
+        entry.get("pipeline"),
+        entry.get("version"),
+        entry.get("params"),
+        entry.get("config"),
+        entry.get("attempt"),
+    )
+
+
+def _prune_last_submitted(*, cwd: pathlib.Path, state_entries: list[dict]) -> None:
+    """Remove last_submitted entries that now have logs or output in state."""
+    last_submitted_file = cwd / "last_submitted.jsonl"
+    if not last_submitted_file.exists():
+        return
+
+    entries_to_prune = {_entry_identity(e) for e in state_entries if e.get("has_output") or e.get("has_logs")}
+
+    last_submitted_entries = [
+        json.loads(line.strip()) for line in last_submitted_file.read_text().splitlines() if line.strip()
+    ]
+    filtered = [entry for entry in last_submitted_entries if _entry_identity(entry) not in entries_to_prune]
+    last_submitted_file.write_text("".join(json.dumps(entry) + "\n" for entry in filtered))
+
+
 def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool:
     """
     Submit the next pending entry from ``waiting.jsonl``.
@@ -266,9 +295,11 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     or empty, :func:`refresh_waiting_queue` is called once to attempt to repopulate it
     from ``state.jsonl``.  If still empty after that, returns ``False``.
 
-    The first entry that is not blocked by the ``max_fail_per_dandiset`` limit
-    is submitted and then removed from ``waiting.jsonl``; the entry is
-    simultaneously appended to ``submitted.jsonl`` for auditing purposes.
+    The first entry from ``waiting.jsonl`` is submitted and then removed from
+    ``waiting.jsonl``; the entry is simultaneously appended to
+    ``last_submitted.jsonl``. The waiting queue is produced upstream by
+    :func:`refresh_waiting_queue`; this function applies no additional
+    submission gating beyond requiring the submit script to exist.
 
     Parameters
     ----------
@@ -276,8 +307,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
         Path to the queue root directory.
     dandiset_directory : pathlib.Path
         Path to a local clone of the 001697 dandiset repository.  Used to
-        locate prepared submission scripts and to count failure directories for
-        ``max_fail_per_dandiset`` enforcement.
+        locate prepared submission scripts.
 
     Returns
     -------
@@ -304,37 +334,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
         print(f"No pending entries in `{waiting_file}`")
         return False
 
-    queue_config = json.loads((cwd / "queue_config.json").read_text())
-
-    # Find the first entry not blocked by max_fail_per_dandiset
-    entry = None
-    entry_idx = None
-    for idx, candidate in enumerate(waiting_entries):
-        pipeline = candidate.get("pipeline", "")
-        version = candidate.get("version", "")
-        if not pipeline or not version:
-            continue
-
-        pipeline_cfg = queue_config.get("pipelines", {}).get(pipeline)
-        if pipeline_cfg is None:
-            continue
-
-        max_fail = pipeline_cfg.get("max_fail_per_dandiset")
-        if max_fail is not None:
-            failure_count = _count_dandiset_failures(
-                dandiset_directory=dandiset_directory,
-                version=version,
-            )
-            if failure_count >= max_fail:
-                continue
-
-        entry = candidate
-        entry_idx = idx
-        break
-
-    if entry is None:
-        print(f"No submittable entries in `{waiting_file}`")
-        return False
+    entry = waiting_entries[0]
 
     dandiset_id = entry["dandiset_id"]
     subject = entry["subject"]
@@ -368,12 +368,12 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
         raise RuntimeError(message)
 
     # Pop the submitted entry from waiting.jsonl.
-    waiting_entries.pop(entry_idx)
+    waiting_entries.pop(0)
     waiting_file.write_text("".join(json.dumps(e) + "\n" for e in waiting_entries))
 
-    # Append to submitted.jsonl for auditing.
-    submitted_file = cwd / "submitted.jsonl"
-    with submitted_file.open("a") as f:
+    # Append to last_submitted.jsonl.
+    last_submitted_file = cwd / "last_submitted.jsonl"
+    with last_submitted_file.open("a") as f:
         f.write(json.dumps(entry) + "\n")
 
     return True
@@ -440,6 +440,7 @@ def refresh_waiting_queue(*, cwd: pathlib.Path, limit: int | None = None) -> Non
     ordered = order_queue(state_entries=state_entries, queue_config=queue_config, limit=limit)
     waiting_file = cwd / "waiting.jsonl"
     waiting_file.write_text("".join(json.dumps(e) + "\n" for e in ordered))
+    _prune_last_submitted(cwd=cwd, state_entries=state_entries)
 
 
 def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
