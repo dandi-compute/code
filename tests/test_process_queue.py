@@ -851,6 +851,19 @@ def test_order_queue_returns_ordered_pending_entries_only() -> None:
     assert ordered[0]["dandiset_id"] == "000001"
 
 
+@pytest.mark.ai_generated
+def test_order_queue_respects_limit_parameter() -> None:
+    """order_queue truncates ordered entries when limit is provided."""
+    state_entries = [
+        _make_state_entry(dandiset_id=f"00000{i}", has_code=True, has_output=False, has_logs=False) for i in range(1, 6)
+    ]
+    queue_config = {"pipelines": {"test": {"version_priority": ["v1.0"], "params_priority": ["default"]}}}
+
+    ordered = order_queue(state_entries=state_entries, queue_config=queue_config, limit=2)
+
+    assert len(ordered) == 2
+
+
 # ---------------------------------------------------------------------------
 # Tests for _count_dandiset_failures
 # ---------------------------------------------------------------------------
