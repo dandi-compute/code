@@ -1,5 +1,5 @@
 """
-Unit tests for scan_dandiset_directory and write_scan_jsonl
+Unit tests for scan_dandiset_directory and state/waiting queue file writing.
 (dandi_compute_code.dandiset).
 """
 
@@ -10,7 +10,7 @@ import pytest
 from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
-from dandi_compute_code.dandiset import scan_dandiset_directory, write_scan_jsonl
+from dandi_compute_code.dandiset import scan_dandiset_directory, write_state_and_waiting_jsonl
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -280,35 +280,57 @@ def test_scan_config_with_underscores(tmp_path: pathlib.Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests for write_scan_jsonl
+# Tests for write_state_and_waiting_jsonl
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.ai_generated
-def test_write_scan_jsonl_creates_valid_file(tmp_path: pathlib.Path) -> None:
-    """write_scan_jsonl produces a readable JSONL file with correct content."""
+def test_write_state_and_waiting_jsonl_creates_valid_files(tmp_path: pathlib.Path) -> None:
+    """write_state_and_waiting_jsonl writes state.jsonl and waiting.jsonl."""
     _make_attempt_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1)
-    out = tmp_path / "scan.jsonl"
-    write_scan_jsonl(dandiset_directory=tmp_path, output_file=out)
-    assert out.exists()
-    lines = [line for line in out.read_text().splitlines() if line.strip()]
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(
+        json.dumps(
+            {
+                "pipelines": {
+                    "aind+ephys": {
+                        "version_priority": ["v1.0"],
+                        "params_priority": ["abc1234"],
+                    }
+                }
+            }
+        )
+    )
+    write_state_and_waiting_jsonl(dandiset_directory=tmp_path, queue_directory=queue_dir)
+    state_file = queue_dir / "state.jsonl"
+    waiting_file = queue_dir / "waiting.jsonl"
+    assert state_file.exists()
+    assert waiting_file.exists()
+    lines = [line for line in state_file.read_text().splitlines() if line.strip()]
     assert len(lines) == 1
     record = json.loads(lines[0])
     assert record["dandiset_id"] == "000001"
 
 
 @pytest.mark.ai_generated
-def test_write_scan_jsonl_empty_when_no_attempts(tmp_path: pathlib.Path) -> None:
-    """write_scan_jsonl writes an empty file when there are no attempts."""
-    out = tmp_path / "scan.jsonl"
-    write_scan_jsonl(dandiset_directory=tmp_path, output_file=out)
-    assert out.exists()
-    assert out.read_text() == ""
+def test_write_state_and_waiting_jsonl_empty_when_no_attempts(tmp_path: pathlib.Path) -> None:
+    """write_state_and_waiting_jsonl writes empty state and waiting files with no attempts."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
+    write_state_and_waiting_jsonl(dandiset_directory=tmp_path, queue_directory=queue_dir)
+    state_file = queue_dir / "state.jsonl"
+    waiting_file = queue_dir / "waiting.jsonl"
+    assert state_file.exists()
+    assert waiting_file.exists()
+    assert state_file.read_text() == ""
+    assert waiting_file.read_text() == ""
 
 
 @pytest.mark.ai_generated
-def test_write_scan_jsonl_state_file_also_writes_waiting_jsonl(tmp_path: pathlib.Path) -> None:
-    """Writing state.jsonl in a queue directory also writes waiting.jsonl."""
+def test_write_state_and_waiting_jsonl_includes_only_pending_in_waiting(tmp_path: pathlib.Path) -> None:
+    """waiting.jsonl contains only pending entries from the newly written state."""
     _make_attempt_dir(tmp_path, "000001", "mouse01", "test-pipeline", "v1.0", "abc1234", "def5678", 1, with_code=True)
     _make_attempt_dir(
         tmp_path,
@@ -338,8 +360,7 @@ def test_write_scan_jsonl_state_file_also_writes_waiting_jsonl(tmp_path: pathlib
         )
     )
 
-    state_file = queue_dir / "state.jsonl"
-    write_scan_jsonl(dandiset_directory=tmp_path, output_file=state_file)
+    write_state_and_waiting_jsonl(dandiset_directory=tmp_path, queue_directory=queue_dir)
 
     waiting_file = queue_dir / "waiting.jsonl"
     assert waiting_file.exists()

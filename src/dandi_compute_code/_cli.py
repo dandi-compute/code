@@ -11,7 +11,7 @@ from .dandiset import (
     delete_dandiset_version,
     scan_dandiset_directory,
     scan_version_directories,
-    write_scan_jsonl,
+    write_state_and_waiting_jsonl,
 )
 from .queue import order_queue, prepare_queue, process_queue
 
@@ -315,7 +315,16 @@ def _dandiset_scan_command(
         for record in records:
             sys.stdout.write(json.dumps(record) + "\n")
     else:
-        write_scan_jsonl(dandiset_directory=dandiset_directory, output_file=output_file)
+        if output_file.name == "state.jsonl":
+            write_state_and_waiting_jsonl(
+                dandiset_directory=dandiset_directory,
+                queue_directory=output_file.parent,
+            )
+        else:
+            records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
+            with output_file.open(mode="w") as file_stream:
+                for record in records:
+                    file_stream.write(json.dumps(record) + "\n")
         _styled_echo(text=f"\nScan complete! Output written to: {output_file}", color="green")
 
 
