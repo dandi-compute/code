@@ -47,8 +47,6 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     if version_or_pipeline_dir.name.startswith("version-"):
         version = version_or_pipeline_dir.name[len("version-") :]
         pipeline_dir = version_or_pipeline_dir.parent
-        if version_from_name and version_from_name != version:
-            return None
     elif version_or_pipeline_dir.name.startswith("pipeline-"):
         if not version_from_name:
             return None

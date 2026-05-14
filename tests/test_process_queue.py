@@ -126,7 +126,7 @@ def _make_state_entry(
         ("ses01", pathlib.Path("derivatives/dandiset-000001/sub-mouse01/ses-ses01/pipeline-test")),
     ],
 )
-def test_attempt_dir_candidates_returns_flat_and_legacy_paths(
+def test_attempt_dir_candidates_constructs_both_layouts(
     session: str | None,
     relative_prefix: pathlib.Path,
     tmp_path: pathlib.Path,
