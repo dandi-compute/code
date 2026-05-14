@@ -37,6 +37,7 @@ cd $RESULTS_PATH
 mv nwb/ ../derivatives/
 mv visualization_output.json visualization/
 mv visualization/ ..
+mv postprocessed/ ..
 mv nextflow/* ../logs/
 cd ..
 rm -rf $RESULTS_PATH  # Clean up intermediate values
