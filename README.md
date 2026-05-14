@@ -24,6 +24,12 @@ To test automatically on the example asset:
 dandicompute aind prepare --id 048d1ee9-83b7-491f-8f02-1ca615b1d455 --submit
 ```
 
+To clean unsubmitted job capsules:
+
+```bash
+dandicompute queue clean --dandiset-directory ./dandi/001697/ --queue-directory ./queue/
+```
+
 
 
 ## Contributing Non-Code Files
