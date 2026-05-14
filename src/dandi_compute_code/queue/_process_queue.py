@@ -257,11 +257,10 @@ def _determine_running() -> bool:
 
 
 def _entry_identity(entry: dict) -> tuple:
-    session = entry.get("session")
     return (
         entry.get("dandiset_id"),
         entry.get("subject"),
-        session if session is not None else "",
+        entry.get("session"),
         entry.get("pipeline"),
         entry.get("version"),
         entry.get("params"),
@@ -344,7 +343,11 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
             version=version,
         )
         if failure_count >= max_fail:
-            print(f"Skipping submission for first waiting entry due to max_fail_per_dandiset in `{waiting_file}`")
+            dandiset_id = entry.get("dandiset_id", "<unknown>")
+            print(
+                f"Skipping submission for first waiting entry {dandiset_id}: "
+                f"failure count ({failure_count}) has reached max_fail_per_dandiset ({max_fail}) in `{waiting_file}`"
+            )
             return False
 
     dandiset_id = entry["dandiset_id"]
