@@ -169,3 +169,8 @@ def write_scan_jsonl(dandiset_directory: pathlib.Path, output_file: pathlib.Path
     with output_file.open(mode="w") as file_stream:
         for record in records:
             file_stream.write(json.dumps(record) + "\n")
+
+    if output_file.name == "state.jsonl" and (output_file.parent / "queue_config.json").exists():
+        from dandi_compute_code.queue import order_queue
+
+        order_queue(cwd=output_file.parent)
