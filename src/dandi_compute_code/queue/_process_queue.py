@@ -297,9 +297,9 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
 
     The first entry from ``waiting.jsonl`` is submitted and then removed from
     ``waiting.jsonl``; the entry is simultaneously appended to
-    ``last_submitted.jsonl``. Submission gating based on
-    ``max_fail_per_dandiset`` is intentionally handled upstream when
-    generating ``waiting.jsonl``.
+    ``last_submitted.jsonl``. The waiting queue is produced upstream by
+    :func:`refresh_waiting_queue`; this function applies no additional
+    submission gating beyond requiring the submit script to exist.
 
     Parameters
     ----------
