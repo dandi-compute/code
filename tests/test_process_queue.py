@@ -8,6 +8,7 @@ than touching the network or a SLURM cluster.
 
 import gzip
 import json
+import os
 import pathlib
 from unittest import mock
 
@@ -1289,6 +1290,15 @@ def _make_full_attempt_dir(
 
 
 @pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_raises_without_dandi_api_key(tmp_path: pathlib.Path) -> None:
+    """clean_unsubmitted_capsules raises RuntimeError when DANDI_API_KEY is not set."""
+    env_without_key = {k: v for k, v in os.environ.items() if k != "DANDI_API_KEY"}
+    with mock.patch.dict(os.environ, env_without_key, clear=True):
+        with pytest.raises(RuntimeError, match="DANDI_API_KEY"):
+            clean_unsubmitted_capsules(dandiset_directory=tmp_path, queue_directory=tmp_path)
+
+
+@pytest.mark.ai_generated
 def test_clean_unsubmitted_capsules_removes_queued_directories(tmp_path: pathlib.Path) -> None:
     """clean_unsubmitted_capsules removes capsule dirs that are queued (code, no logs, no output)."""
     dandiset_dir = tmp_path / "dandiset"
@@ -1299,10 +1309,16 @@ def test_clean_unsubmitted_capsules_removes_queued_directories(tmp_path: pathlib
         dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
     )
 
-    removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    with mock.patch("subprocess.run") as mock_run, mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
 
     assert removed == [queued_dir]
     assert not queued_dir.exists()
+    mock_run.assert_called_once_with(
+        ["dandi", "delete", str(queued_dir)],
+        input=b"y\n",
+        check=True,
+    )
 
 
 @pytest.mark.ai_generated
@@ -1325,10 +1341,12 @@ def test_clean_unsubmitted_capsules_skips_entries_with_output(tmp_path: pathlib.
         with_output=True,
     )
 
-    removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    with mock.patch("subprocess.run") as mock_run, mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
 
     assert removed == []
     assert completed_dir.exists()
+    mock_run.assert_not_called()
 
 
 @pytest.mark.ai_generated
@@ -1351,10 +1369,12 @@ def test_clean_unsubmitted_capsules_skips_entries_with_logs(tmp_path: pathlib.Pa
         with_logs=True,
     )
 
-    removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    with mock.patch("subprocess.run") as mock_run, mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
 
     assert removed == []
     assert failed_dir.exists()
+    mock_run.assert_not_called()
 
 
 @pytest.mark.ai_generated
@@ -1379,7 +1399,8 @@ def test_clean_unsubmitted_capsules_ignores_dataset_description_in_logs(
     logs_dir.mkdir()
     (logs_dir / "dataset_description.json").write_text("{}\n")
 
-    removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
 
     assert removed == [queued_dir]
     assert not queued_dir.exists()
@@ -1408,10 +1429,12 @@ def test_clean_unsubmitted_capsules_skips_last_submitted_entries(tmp_path: pathl
     }
     (queue_dir / "last_submitted.jsonl").write_text(json.dumps(submitted_entry) + "\n")
 
-    removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    with mock.patch("subprocess.run") as mock_run, mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
 
     assert removed == []
     assert queued_dir.exists()
+    mock_run.assert_not_called()
 
 
 @pytest.mark.ai_generated
@@ -1421,7 +1444,8 @@ def test_clean_unsubmitted_capsules_returns_empty_list_when_nothing_queued(tmp_p
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
 
-    removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    with mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
 
     assert removed == []
 
@@ -1446,7 +1470,8 @@ def test_clean_unsubmitted_capsules_handles_session_in_path(tmp_path: pathlib.Pa
         with_code=True,
     )
 
-    removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
 
     assert removed == [queued_dir]
     assert not queued_dir.exists()
@@ -1480,7 +1505,8 @@ def test_clean_unsubmitted_capsules_removes_only_queued_not_submitted(tmp_path: 
     }
     (queue_dir / "last_submitted.jsonl").write_text(json.dumps(submitted_entry) + "\n")
 
-    removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
 
     assert removed == [queued_dir]
     assert not queued_dir.exists()

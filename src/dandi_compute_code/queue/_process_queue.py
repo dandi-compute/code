@@ -1,5 +1,6 @@
 import gzip
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -284,7 +285,8 @@ def clean_unsubmitted_capsules(
 
     The function scans *dandiset_directory* for all attempt directories using
     the local filesystem as the ground truth, filters to the queued subset,
-    then deletes each matching attempt directory tree.
+    then deletes each matching attempt directory tree from the DANDI archive
+    (via ``dandi delete``) and from the local filesystem.
 
     Parameters
     ----------
@@ -301,6 +303,10 @@ def clean_unsubmitted_capsules(
     list[pathlib.Path]
         List of attempt directory paths that were deleted.
     """
+    if not os.environ.get("DANDI_API_KEY", "").strip():
+        message = "`DANDI_API_KEY` environment variable is not set or is blank."
+        raise RuntimeError(message)
+
     from ..dandiset import scan_dandiset_directory
 
     state_entries = scan_dandiset_directory(dandiset_directory=dandiset_directory)
@@ -347,6 +353,11 @@ def clean_unsubmitted_capsules(
         )
 
         if attempt_dir.is_dir():
+            subprocess.run(
+                ["dandi", "delete", str(attempt_dir)],
+                input=b"y\n",
+                check=True,
+            )
             shutil.rmtree(attempt_dir)
             removed.append(attempt_dir)
 
