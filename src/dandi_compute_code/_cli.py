@@ -69,11 +69,11 @@ def _aind_group() -> None:
 )
 @click.option(
     "--config",
-    "config_file_path",
-    help="Path to the configuration file.",
+    "config_key",
+    help="Registered configuration key to use.",
     required=False,
-    type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
-    default=None,
+    type=str,
+    default="default",
 )
 @click.option(
     "--pipeline",
@@ -117,7 +117,7 @@ def _aind_prepare_command(
     content_id: str | None = None,
     dandiset_id: str | None = None,
     dandiset_path: pathlib.Path | None = None,
-    config_file_path: pathlib.Path | None = None,
+    config_key: str = "default",
     pipeline_directory: pathlib.Path | None = None,
     parameters_key: str = "default",
     submit: bool = False,
@@ -131,7 +131,7 @@ def _aind_prepare_command(
         content_id=content_id,
         dandiset_id=dandiset_id,
         dandiset_path=dandiset_path,
-        config_file_path=config_file_path,
+        config_key=config_key,
         pipeline_directory=pipeline_directory,
         pipeline_version=pipeline_version,
         parameters_key=parameters_key,
@@ -256,16 +256,16 @@ def _prepare_group() -> None:
 )
 @click.option(
     "--config",
-    "config_file_path",
-    help="Path to the configuration file.",
+    "config_key",
+    help="Registered configuration key to use.",
     required=False,
-    type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
-    default=None,
+    type=str,
+    default="default",
 )
 def _prepare_test_command(
     directory: pathlib.Path | None = None,
     pipeline_directory: pathlib.Path | None = None,
-    config_file_path: pathlib.Path | None = None,
+    config_key: str = "default",
 ) -> None:
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
@@ -273,7 +273,7 @@ def _prepare_test_command(
     prepare_test_queue(
         cwd=cwd,
         pipeline_directory=pipeline_directory,
-        config_file_path=config_file_path,
+        config_key=config_key,
     )
 
 
@@ -329,11 +329,11 @@ def _queue_process_command(
 )
 @click.option(
     "--config",
-    "config_file_path",
-    help="Path to the configuration file.",
+    "config_key",
+    help="Registered configuration key to use.",
     required=False,
-    type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
-    default=None,
+    type=str,
+    default="default",
 )
 @click.option(
     "--limit",
@@ -347,7 +347,7 @@ def _queue_prepare_command(
     directory: pathlib.Path | None = None,
     dandiset_directory: pathlib.Path = pathlib.Path("."),
     pipeline_directory: pathlib.Path | None = None,
-    config_file_path: pathlib.Path | None = None,
+    config_key: str = "default",
     limit: int | None = None,
 ) -> None:
     if "DANDI_API_KEY" not in os.environ:
@@ -357,7 +357,7 @@ def _queue_prepare_command(
         cwd=cwd,
         dandiset_directory=dandiset_directory,
         pipeline_directory=pipeline_directory,
-        config_file_path=config_file_path,
+        config_key=config_key,
         limit=limit,
     )
 

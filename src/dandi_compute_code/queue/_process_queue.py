@@ -565,7 +565,7 @@ def prepare_test_queue(
     *,
     cwd: pathlib.Path,
     pipeline_directory: pathlib.Path | None = None,
-    config_file_path: pathlib.Path | None = None,
+    config_key: str = "default",
 ) -> None:
     """
     Prepare a new test run for each configured aind+ephys version/params pair.
@@ -592,7 +592,7 @@ def prepare_test_queue(
                 parameters_key=params,
                 pipeline_version=submission_version,
                 pipeline_directory=pipeline_directory,
-                config_file_path=config_file_path,
+                config_key=config_key,
                 silent=True,
             )
 
@@ -602,7 +602,7 @@ def prepare_queue(
     cwd: pathlib.Path,
     dandiset_directory: pathlib.Path,
     pipeline_directory: pathlib.Path | None = None,
-    config_file_path: pathlib.Path | None = None,
+    config_key: str = "default",
     limit: int | None = None,
 ) -> None:
     """
@@ -625,8 +625,8 @@ def prepare_queue(
     pipeline_directory : pathlib.Path, optional
         Local path to the AIND pipeline repository.  Passed directly to
         :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job`.
-    config_file_path : pathlib.Path, optional
-        Path to the job configuration file.  Passed directly to
+    config_key : str
+        Key for a registered job configuration. Passed directly to
         :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job`.
     limit : int, optional
         If provided, stop after preparing *limit* assets in total (across all
@@ -680,7 +680,7 @@ def prepare_queue(
                         parameters_key=params,
                         pipeline_version=submission_version,
                         pipeline_directory=pipeline_directory,
-                        config_file_path=config_file_path,
+                        config_key=config_key,
                         silent=True,
                     )
                     prepared_count += 1
