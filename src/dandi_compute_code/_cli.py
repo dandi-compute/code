@@ -13,7 +13,7 @@ from .dandiset import (
     scan_version_directories,
     write_scan_jsonl,
 )
-from .queue import order_queue, prepare_queue, process_queue
+from .queue import order_queue, prepare_queue, prepare_test_queue, process_queue
 
 
 # dandicompute
@@ -173,6 +173,53 @@ def _aind_submit_command(script_file_path: pathlib.Path) -> None:
 @_dandicompute_group.group(name="queue")
 def _queue_group() -> None:
     pass
+
+
+# dandicompute prepare
+@_dandicompute_group.group(name="prepare")
+def _prepare_group() -> None:
+    pass
+
+
+# dandicompute prepare test [OPTIONS]
+@_prepare_group.command(name="test")
+@click.option(
+    "--queue-directory",
+    "directory",
+    help="Path to the queue root directory containing queue_config.json. Defaults to the current working directory.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--pipeline",
+    "pipeline_directory",
+    help="Local path to the AIND pipeline repository.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--config",
+    "config_file_path",
+    help="Path to the configuration file.",
+    required=False,
+    type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+def _prepare_test_command(
+    directory: pathlib.Path | None = None,
+    pipeline_directory: pathlib.Path | None = None,
+    config_file_path: pathlib.Path | None = None,
+) -> None:
+    if "DANDI_API_KEY" not in os.environ:
+        raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
+    cwd = directory if directory is not None else pathlib.Path.cwd()
+    prepare_test_queue(
+        cwd=cwd,
+        pipeline_directory=pipeline_directory,
+        config_file_path=config_file_path,
+    )
 
 
 # dandicompute queue order [OPTIONS]
