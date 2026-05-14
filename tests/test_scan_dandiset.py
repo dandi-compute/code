@@ -1,5 +1,5 @@
 """
-Unit tests for scan_dandiset_directory and state/waiting queue file writing.
+Unit tests for scan_dandiset_directory and writing state and waiting queue files.
 (dandi_compute_code.dandiset).
 """
 
@@ -404,3 +404,17 @@ def test_cli_dandiset_scan_to_file(tmp_path: pathlib.Path) -> None:
     assert len(lines) == 1
     record = json.loads(lines[0])
     assert record["dandiset_id"] == "000001"
+
+
+@pytest.mark.ai_generated
+def test_cli_dandiset_scan_state_output_requires_queue_config(tmp_path: pathlib.Path) -> None:
+    """CLI returns a clear error when writing state.jsonl outside a queue directory."""
+    _make_attempt_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1)
+    out = tmp_path / "state.jsonl"
+    runner = CliRunner()
+    result = runner.invoke(
+        _dandicompute_group,
+        ["dandiset", "scan", "--directory", str(tmp_path), "--output", str(out)],
+    )
+    assert result.exit_code != 0
+    assert "ensure queue_config.json exists in the parent directory" in result.output

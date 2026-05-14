@@ -316,10 +316,16 @@ def _dandiset_scan_command(
             sys.stdout.write(json.dumps(record) + "\n")
     else:
         if output_file.name == "state.jsonl":
-            write_state_and_waiting_jsonl(
-                dandiset_directory=dandiset_directory,
-                queue_directory=output_file.parent,
-            )
+            try:
+                write_state_and_waiting_jsonl(
+                    dandiset_directory=dandiset_directory,
+                    queue_directory=output_file.parent,
+                )
+            except FileNotFoundError as error:
+                message = (
+                    f"{error} When writing to state.jsonl, ensure queue_config.json exists " "in the parent directory."
+                )
+                raise click.ClickException(message) from error
         else:
             records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
             with output_file.open(mode="w") as file_stream:
