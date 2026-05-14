@@ -1,10 +1,14 @@
 {
-  "default": {
-    "path": "default.json",
+  "original": {
+    "path": "name-original.json",
     "md5": "98fd947595f60b65812a4b0ea29b7141"
   },
   "no+motion": {
-    "path": "no_motion.json",
+    "path": "name-no+motion_revision-0.json",
     "md5": "aa073df2761666edbf0bb66cab85ca4c"
-  }
+  },
+  "default": {
+    "path": "name-original.json",
+    "md5": "98fd947595f60b65812a4b0ea29b7141"
+  },
 }
