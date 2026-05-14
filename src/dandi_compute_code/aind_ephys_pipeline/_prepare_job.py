@@ -89,21 +89,21 @@ def prepare_aind_ephys_job(
             f"Registered keys are: {registered_keys}. "
             "To register a new parameters file, add the JSON file to the `params/` directory "
             "and add an entry to `registries/registered_params.json` mapping the short name to its "
-            "relative `path` and full MD5 `checksum`."
+            "relative `path` and full MD5 `md5`."
         )
         raise ValueError(message)
     parameters_file_path = pathlib.Path(__file__).parent / "params" / params_registry[parameters_key]["path"]
-    actual_checksum = hashlib.md5(parameters_file_path.read_bytes()).hexdigest()
-    expected_checksum = params_registry[parameters_key]["checksum"]
-    if actual_checksum != expected_checksum:
+    actual_md5 = hashlib.md5(parameters_file_path.read_bytes()).hexdigest()
+    expected_md5 = params_registry[parameters_key]["md5"]
+    if actual_md5 != expected_md5:
         message = (
-            f"Checksum mismatch for parameters file '{parameters_file_path.name}': "
-            f"expected {expected_checksum!r}, got {actual_checksum!r}. "
-            "The file may have been modified. Update the `checksum` in `registries/registered_params.json` "
+            f"MD5 mismatch for parameters file '{parameters_file_path.name}': "
+            f"expected {expected_md5!r}, got {actual_md5!r}. "
+            "The file may have been modified. Update the `md5` in `registries/registered_params.json` "
             "to reflect the new file contents."
         )
         raise ValueError(message)
-    params_id = actual_checksum[0:7]
+    params_id = actual_md5[0:7]
     config_id = hashlib.md5(config_file_path.read_bytes()).hexdigest()[0:7] if config_file_path else "default"
 
     dandi_compute_dir = pathlib.Path("/orcd/data/dandi/001/dandi-compute")
@@ -156,6 +156,16 @@ def prepare_aind_ephys_job(
         raise ValueError(message)
     pipeline_commit_head = pipeline_commit_hash[0:7]
 
+    dandi_compute_code_commit_hash = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"],
+        cwd=dandi_compute_code_source_dir,
+        text=True,
+    ).strip()
+    if not re.match(r"^[0-9a-f]{40}$", dandi_compute_code_commit_hash):
+        message = f"Unexpected commit hash format: {dandi_compute_code_commit_hash}"
+        raise ValueError(message)
+    dandi_compute_code_commit_head = dandi_compute_code_commit_hash[0:7]
+
     dandi_compute_code_version = subprocess.check_output(
         ["git", "describe", "--tags", "--always"],
         cwd=dandi_compute_code_source_dir,
@@ -167,7 +177,7 @@ def prepare_aind_ephys_job(
     if "ses" in entities:
         output_dandiset_path_base += f"ses-{entities['ses']}/"
     output_dandiset_path_base += (
-        f"pipeline-aind+ephys/version-{bidsy_pipeline_version}+{pipeline_commit_head}/"
+        f"pipeline-aind+ephys/version-{bidsy_pipeline_version}+{pipeline_commit_head}+{dandi_compute_code_commit_head}/"
         f"params-{params_id}_config-{config_id}"
     )
 

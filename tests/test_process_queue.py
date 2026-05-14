@@ -21,6 +21,7 @@ from dandi_compute_code.queue._process_queue import (
     _determine_running,
     _resolve_params_key_to_id,
     _submit_next,
+    _version_matches,
     order_queue,
     prepare_queue,
     prepare_test_queue,
@@ -158,7 +159,7 @@ def _make_attempt_dir_with_script(
 def test_resolve_params_key_to_id_aind_ephys_default() -> None:
     """_resolve_params_key_to_id returns the 7-char hash for a known aind+ephys key."""
     result = _resolve_params_key_to_id("aind+ephys", "default")
-    # The 'default' params key maps to checksum starting with '98fd947'
+    # The 'default' params key maps to MD5 starting with '98fd947'
     assert result == "98fd947"
 
 
@@ -321,7 +322,7 @@ def test_build_processing_order_ignores_unknown_pipeline() -> None:
 def test_build_processing_order_resolves_aind_ephys_params_key_to_id() -> None:
     """_build_processing_order matches state entries whose params is a hash ID when queue_config uses the key name."""
     # Simulates the real scenario: queue_config uses 'default' as the params key,
-    # but state.jsonl entries have the 7-char hash '98fd947' derived from the params file checksum.
+    # but state.jsonl entries have the 7-char hash '98fd947' derived from the params file MD5.
     config = {
         "pipelines": {
             "aind+ephys": {
@@ -331,6 +332,51 @@ def test_build_processing_order_resolves_aind_ephys_params_key_to_id() -> None:
         }
     }
     entry = _make_state_entry(pipeline="aind+ephys", version="v1.1.1+b268fd2", params="98fd947", dandiset_id="000233")
+    result = _build_processing_order(state_entries=[entry], queue_config=config)
+    assert len(result) == 1
+    assert result[0]["dandiset_id"] == "000233"
+
+
+@pytest.mark.ai_generated
+def test_version_matches_exact() -> None:
+    """_version_matches returns True for exact match."""
+    assert _version_matches("v1.1.1+b268fd2", "v1.1.1+b268fd2") is True
+
+
+@pytest.mark.ai_generated
+def test_version_matches_with_code_hash_suffix() -> None:
+    """_version_matches returns True when state version has an extra code-repo commit hash suffix."""
+    assert _version_matches("v1.1.1+b268fd2+abcdef1", "v1.1.1+b268fd2") is True
+
+
+@pytest.mark.ai_generated
+def test_version_matches_rejects_non_hex_suffix() -> None:
+    """_version_matches returns False when the extra suffix is not a hex hash."""
+    assert _version_matches("v1.1.1+b268fd2+notahex", "v1.1.1+b268fd2") is False
+
+
+@pytest.mark.ai_generated
+def test_version_matches_rejects_different_version() -> None:
+    """_version_matches returns False when the version base is different."""
+    assert _version_matches("v1.1.0+b268fd2", "v1.1.1+b268fd2") is False
+
+
+@pytest.mark.ai_generated
+def test_build_processing_order_matches_new_style_version_with_code_hash() -> None:
+    """_build_processing_order matches state entries with a code-repo commit hash appended to the version."""
+    # Simulates state entries produced after the change that appends the first 7 chars
+    # of the dandi-compute/code repo commit hash to the version directory name.
+    config = {
+        "pipelines": {
+            "aind+ephys": {
+                "version_priority": ["v1.1.1+b268fd2"],
+                "params_priority": ["default"],
+            }
+        }
+    }
+    entry = _make_state_entry(
+        pipeline="aind+ephys", version="v1.1.1+b268fd2+abcdef1", params="98fd947", dandiset_id="000233"
+    )
     result = _build_processing_order(state_entries=[entry], queue_config=config)
     assert len(result) == 1
     assert result[0]["dandiset_id"] == "000233"
