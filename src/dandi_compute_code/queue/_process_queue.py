@@ -213,12 +213,13 @@ def _count_dandiset_failures(
                 continue
             parent_name = attempt_dir.parent.name
             if parent_name == version_dir_name:
-                pass
+                is_matching_version = True
             elif parent_name.startswith("pipeline-"):
                 flat_match = flat_attempt_re.fullmatch(attempt_dir.name)
-                if not flat_match or flat_match.group("version") != version:
-                    continue
+                is_matching_version = bool(flat_match and flat_match.group("version") == version)
             else:
+                is_matching_version = False
+            if not is_matching_version:
                 continue
             logs_dir = attempt_dir / "logs"
             has_logs = logs_dir.is_dir() and any(logs_dir.iterdir())

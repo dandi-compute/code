@@ -17,6 +17,7 @@ from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
 from dandi_compute_code.queue._process_queue import (
+    _attempt_dir_candidates,
     _build_processing_order,
     _count_dandiset_failures,
     _determine_running,
@@ -115,6 +116,37 @@ def _make_state_entry(
         "has_logs": has_logs,
         "created_at": created_at,
     }
+
+
+@pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    ("session", "relative_prefix"),
+    [
+        (None, pathlib.Path("derivatives/dandiset-000001/sub-mouse01/pipeline-test")),
+        ("ses01", pathlib.Path("derivatives/dandiset-000001/sub-mouse01/ses-ses01/pipeline-test")),
+    ],
+)
+def test_attempt_dir_candidates_returns_flat_and_legacy_paths(
+    session: str | None,
+    relative_prefix: pathlib.Path,
+    tmp_path: pathlib.Path,
+) -> None:
+    """_attempt_dir_candidates returns both flat and legacy attempt directory paths."""
+    entry = _make_state_entry(
+        dandiset_id="000001",
+        subject="mouse01",
+        session=session,
+        pipeline="test",
+        version="v1.0",
+        params="abc1234",
+        config="def5678",
+        attempt=2,
+    )
+
+    flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
+
+    assert flat_path == tmp_path / relative_prefix / "version-v1.0_params-abc1234_config-def5678_attempt-2"
+    assert legacy_path == tmp_path / relative_prefix / "version-v1.0/params-abc1234_config-def5678_attempt-2"
 
 
 def _make_attempt_dir_with_script(
