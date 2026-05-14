@@ -1365,6 +1365,7 @@ def _make_full_attempt_dir(
 
 
 def _make_full_attempt_dir_legacy_nested(
+    *,
     base: pathlib.Path,
     dandiset_id: str,
     subject: str,
@@ -1373,7 +1374,6 @@ def _make_full_attempt_dir_legacy_nested(
     params: str,
     config: str,
     attempt: int,
-    *,
     session: str | None = None,
     with_code: bool = True,
     with_output: bool = False,
@@ -1661,14 +1661,14 @@ def test_clean_unsubmitted_capsules_removes_legacy_nested_layout(tmp_path: pathl
     queue_dir.mkdir()
 
     queued_dir = _make_full_attempt_dir_legacy_nested(
-        dandiset_dir,
-        "001371",
-        "S25",
-        "aind+ephys",
-        "v1.1.1+b268fd2",
-        "abc1234",
-        "def5678",
-        1,
+        base=dandiset_dir,
+        dandiset_id="001371",
+        subject="S25",
+        pipeline="aind+ephys",
+        version="v1.1.1+b268fd2",
+        params="abc1234",
+        config="def5678",
+        attempt=1,
         session="S25-210913",
         with_code=True,
     )
