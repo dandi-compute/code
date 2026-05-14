@@ -46,10 +46,11 @@ def prepare_aind_ephys_job(
         The local path to the Dandiset data to be processed. Required if `content_id
         is not provided and will be used to look up the content ID if `content_id` is not provided.
     config_key : str
-        The short name of the configuration to use. Must be a key registered in
-        `registries/registered_configs.json`.
+        The short name of the configuration to use.
+        Must be a key registered in `registries/registered_configs.json`.
     parameters_key : str
-        The short name of the parameters to use. Must be a key registered in `registries/registered_params.json`.
+        The short name of the parameters to use.
+        Must be a key registered in `registries/registered_params.json`.
     pipeline_directory : pathlib.Path, optional
         Local path to the AIND pipeline repository.
     silent : bool, optional
