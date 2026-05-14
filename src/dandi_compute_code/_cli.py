@@ -13,7 +13,7 @@ from .dandiset import (
     scan_version_directories,
     write_state_and_waiting_jsonl,
 )
-from .queue import prepare_queue, prepare_test_queue, process_queue, refresh_waiting_queue
+from .queue import clean_unsubmitted_capsules, prepare_queue, prepare_test_queue, process_queue, refresh_waiting_queue
 
 
 # dandicompute
@@ -196,6 +196,37 @@ def _queue_group() -> None:
 def _queue_refresh_command(directory: pathlib.Path | None = None, limit: int | None = None) -> None:
     cwd = directory if directory is not None else pathlib.Path.cwd()
     refresh_waiting_queue(cwd=cwd, limit=limit)
+
+
+# dandicompute queue clean [OPTIONS]
+@_queue_group.command(name="clean")
+@click.option(
+    "--queue-directory",
+    "directory",
+    help="Path to the queue root directory. Defaults to the current working directory.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--dandiset-directory",
+    "dandiset_directory",
+    help="Path to a local clone of the dandiset repository to scan for queued capsules.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+def _queue_clean_command(
+    directory: pathlib.Path | None = None,
+    dandiset_directory: pathlib.Path = pathlib.Path("."),
+) -> None:
+    cwd = directory if directory is not None else pathlib.Path.cwd()
+    removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_directory, queue_directory=cwd)
+    if removed:
+        for path in removed:
+            _styled_echo(text=f"  Removed: {path}", color="yellow")
+        _styled_echo(text=f"\nCleaned {len(removed)} unsubmitted capsule(s).", color="green")
+    else:
+        _styled_echo(text="\nNo unsubmitted capsules found.", color="yellow")
 
 
 # dandicompute prepare
