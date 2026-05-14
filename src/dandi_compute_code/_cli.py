@@ -323,7 +323,7 @@ def _dandiset_scan_command(
                 )
             except FileNotFoundError as error:
                 message = (
-                    f"{error} When writing to state.jsonl, ensure queue_config.json exists " "in the parent directory."
+                    f"{error} When writing to state.jsonl, ensure " "queue_config.json exists in the parent directory."
                 )
                 raise click.ClickException(message) from error
         else:
