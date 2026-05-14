@@ -276,12 +276,12 @@ def _prune_last_submitted(*, cwd: pathlib.Path, state_entries: list[dict]) -> No
     if not last_submitted_file.exists():
         return
 
-    completed_or_logged = {_entry_identity(e) for e in state_entries if e.get("has_output") or e.get("has_logs")}
+    entries_to_prune = {_entry_identity(e) for e in state_entries if e.get("has_output") or e.get("has_logs")}
 
     last_submitted_entries = [
         json.loads(line.strip()) for line in last_submitted_file.read_text().splitlines() if line.strip()
     ]
-    filtered = [entry for entry in last_submitted_entries if _entry_identity(entry) not in completed_or_logged]
+    filtered = [entry for entry in last_submitted_entries if _entry_identity(entry) not in entries_to_prune]
     last_submitted_file.write_text("".join(json.dumps(entry) + "\n" for entry in filtered))
 
 
@@ -339,7 +339,8 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     pipeline = entry.get("pipeline", "")
     version = entry.get("version", "")
     if not pipeline or not version:
-        print(f"Skipping first waiting entry with missing pipeline/version in `{waiting_file}`")
+        dandiset_id = entry.get("dandiset_id", "<unknown>")
+        print(f"Skipping first waiting entry {dandiset_id}: " f"missing pipeline/version values in `{waiting_file}`")
         return False
     pipeline_cfg = queue_config.get("pipelines", {}).get(pipeline)
     max_fail = pipeline_cfg.get("max_fail_per_dandiset") if pipeline_cfg is not None else None
