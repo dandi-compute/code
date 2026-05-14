@@ -465,7 +465,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
         return False
 
     print(f"Submitting run capsule directory: {attempt_dir}")
-    command = ["dandicompute", "aind", "submit", "--script", str(script_file_path)]
+    command = ["dandicompute", "submit", "--script", str(script_file_path)]
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0 and result.stderr:
         message = f"command: {command}\nstdout: {result.stdout}\nstderr: {result.stderr}"

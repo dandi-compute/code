@@ -496,10 +496,10 @@ def test_write_state_and_waiting_jsonl_prunes_last_submitted_entries_with_output
 
 @pytest.mark.ai_generated
 def test_cli_dandiset_scan_to_stdout(tmp_path: pathlib.Path) -> None:
-    """dandicompute dandiset scan prints JSONL to stdout when no --output given."""
+    """dandicompute queue scan prints JSONL to stdout when no --output given."""
     _make_attempt_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1)
     runner = CliRunner()
-    result = runner.invoke(_dandicompute_group, ["dandiset", "scan", "--directory", str(tmp_path)])
+    result = runner.invoke(_dandicompute_group, ["queue", "scan", "--directory", str(tmp_path)])
     assert result.exit_code == 0, result.output
     lines = [line for line in result.output.splitlines() if line.strip()]
     assert len(lines) == 1
@@ -509,13 +509,13 @@ def test_cli_dandiset_scan_to_stdout(tmp_path: pathlib.Path) -> None:
 
 @pytest.mark.ai_generated
 def test_cli_dandiset_scan_to_file(tmp_path: pathlib.Path) -> None:
-    """dandicompute dandiset scan writes JSONL to a file when --output is given."""
+    """dandicompute queue scan writes JSONL to a file when --output is given."""
     _make_attempt_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1)
     out = tmp_path / "out.jsonl"
     runner = CliRunner()
     result = runner.invoke(
         _dandicompute_group,
-        ["dandiset", "scan", "--directory", str(tmp_path), "--output", str(out)],
+        ["queue", "scan", "--directory", str(tmp_path), "--output", str(out)],
     )
     assert result.exit_code == 0, result.output
     assert out.exists()
@@ -533,7 +533,7 @@ def test_cli_dandiset_scan_state_output_requires_queue_config(tmp_path: pathlib.
     runner = CliRunner()
     result = runner.invoke(
         _dandicompute_group,
-        ["dandiset", "scan", "--directory", str(tmp_path), "--output", str(out)],
+        ["queue", "scan", "--directory", str(tmp_path), "--output", str(out)],
     )
     assert result.exit_code != 0
     assert "ensure queue_config.json exists in the parent directory" in result.output

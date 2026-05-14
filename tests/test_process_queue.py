@@ -562,7 +562,7 @@ def test_submit_next_submits_first_entry_in_order(tmp_path: pathlib.Path) -> Non
 
     assert result is True
     submitted_command = mock_run.call_args.args[0]
-    assert submitted_command[:3] == ["dandicompute", "aind", "submit"]
+    assert submitted_command[:2] == ["dandicompute", "submit"]
     assert "--script" in submitted_command
 
 
@@ -1323,7 +1323,7 @@ def test_prepare_test_queue_raises_when_aind_ephys_missing(tmp_path: pathlib.Pat
 
 @pytest.mark.ai_generated
 def test_cli_prepare_test_calls_helper(tmp_path: pathlib.Path) -> None:
-    """dandicompute prepare test delegates to prepare_test_queue."""
+    """dandicompute prepare aind --test delegates to prepare_test_queue."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     runner = CliRunner()
@@ -1332,7 +1332,7 @@ def test_cli_prepare_test_calls_helper(tmp_path: pathlib.Path) -> None:
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
         mock.patch("dandi_compute_code._cli.prepare_test_queue") as mock_prepare_test_queue,
     ):
-        result = runner.invoke(_dandicompute_group, ["prepare", "test", "--queue-directory", str(queue_dir)])
+        result = runner.invoke(_dandicompute_group, ["prepare", "aind", "--test", "--queue-directory", str(queue_dir)])
 
     assert result.exit_code == 0
     mock_prepare_test_queue.assert_called_once_with(
@@ -1344,7 +1344,7 @@ def test_cli_prepare_test_calls_helper(tmp_path: pathlib.Path) -> None:
 
 @pytest.mark.ai_generated
 def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
-    """dandicompute prepare test forwards --config to prepare_test_queue."""
+    """dandicompute prepare aind --test forwards --config to prepare_test_queue."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     runner = CliRunner()
@@ -1355,7 +1355,7 @@ def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
     ):
         result = runner.invoke(
             _dandicompute_group,
-            ["prepare", "test", "--queue-directory", str(queue_dir), "--config", "mit+engaging+revision-1"],
+            ["prepare", "aind", "--test", "--queue-directory", str(queue_dir), "--config", "mit+engaging+revision-1"],
         )
 
     assert result.exit_code == 0
@@ -1368,16 +1368,19 @@ def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
 
 @pytest.mark.ai_generated
 def test_cli_aind_prepare_passes_config_key() -> None:
-    """dandicompute aind prepare forwards --config to prepare_aind_ephys_job."""
+    """dandicompute prepare aind forwards --config to prepare_aind_ephys_job."""
     runner = CliRunner()
 
-    with mock.patch("dandi_compute_code._cli.prepare_aind_ephys_job") as mock_prepare:
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
+        mock.patch("dandi_compute_code._cli.prepare_aind_ephys_job") as mock_prepare,
+    ):
         mock_prepare.return_value = pathlib.Path("/tmp/submit.sh")
         result = runner.invoke(
             _dandicompute_group,
             [
-                "aind",
                 "prepare",
+                "aind",
                 "--id",
                 "abc123",
                 "--version",
