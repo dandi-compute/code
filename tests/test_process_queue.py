@@ -546,7 +546,7 @@ def test_submit_next_submits_first_entry_in_order(tmp_path: pathlib.Path) -> Non
 
     assert result is True
     submitted_command = mock_run.call_args.args[0]
-    assert "submit" in submitted_command
+    assert submitted_command[:3] == ["dandicompute", "aind", "submit"]
     assert "--script" in submitted_command
 
 
@@ -650,8 +650,8 @@ def test_submit_next_pops_submitted_entry_from_waiting_jsonl(tmp_path: pathlib.P
 
 
 @pytest.mark.ai_generated
-def test_submit_next_appends_submitted_entry_to_submitted_jsonl(tmp_path: pathlib.Path) -> None:
-    """_submit_next appends the submitted entry to submitted.jsonl."""
+def test_submit_next_appends_submitted_entry_to_last_submitted_jsonl(tmp_path: pathlib.Path) -> None:
+    """_submit_next appends the submitted entry to last_submitted.jsonl."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "dandiset"
 
@@ -680,7 +680,7 @@ def test_submit_next_appends_submitted_entry_to_submitted_jsonl(tmp_path: pathli
         mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
         _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
-    submitted_entries = _read_jsonl(queue_dir / "submitted.jsonl")
+    submitted_entries = _read_jsonl(queue_dir / "last_submitted.jsonl")
     assert len(submitted_entries) == 1
     assert submitted_entries[0]["dandiset_id"] == "000001"
 
@@ -840,6 +840,25 @@ def test_order_queue_limit_truncates_waiting_jsonl(tmp_path: pathlib.Path) -> No
 
 
 @pytest.mark.ai_generated
+def test_refresh_waiting_queue_prunes_last_submitted_entries_with_output_or_logs(tmp_path: pathlib.Path) -> None:
+    """refresh_waiting_queue removes finished/running entries from last_submitted.jsonl."""
+    queue_dir = _make_queue_dir(tmp_path)
+
+    pending_entry = _make_state_entry(dandiset_id="000001", has_code=True, has_output=False, has_logs=False)
+    with_output_entry = _make_state_entry(dandiset_id="000002", has_code=True, has_output=True, has_logs=False)
+    with_logs_entry = _make_state_entry(dandiset_id="000003", has_code=True, has_output=False, has_logs=True)
+    _write_jsonl(queue_dir / "state.jsonl", [pending_entry, with_output_entry, with_logs_entry])
+
+    _write_jsonl(queue_dir / "last_submitted.jsonl", [pending_entry, with_output_entry, with_logs_entry])
+
+    refresh_waiting_queue(cwd=queue_dir)
+
+    last_submitted_entries = _read_jsonl(queue_dir / "last_submitted.jsonl")
+    assert len(last_submitted_entries) == 1
+    assert last_submitted_entries[0]["dandiset_id"] == "000001"
+
+
+@pytest.mark.ai_generated
 def test_order_queue_returns_ordered_pending_entries_only() -> None:
     """order_queue returns pending entries without writing files."""
     state_entries = [
@@ -990,7 +1009,7 @@ def test_count_dandiset_failures_counts_across_all_dandisets(tmp_path: pathlib.P
 
 
 # ---------------------------------------------------------------------------
-# Tests for _submit_next with max_fail_per_dandiset
+# Tests for _submit_next simplification behavior
 # ---------------------------------------------------------------------------
 
 #: params_id and config_id used when building fake attempt directories.
@@ -999,8 +1018,8 @@ _FAKE_CONFIG_ID = "def5678"
 
 
 @pytest.mark.ai_generated
-def test_submit_next_skips_all_entries_when_total_failures_exceed_max(tmp_path: pathlib.Path) -> None:
-    """_submit_next skips all entries when the total failure count reaches max_fail_per_dandiset."""
+def test_submit_next_submits_first_entry_directly(tmp_path: pathlib.Path) -> None:
+    """_submit_next submits the first waiting entry directly."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "001697"
 
@@ -1008,7 +1027,7 @@ def test_submit_next_skips_all_entries_when_total_failures_exceed_max(tmp_path: 
     _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 1, with_logs=True)
     _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 2, with_logs=True)
 
-    # waiting.jsonl: two pending entries – all should be skipped due to failure cap
+    # waiting.jsonl: first entry will be submitted directly.
     _write_jsonl(
         queue_dir / "waiting.jsonl",
         [
@@ -1017,16 +1036,27 @@ def test_submit_next_skips_all_entries_when_total_failures_exceed_max(tmp_path: 
         ],
     )
 
+    _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+
     with mock.patch("subprocess.run") as mock_run:
         mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
         result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
-    assert result is False
+    assert result is True
 
 
 @pytest.mark.ai_generated
-def test_submit_next_allows_entry_when_dandiset_failures_below_max(tmp_path: pathlib.Path) -> None:
-    """_submit_next does NOT skip an entry when total failure count is below the limit."""
+def test_submit_next_submits_first_entry_with_existing_failure_dirs(tmp_path: pathlib.Path) -> None:
+    """_submit_next submits the first waiting entry directly even if failure dirs exist."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "001697"
 
