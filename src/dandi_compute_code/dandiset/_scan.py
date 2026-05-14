@@ -141,7 +141,7 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         return []
 
     attempt_re = _ATTEMPT_SUFFIX_RE
-    records: list[dict] = []
+    records_by_key: dict[tuple[str, str, str | None, str, str, str, str, int], dict] = {}
 
     for dandiset_path in sorted(derivatives.iterdir()):
         if not dandiset_path.is_dir() or not dandiset_path.name.startswith("dandiset-"):
@@ -153,8 +153,26 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
                 continue
             record = _parse_attempt_dir(attempt_dir)
             if record is not None:
-                records.append(record)
+                key = (
+                    record["dandiset_id"],
+                    record["subject"],
+                    record["session"],
+                    record["pipeline"],
+                    record["version"],
+                    record["params"],
+                    record["config"],
+                    record["attempt"],
+                )
+                existing = records_by_key.get(key)
+                if existing is None:
+                    records_by_key[key] = record
+                    continue
+                existing["has_code"] = existing["has_code"] or record["has_code"]
+                existing["has_output"] = existing["has_output"] or record["has_output"]
+                existing["has_logs"] = existing["has_logs"] or record["has_logs"]
+                existing["created_at"] = max(existing["created_at"], record["created_at"])
 
+    records = list(records_by_key.values())
     records.sort(
         key=lambda r: (
             r["dandiset_id"],

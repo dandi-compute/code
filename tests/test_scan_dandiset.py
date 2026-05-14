@@ -300,6 +300,46 @@ def test_scan_supports_legacy_version_subdirectory_layout(tmp_path: pathlib.Path
     assert records[0]["params"] == "abc1234"
 
 
+@pytest.mark.ai_generated
+def test_scan_deduplicates_attempts_present_in_flat_and_legacy_layouts(tmp_path: pathlib.Path) -> None:
+    """Same logical attempt present in both layouts is emitted once."""
+    _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        with_code=True,
+        with_output=False,
+        with_logs=False,
+    )
+
+    legacy_attempt_dir = (
+        tmp_path
+        / "derivatives"
+        / "dandiset-000001"
+        / "sub-mouse01"
+        / "pipeline-aind+ephys"
+        / "version-v1.0"
+        / "params-abc1234_config-def5678_attempt-1"
+    )
+    legacy_attempt_dir.mkdir(parents=True)
+    (legacy_attempt_dir / "derivatives").mkdir()
+    (legacy_attempt_dir / "logs").mkdir()
+    (legacy_attempt_dir / "logs" / "nextflow.log").write_text("log content")
+
+    records = scan_dandiset_directory(dandiset_directory=tmp_path)
+
+    assert len(records) == 1
+    assert records[0]["dandiset_id"] == "000001"
+    assert records[0]["has_code"] is True
+    assert records[0]["has_output"] is True
+    assert records[0]["has_logs"] is True
+
+
 # ---------------------------------------------------------------------------
 # Tests for write_state_and_waiting_jsonl
 # ---------------------------------------------------------------------------
