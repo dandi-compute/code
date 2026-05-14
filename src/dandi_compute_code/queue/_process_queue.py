@@ -300,7 +300,7 @@ def clean_unsubmitted_capsules(
     list[pathlib.Path]
         List of attempt directory paths that were deleted.
     """
-    from dandi_compute_code.dandiset import scan_dandiset_directory
+    from ..dandiset import scan_dandiset_directory
 
     state_entries = scan_dandiset_directory(dandiset_directory=dandiset_directory)
 
