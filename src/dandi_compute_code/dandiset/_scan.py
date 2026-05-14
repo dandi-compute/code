@@ -6,7 +6,7 @@ import re
 from ..queue import refresh_waiting_queue
 
 _ATTEMPT_DIR_RE = re.compile(
-    r"(?:version-(?P<version_in_name>.+)_)?params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)"
+    r"(?:version-(?P<version_in_name>.+?)_)?params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)"
 )
 _ATTEMPT_SUFFIX_RE = re.compile(r"_attempt-\d+$")
 

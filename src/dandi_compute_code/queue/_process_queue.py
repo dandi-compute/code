@@ -12,7 +12,7 @@ from dandi_compute_code.aind_ephys_pipeline import prepare_aind_ephys_job
 _AIND_EPHYS_PARAMS_REGISTRY_PATH = (
     pathlib.Path(__file__).parent.parent / "aind_ephys_pipeline" / "registries" / "registered_params.json"
 )
-_FLAT_ATTEMPT_DIR_RE = re.compile(r"^version-(?P<version>.+)_params-[^_]+_config-.+_attempt-\d+$")
+_FLAT_ATTEMPT_DIR_RE = re.compile(r"^version-(?P<version>.+?)_params-[^_]+_config-.+_attempt-\d+$")
 _TEST_QUEUE_CONTENT_ID = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
 _TEST_QUEUE_PIPELINE = "aind+ephys"
 
