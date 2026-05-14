@@ -297,8 +297,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
 
     The first entry from ``waiting.jsonl`` is submitted and then removed from
     ``waiting.jsonl``; the entry is simultaneously appended to
-    ``last_submitted.jsonl``. This function intentionally does not scan for
-    later submittable entries if the first entry is blocked.
+    ``last_submitted.jsonl``.
 
     Parameters
     ----------
@@ -306,8 +305,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
         Path to the queue root directory.
     dandiset_directory : pathlib.Path
         Path to a local clone of the 001697 dandiset repository.  Used to
-        locate prepared submission scripts and to count failure directories for
-        ``max_fail_per_dandiset`` enforcement.
+        locate prepared submission scripts.
 
     Returns
     -------
@@ -334,28 +332,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
         print(f"No pending entries in `{waiting_file}`")
         return False
 
-    queue_config = json.loads((cwd / "queue_config.json").read_text())
     entry = waiting_entries[0]
-    pipeline = entry.get("pipeline", "")
-    version = entry.get("version", "")
-    if not pipeline or not version:
-        dandiset_id = entry.get("dandiset_id", "<unknown>")
-        print(f"Skipping first waiting entry {dandiset_id}: " f"missing pipeline/version values in `{waiting_file}`")
-        return False
-    pipeline_cfg = queue_config.get("pipelines", {}).get(pipeline)
-    max_fail = pipeline_cfg.get("max_fail_per_dandiset") if pipeline_cfg is not None else None
-    if max_fail is not None and version:
-        failure_count = _count_dandiset_failures(
-            dandiset_directory=dandiset_directory,
-            version=version,
-        )
-        if failure_count >= max_fail:
-            dandiset_id = entry.get("dandiset_id", "<unknown>")
-            print(
-                f"Skipping submission for first waiting entry {dandiset_id}: "
-                f"failure count ({failure_count}) has reached max_fail_per_dandiset ({max_fail}) in `{waiting_file}`"
-            )
-            return False
 
     dandiset_id = entry["dandiset_id"]
     subject = entry["subject"]
