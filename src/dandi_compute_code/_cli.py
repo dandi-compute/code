@@ -175,8 +175,8 @@ def _queue_group() -> None:
     pass
 
 
-# dandicompute queue order [OPTIONS]
-@_queue_group.command(name="order")
+# dandicompute queue refresh [OPTIONS]
+@_queue_group.command(name="refresh")
 @click.option(
     "--queue-directory",
     "directory",
@@ -193,7 +193,7 @@ def _queue_group() -> None:
     type=click.IntRange(min=1),
     default=None,
 )
-def _queue_order_command(directory: pathlib.Path | None = None, limit: int | None = None) -> None:
+def _queue_refresh_command(directory: pathlib.Path | None = None, limit: int | None = None) -> None:
     cwd = directory if directory is not None else pathlib.Path.cwd()
     refresh_waiting_queue(cwd=cwd, limit=limit)
 
