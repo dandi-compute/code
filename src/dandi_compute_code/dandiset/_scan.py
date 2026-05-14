@@ -5,7 +5,9 @@ import re
 
 from ..queue import refresh_waiting_queue
 
-_ATTEMPT_DIR_RE = re.compile(r"params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)")
+_ATTEMPT_DIR_RE = re.compile(
+    r"(?:version-(?P<version_in_name>.+)_)?params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)"
+)
 _ATTEMPT_SUFFIX_RE = re.compile(r"_attempt-\d+$")
 
 
@@ -14,6 +16,11 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     Parse a single attempt directory into a flat record dict.
 
     The expected path structure (relative to ``derivatives/dandiset-{dandiset_id}/``) is::
+
+        sub-{subject}/[ses-{session}/]pipeline-{pipeline}/
+            version-{version}_params-{params}_config-{config}_attempt-{attempt}/
+
+    Legacy layout with an additional version directory is also accepted::
 
         sub-{subject}/[ses-{session}/]pipeline-{pipeline}/version-{version}/
             params-{params}_config-{config}_attempt-{attempt}/
@@ -34,12 +41,22 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     if not attempt_match:
         return None
 
-    version_dir = attempt_dir.parent
-    if not version_dir.name.startswith("version-"):
-        return None
-    version = version_dir.name[len("version-") :]
+    version_from_name = attempt_match.group("version_in_name")
+    version_or_pipeline_dir = attempt_dir.parent
 
-    pipeline_dir = version_dir.parent
+    if version_or_pipeline_dir.name.startswith("version-"):
+        version = version_or_pipeline_dir.name[len("version-") :]
+        pipeline_dir = version_or_pipeline_dir.parent
+        if version_from_name and version_from_name != version:
+            return None
+    elif version_or_pipeline_dir.name.startswith("pipeline-"):
+        if not version_from_name:
+            return None
+        version = version_from_name
+        pipeline_dir = version_or_pipeline_dir
+    else:
+        return None
+
     if not pipeline_dir.name.startswith("pipeline-"):
         return None
     pipeline = pipeline_dir.name[len("pipeline-") :]

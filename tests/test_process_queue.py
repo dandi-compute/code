@@ -139,10 +139,7 @@ def _make_attempt_dir_with_script(
     if session:
         attempt_dir = attempt_dir / f"ses-{session}"
     attempt_dir = (
-        attempt_dir
-        / f"pipeline-{pipeline}"
-        / f"version-{version}"
-        / f"params-{params}_config-{config}_attempt-{attempt}"
+        attempt_dir / f"pipeline-{pipeline}" / f"version-{version}_params-{params}_config-{config}_attempt-{attempt}"
     )
     attempt_dir.mkdir(parents=True)
     code_dir = attempt_dir / "code"
@@ -883,7 +880,7 @@ def _make_attempt_dir(
     A directory path
 
     ``derivatives/dandiset-{dandiset_id}/sub-test/pipeline-aind+ephys/``
-    ``version-{version}/params-{params_id}_config-{config_id}_attempt-{attempt_number}/``
+    ``version-{version}_params-{params_id}_config-{config_id}_attempt-{attempt_number}/``
 
     is created.  *with_code*, *with_output*, and *with_logs* control whether the
     ``code/``, ``derivatives/``, and ``logs/`` subdirectories are created.  When
@@ -896,8 +893,7 @@ def _make_attempt_dir(
         / f"dandiset-{dandiset_id}"
         / "sub-test"
         / "pipeline-aind+ephys"
-        / f"version-{version}"
-        / f"params-{params_id}_config-{config_id}_attempt-{attempt_number}"
+        / f"version-{version}_params-{params_id}_config-{config_id}_attempt-{attempt_number}"
     )
     attempt_dir.mkdir(parents=True)
     if with_code:
@@ -1321,8 +1317,7 @@ def _make_full_attempt_dir(
         parts.append(f"ses-{session}")
     parts += [
         f"pipeline-{pipeline}",
-        f"version-{version}",
-        f"params-{params}_config-{config}_attempt-{attempt}",
+        f"version-{version}_params-{params}_config-{config}_attempt-{attempt}",
     ]
     attempt_dir = pathlib.Path(*parts)
     attempt_dir.mkdir(parents=True)

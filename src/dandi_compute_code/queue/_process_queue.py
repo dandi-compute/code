@@ -174,7 +174,11 @@ def _count_dandiset_failures(
     absent) are not counted.
 
     A directory is considered an attempt if its name ends with ``_attempt-<number>``
-    and its immediate parent is named ``version-{version}``.
+    and either:
+
+    * its immediate parent is named ``version-{version}`` (legacy layout), or
+    * its immediate parent is ``pipeline-*`` and the attempt directory name starts
+      with ``version-{version}_`` (current flat layout).
 
     Parameters
     ----------
@@ -197,6 +201,7 @@ def _count_dandiset_failures(
     failure_count = 0
     attempt_re = re.compile(r"_attempt-\d+$")
     version_dir_name = f"version-{version}"
+    flat_attempt_re = re.compile(r"^version-(?P<version>.+)_params-[^_]+_config-.+_attempt-\d+$")
 
     for dandiset_path in derivatives.iterdir():
         if not dandiset_path.is_dir() or not dandiset_path.name.startswith("dandiset-"):
@@ -206,7 +211,14 @@ def _count_dandiset_failures(
                 continue
             if not attempt_re.search(attempt_dir.name):
                 continue
-            if attempt_dir.parent.name != version_dir_name:
+            parent_name = attempt_dir.parent.name
+            if parent_name == version_dir_name:
+                pass
+            elif parent_name.startswith("pipeline-"):
+                flat_match = flat_attempt_re.fullmatch(attempt_dir.name)
+                if not flat_match or flat_match.group("version") != version:
+                    continue
+            else:
                 continue
             logs_dir = attempt_dir / "logs"
             has_logs = logs_dir.is_dir() and any(logs_dir.iterdir())
@@ -238,6 +250,27 @@ def _determine_running() -> bool:
         if "AIND" in line:
             return True
     return False
+
+
+def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pathlib.Path, pathlib.Path]:
+    """Return (flat_layout_path, legacy_nested_layout_path) for an attempt entry."""
+    dandiset_id = entry["dandiset_id"]
+    subject = entry["subject"]
+    session = entry.get("session")
+    pipeline = entry["pipeline"]
+    version = entry["version"]
+    params = entry["params"]
+    config = entry["config"]
+    attempt = entry["attempt"]
+
+    pipeline_dir = base_dir / "derivatives" / f"dandiset-{dandiset_id}" / f"sub-{subject}"
+    if session:
+        pipeline_dir = pipeline_dir / f"ses-{session}"
+    pipeline_dir = pipeline_dir / f"pipeline-{pipeline}"
+
+    flat_attempt_dir = pipeline_dir / f"version-{version}_params-{params}_config-{config}_attempt-{attempt}"
+    nested_attempt_dir = pipeline_dir / f"version-{version}" / f"params-{params}_config-{config}_attempt-{attempt}"
+    return flat_attempt_dir, nested_attempt_dir
 
 
 def _entry_identity(entry: dict) -> tuple:
@@ -333,24 +366,8 @@ def clean_unsubmitted_capsules(
 
     removed: list[pathlib.Path] = []
     for entry in queued_entries:
-        dandiset_id = entry["dandiset_id"]
-        subject = entry["subject"]
-        session = entry.get("session")
-        pipeline = entry["pipeline"]
-        version = entry["version"]
-        params = entry["params"]
-        config = entry["config"]
-        attempt = entry["attempt"]
-
-        attempt_dir = dandiset_directory / "derivatives" / f"dandiset-{dandiset_id}" / f"sub-{subject}"
-        if session:
-            attempt_dir = attempt_dir / f"ses-{session}"
-        attempt_dir = (
-            attempt_dir
-            / f"pipeline-{pipeline}"
-            / f"version-{version}"
-            / f"params-{params}_config-{config}_attempt-{attempt}"
-        )
+        flat_attempt_dir, nested_attempt_dir = _attempt_dir_candidates(base_dir=dandiset_directory, entry=entry)
+        attempt_dir = flat_attempt_dir if flat_attempt_dir.is_dir() else nested_attempt_dir
 
         if attempt_dir.is_dir():
             subprocess.run(
@@ -415,24 +432,8 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
 
     entry = waiting_entries[0]
 
-    dandiset_id = entry["dandiset_id"]
-    subject = entry["subject"]
-    session = entry.get("session")
-    pipeline = entry["pipeline"]
-    version = entry["version"]
-    params = entry["params"]
-    config = entry["config"]
-    attempt = entry["attempt"]
-
-    attempt_dir = dandiset_directory / "derivatives" / f"dandiset-{dandiset_id}" / f"sub-{subject}"
-    if session:
-        attempt_dir = attempt_dir / f"ses-{session}"
-    attempt_dir = (
-        attempt_dir
-        / f"pipeline-{pipeline}"
-        / f"version-{version}"
-        / f"params-{params}_config-{config}_attempt-{attempt}"
-    )
+    flat_attempt_dir, nested_attempt_dir = _attempt_dir_candidates(base_dir=dandiset_directory, entry=entry)
+    attempt_dir = flat_attempt_dir if flat_attempt_dir.is_dir() else nested_attempt_dir
 
     script_file_path = attempt_dir / "code" / "submit.sh"
     if not script_file_path.exists():

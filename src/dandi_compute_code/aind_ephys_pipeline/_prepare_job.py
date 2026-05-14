@@ -201,8 +201,9 @@ def prepare_aind_ephys_job(
     if "ses" in entities:
         output_dandiset_path_base += f"ses-{entities['ses']}/"
     output_dandiset_path_base += (
-        f"pipeline-aind+ephys/version-{bidsy_pipeline_version}+{pipeline_commit_head}+{dandi_compute_code_commit_head}/"
-        f"params-{params_id}_config-{config_id}"
+        f"pipeline-aind+ephys/"
+        f"version-{bidsy_pipeline_version}+{pipeline_commit_head}+{dandi_compute_code_commit_head}"
+        f"_params-{params_id}_config-{config_id}"
     )
 
     # Assign the lowest integer run ID that has not been used yet, up to a maximum limit
