@@ -160,7 +160,7 @@ def _make_attempt_dir_with_script(
 def test_resolve_params_key_to_id_aind_ephys_default() -> None:
     """_resolve_params_key_to_id returns the 7-char hash for a known aind+ephys key."""
     result = _resolve_params_key_to_id("aind+ephys", "default")
-    # The 'default' params key maps to checksum starting with '98fd947'
+    # The 'default' params key maps to MD5 starting with '98fd947'
     assert result == "98fd947"
 
 
@@ -323,7 +323,7 @@ def test_build_processing_order_ignores_unknown_pipeline() -> None:
 def test_build_processing_order_resolves_aind_ephys_params_key_to_id() -> None:
     """_build_processing_order matches state entries whose params is a hash ID when queue_config uses the key name."""
     # Simulates the real scenario: queue_config uses 'default' as the params key,
-    # but state.jsonl entries have the 7-char hash '98fd947' derived from the params file checksum.
+    # but state.jsonl entries have the 7-char hash '98fd947' derived from the params file MD5.
     config = {
         "pipelines": {
             "aind+ephys": {

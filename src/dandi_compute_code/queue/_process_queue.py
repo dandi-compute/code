@@ -29,7 +29,7 @@ def _resolve_params_key_to_id(pipeline: str, params_key: str) -> str:
     the ``params`` field recorded by :func:`scan_dandiset_directory` — use the
     first seven hex characters of the MD5 checksum of the parameters file (e.g.
     ``"98fd947"``).  This function bridges that gap by looking up the registered
-    checksum for a known key.
+    MD5 for a known key.
 
     For the ``aind+ephys`` pipeline the lookup is performed against
     ``registered_params.json`` inside the pipeline module.  For any other
@@ -54,7 +54,7 @@ def _resolve_params_key_to_id(pipeline: str, params_key: str) -> str:
     if pipeline == "aind+ephys":
         entry = _AIND_EPHYS_PARAMS_REGISTRY.get(params_key)
         if entry:
-            return entry["checksum"][:7]
+            return entry["md5"][:7]
     return params_key
 
 
