@@ -48,4 +48,7 @@ Non-code files for the AIND ephys pipeline are organized under the following sub
 - **`registries/`** — JSON registry files mapping short names to resource paths and checksums (e.g., `registered_params.json`).
 
 - **`configs/`** — Nextflow configuration files for a specific compute environment (e.g., `mit_engaging.config`).
-  Add a new `[environment].config` file here. Users can pass the path explicitly via the `--config` CLI option or the `config_file_path` argument in `_prepare_job.py`.
+  To add a new config file:
+  1. Add the `[environment].config` file to this directory.
+  2. Register it in `registries/registered_configs.json` by adding an entry with the short name as the key, and its relative `path` and full MD5 `md5` as values.
+  Users can still pass a path explicitly via `--config` / `config_file_path`; when omitted, the registered `default` config is used.

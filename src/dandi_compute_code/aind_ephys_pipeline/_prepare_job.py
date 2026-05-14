@@ -71,7 +71,23 @@ def prepare_aind_ephys_job(
             "Version `v1.0.0` is incompatible with the new parameters file usage." "Please use `v1.0.0-fixes` instead."
         )
         raise ValueError(message)
-    config_file_path = config_file_path or pathlib.Path(__file__).parent / "configs" / "mit_engaging.config"
+    config_registry_path = pathlib.Path(__file__).parent / "registries" / "registered_configs.json"
+    config_registry = json.loads(config_registry_path.read_text())
+    expected_config_md5: str | None = None
+    if config_file_path is None:
+        config_key = "default"
+        if config_key not in config_registry:
+            registered_keys = list(config_registry.keys())
+            message = (
+                f"Config key '{config_key}' is not registered. "
+                f"Registered keys are: {registered_keys}. "
+                "To register a new config file, add the `.config` file to the `configs/` directory "
+                "and add an entry to `registries/registered_configs.json` mapping the short name to its "
+                "relative `path` and full MD5 `md5`."
+            )
+            raise ValueError(message)
+        config_file_path = pathlib.Path(__file__).parent / "configs" / config_registry[config_key]["path"]
+        expected_config_md5 = config_registry[config_key]["md5"]
 
     if content_id is None:
         client = dandi.dandiapi.DandiAPIClient()
@@ -104,7 +120,16 @@ def prepare_aind_ephys_job(
         )
         raise ValueError(message)
     params_id = actual_md5[0:7]
-    config_id = hashlib.md5(config_file_path.read_bytes()).hexdigest()[0:7] if config_file_path else "default"
+    actual_config_md5 = hashlib.md5(config_file_path.read_bytes()).hexdigest()
+    if expected_config_md5 is not None and actual_config_md5 != expected_config_md5:
+        message = (
+            f"MD5 mismatch for config file '{config_file_path.name}': "
+            f"expected {expected_config_md5!r}, got {actual_config_md5!r}. "
+            "The file may have been modified. Update the `md5` in `registries/registered_configs.json` "
+            "to reflect the new file contents."
+        )
+        raise ValueError(message)
+    config_id = actual_config_md5[0:7]
 
     dandi_compute_dir = pathlib.Path("/orcd/data/dandi/001/dandi-compute")
     dandi_cache_directory = dandi_compute_dir / "dandi-cache"
