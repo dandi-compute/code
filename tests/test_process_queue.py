@@ -1364,6 +1364,43 @@ def _make_full_attempt_dir(
     return attempt_dir
 
 
+def _make_full_attempt_dir_legacy_nested(
+    base: pathlib.Path,
+    dandiset_id: str,
+    subject: str,
+    pipeline: str,
+    version: str,
+    params: str,
+    config: str,
+    attempt: int,
+    *,
+    session: str | None = None,
+    with_code: bool = True,
+    with_output: bool = False,
+    with_logs: bool = False,
+) -> pathlib.Path:
+    """Create a mock attempt directory in the legacy nested version/params layout."""
+    parts = [base, "derivatives", f"dandiset-{dandiset_id}", f"sub-{subject}"]
+    if session is not None:
+        parts.append(f"ses-{session}")
+    parts += [
+        f"pipeline-{pipeline}",
+        f"version-{version}",
+        f"params-{params}_config-{config}_attempt-{attempt}",
+    ]
+    attempt_dir = pathlib.Path(*parts)
+    attempt_dir.mkdir(parents=True)
+    if with_code:
+        (attempt_dir / "code").mkdir()
+    if with_output:
+        (attempt_dir / "derivatives").mkdir()
+    if with_logs:
+        logs_dir = attempt_dir / "logs"
+        logs_dir.mkdir()
+        (logs_dir / "run.log").write_text("job output\n")
+    return attempt_dir
+
+
 @pytest.mark.ai_generated
 def test_clean_unsubmitted_capsules_raises_without_dandi_api_key(tmp_path: pathlib.Path) -> None:
     """clean_unsubmitted_capsules raises RuntimeError when DANDI_API_KEY is not set."""
@@ -1614,6 +1651,37 @@ def test_clean_unsubmitted_capsules_keeps_non_empty_parent_directories(tmp_path:
     assert remaining_dir.exists()
     assert version_dir.exists()
     assert pipeline_dir.exists()
+
+
+@pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_removes_legacy_nested_layout(tmp_path: pathlib.Path) -> None:
+    """clean_unsubmitted_capsules removes queued capsules in the legacy nested layout."""
+    dandiset_dir = tmp_path / "dandiset"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+
+    queued_dir = _make_full_attempt_dir_legacy_nested(
+        dandiset_dir,
+        "001371",
+        "S25",
+        "aind+ephys",
+        "v1.1.1+b268fd2",
+        "abc1234",
+        "def5678",
+        1,
+        session="S25-210913",
+        with_code=True,
+    )
+    version_dir = queued_dir.parent
+    pipeline_dir = version_dir.parent
+
+    with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+
+    assert removed == [queued_dir]
+    assert not queued_dir.exists()
+    assert not version_dir.exists()
+    assert not pipeline_dir.exists()
 
 
 @pytest.mark.ai_generated
