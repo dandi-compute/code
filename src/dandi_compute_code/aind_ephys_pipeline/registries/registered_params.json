@@ -1,26 +1,32 @@
 {
   "original": {
     "path": "name-original.json",
-    "md5": "98fd947595f60b65812a4b0ea29b7141"
+    "md5": "98fd947595f60b65812a4b0ea29b7141",
+    "description": "The original default recommended parameter set on the AIND ephys pipeline repo."
   },
   "no+motion_v0": {
     "path": "name-no+motion_revision-0.json",
-    "md5": "aa073df2761666edbf0bb66cab85ca4c"
+    "md5": "aa073df2761666edbf0bb66cab85ca4c",
+    "description": "The first attempt to disable motion correction from being applied during processing."
   },
   "no+motion_v1": {
     "path": "name-no+motion_revision-1.json",
-    "md5": "?"
+    "md5": "0d25c9ddf35d3653a693f63b7418c598",
+    "description": "A revision of `name-no+motion_revision-0.json` which disables motion correction native to the spike sorters. Also clamps the seeds similarly to `name-determinstic.json`."
   },
   "deterministic": {
     "path": "name-deterministic.json",
-    "md5": "4af6a25e20e376c81895ce9350a9cbd4"
+    "md5": "4af6a25e20e376c81895ce9350a9cbd4",
+    "description": "Same as the `name-original.json`, but all `seed` entries are clamped to `0` instead of `null` or some other value."
   },
   "no+motion": {
     "path": "name-no+motion_revision-1.json",
-    "md5": "?"
+    "md5": "0d25c9ddf35d3653a693f63b7418c598",
+    "description": "The current recommendations for running without any motion correction."
   },
   "default": {
     "path": "name-deterministic.json",
-    "md5": "4af6a25e20e376c81895ce9350a9cbd4"
+    "md5": "4af6a25e20e376c81895ce9350a9cbd4",
+    "description": "The current recommended default parameter set."
   },
 }
