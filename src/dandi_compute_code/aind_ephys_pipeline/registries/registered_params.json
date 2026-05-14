@@ -19,6 +19,11 @@
     "md5": "4af6a25e20e376c81895ce9350a9cbd4",
     "description": "Same as the `name-original.json`, but all `seed` entries are clamped to `0` instead of `null` or some other value."
   },
+  "all+channels": {
+    "path": "name-all+channels.json",
+    "md5": "e6a0e8603a19444c0006a1a4d279047a",
+    "description": "Same as the `name-deterministic.json`, but all parameters are set to include any detected 'bad channels' and not exclude any channels at any step of the pipeline."
+  },
   "no+motion": {
     "path": "name-no+motion_revision-1.json",
     "md5": "0d25c9ddf35d3653a693f63b7418c598",
