@@ -257,6 +257,7 @@ def _determine_running() -> bool:
 
 
 def _entry_identity(entry: dict) -> tuple:
+    """Return a stable tuple key for matching queue/state/last-submitted entries."""
     return (
         entry.get("dandiset_id"),
         entry.get("subject"),
@@ -270,6 +271,7 @@ def _entry_identity(entry: dict) -> tuple:
 
 
 def _prune_last_submitted(*, cwd: pathlib.Path, state_entries: list[dict]) -> None:
+    """Remove last_submitted entries that now have logs or output in state."""
     last_submitted_file = cwd / "last_submitted.jsonl"
     if not last_submitted_file.exists():
         return
@@ -335,7 +337,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     entry = waiting_entries[0]
     pipeline = entry.get("pipeline", "")
     version = entry.get("version", "")
-    pipeline_cfg = queue_config.get("pipelines", {}).get(pipeline) if pipeline else None
+    pipeline_cfg = queue_config.get("pipelines", {}).get(pipeline)
     max_fail = pipeline_cfg.get("max_fail_per_dandiset") if pipeline_cfg is not None else None
     if max_fail is not None and version:
         failure_count = _count_dandiset_failures(
