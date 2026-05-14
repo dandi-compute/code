@@ -547,7 +547,6 @@ def test_submit_next_submits_first_entry_in_order(tmp_path: pathlib.Path) -> Non
     assert result is True
     submitted_command = mock_run.call_args.args[0]
     assert submitted_command[:3] == ["dandicompute", "aind", "submit"]
-    submitted_command = mock_run.call_args.args[0]
     assert "submit" in submitted_command
     assert "--script" in submitted_command
 
