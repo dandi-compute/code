@@ -17,6 +17,7 @@ from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
 from dandi_compute_code.queue._process_queue import (
+    _attempt_dir_candidates,
     _build_processing_order,
     _count_dandiset_failures,
     _determine_running,
@@ -117,6 +118,37 @@ def _make_state_entry(
     }
 
 
+@pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    ("session", "relative_prefix"),
+    [
+        (None, pathlib.Path("derivatives/dandiset-000001/sub-mouse01/pipeline-test")),
+        ("ses01", pathlib.Path("derivatives/dandiset-000001/sub-mouse01/ses-ses01/pipeline-test")),
+    ],
+)
+def test_attempt_dir_candidates_constructs_both_layouts(
+    session: str | None,
+    relative_prefix: pathlib.Path,
+    tmp_path: pathlib.Path,
+) -> None:
+    """_attempt_dir_candidates returns both flat and legacy attempt directory paths."""
+    entry = _make_state_entry(
+        dandiset_id="000001",
+        subject="mouse01",
+        session=session,
+        pipeline="test",
+        version="v1.0",
+        params="abc1234",
+        config="def5678",
+        attempt=2,
+    )
+
+    flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
+
+    assert flat_path == tmp_path / relative_prefix / "version-v1.0_params-abc1234_config-def5678_attempt-2"
+    assert legacy_path == tmp_path / relative_prefix / "version-v1.0/params-abc1234_config-def5678_attempt-2"
+
+
 def _make_attempt_dir_with_script(
     base: pathlib.Path,
     dandiset_id: str,
@@ -139,10 +171,7 @@ def _make_attempt_dir_with_script(
     if session:
         attempt_dir = attempt_dir / f"ses-{session}"
     attempt_dir = (
-        attempt_dir
-        / f"pipeline-{pipeline}"
-        / f"version-{version}"
-        / f"params-{params}_config-{config}_attempt-{attempt}"
+        attempt_dir / f"pipeline-{pipeline}" / f"version-{version}_params-{params}_config-{config}_attempt-{attempt}"
     )
     attempt_dir.mkdir(parents=True)
     code_dir = attempt_dir / "code"
@@ -883,7 +912,7 @@ def _make_attempt_dir(
     A directory path
 
     ``derivatives/dandiset-{dandiset_id}/sub-test/pipeline-aind+ephys/``
-    ``version-{version}/params-{params_id}_config-{config_id}_attempt-{attempt_number}/``
+    ``version-{version}_params-{params_id}_config-{config_id}_attempt-{attempt_number}/``
 
     is created.  *with_code*, *with_output*, and *with_logs* control whether the
     ``code/``, ``derivatives/``, and ``logs/`` subdirectories are created.  When
@@ -896,8 +925,7 @@ def _make_attempt_dir(
         / f"dandiset-{dandiset_id}"
         / "sub-test"
         / "pipeline-aind+ephys"
-        / f"version-{version}"
-        / f"params-{params_id}_config-{config_id}_attempt-{attempt_number}"
+        / f"version-{version}_params-{params_id}_config-{config_id}_attempt-{attempt_number}"
     )
     attempt_dir.mkdir(parents=True)
     if with_code:
@@ -1321,8 +1349,7 @@ def _make_full_attempt_dir(
         parts.append(f"ses-{session}")
     parts += [
         f"pipeline-{pipeline}",
-        f"version-{version}",
-        f"params-{params}_config-{config}_attempt-{attempt}",
+        f"version-{version}_params-{params}_config-{config}_attempt-{attempt}",
     ]
     attempt_dir = pathlib.Path(*parts)
     attempt_dir.mkdir(parents=True)
