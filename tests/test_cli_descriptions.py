@@ -28,4 +28,4 @@ def test_cli_help_includes_descriptions(args: list[str], expected_text: str) -> 
     result = runner.invoke(_dandicompute_group, args)
 
     assert result.exit_code == 0
-    assert result.output.find(expected_text) != -1
+    assert expected_text in result.output
