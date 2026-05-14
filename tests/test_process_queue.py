@@ -1056,7 +1056,7 @@ def test_submit_next_submits_first_entry_directly(tmp_path: pathlib.Path) -> Non
 
 @pytest.mark.ai_generated
 def test_submit_next_submits_first_entry_with_existing_failure_dirs(tmp_path: pathlib.Path) -> None:
-    """_submit_next submits the first waiting entry directly."""
+    """_submit_next submits the first waiting entry directly even if failure dirs exist."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "001697"
 
