@@ -21,6 +21,7 @@ from dandi_compute_code.queue._process_queue import (
     _determine_running,
     _resolve_params_key_to_id,
     _submit_next,
+    _version_matches,
     order_queue,
     prepare_queue,
     prepare_test_queue,
@@ -331,6 +332,51 @@ def test_build_processing_order_resolves_aind_ephys_params_key_to_id() -> None:
         }
     }
     entry = _make_state_entry(pipeline="aind+ephys", version="v1.1.1+b268fd2", params="98fd947", dandiset_id="000233")
+    result = _build_processing_order(state_entries=[entry], queue_config=config)
+    assert len(result) == 1
+    assert result[0]["dandiset_id"] == "000233"
+
+
+@pytest.mark.ai_generated
+def test_version_matches_exact() -> None:
+    """_version_matches returns True for exact match."""
+    assert _version_matches("v1.1.1+b268fd2", "v1.1.1+b268fd2") is True
+
+
+@pytest.mark.ai_generated
+def test_version_matches_with_code_hash_suffix() -> None:
+    """_version_matches returns True when state version has an extra code-repo commit hash suffix."""
+    assert _version_matches("v1.1.1+b268fd2+abcdef1", "v1.1.1+b268fd2") is True
+
+
+@pytest.mark.ai_generated
+def test_version_matches_rejects_non_hex_suffix() -> None:
+    """_version_matches returns False when the extra suffix is not a hex hash."""
+    assert _version_matches("v1.1.1+b268fd2+notahex", "v1.1.1+b268fd2") is False
+
+
+@pytest.mark.ai_generated
+def test_version_matches_rejects_different_version() -> None:
+    """_version_matches returns False when the version base is different."""
+    assert _version_matches("v1.1.0+b268fd2", "v1.1.1+b268fd2") is False
+
+
+@pytest.mark.ai_generated
+def test_build_processing_order_matches_new_style_version_with_code_hash() -> None:
+    """_build_processing_order matches state entries with a code-repo commit hash appended to the version."""
+    # Simulates state entries produced after the change that appends the first 7 chars
+    # of the dandi-compute/code repo commit hash to the version directory name.
+    config = {
+        "pipelines": {
+            "aind+ephys": {
+                "version_priority": ["v1.1.1+b268fd2"],
+                "params_priority": ["default"],
+            }
+        }
+    }
+    entry = _make_state_entry(
+        pipeline="aind+ephys", version="v1.1.1+b268fd2+abcdef1", params="98fd947", dandiset_id="000233"
+    )
     result = _build_processing_order(state_entries=[entry], queue_config=config)
     assert len(result) == 1
     assert result[0]["dandiset_id"] == "000233"
