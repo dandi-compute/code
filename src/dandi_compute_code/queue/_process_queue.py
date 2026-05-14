@@ -11,6 +11,8 @@ from dandi_compute_code.aind_ephys_pipeline import prepare_aind_ephys_job
 _AIND_EPHYS_PARAMS_REGISTRY_PATH = (
     pathlib.Path(__file__).parent.parent / "aind_ephys_pipeline" / "registries" / "registered_params.json"
 )
+_TEST_QUEUE_CONTENT_ID = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+_TEST_QUEUE_PIPELINE = "aind+ephys"
 
 try:
     _AIND_EPHYS_PARAMS_REGISTRY: dict = json.loads(_AIND_EPHYS_PARAMS_REGISTRY_PATH.read_text())
@@ -472,6 +474,49 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
         _submit_next(cwd=cwd, dandiset_directory=dandiset_directory)
 
 
+def _strip_commit_hash_suffix(version: str) -> str:
+    version_parts = version.split("+")
+    if len(version_parts) > 1 and re.fullmatch(r"[0-9a-f]{7,40}", version_parts[-1]):
+        return "+".join(version_parts[:-1])
+    return version
+
+
+def prepare_test_queue(
+    *,
+    cwd: pathlib.Path,
+    pipeline_directory: pathlib.Path | None = None,
+    config_file_path: pathlib.Path | None = None,
+) -> None:
+    """
+    Prepare a new test run for each configured aind+ephys version/params pair.
+
+    Reads ``queue_config.json`` from *cwd* and, for every combination of
+    ``version_priority`` and ``params_priority`` in the ``aind+ephys`` pipeline
+    configuration, calls
+    :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job` for
+    the canonical test content ID.  The preparation helper determines the next
+    available attempt number, effectively bumping the attempt counter each run.
+    """
+    queue_config = json.loads((cwd / "queue_config.json").read_text())
+    pipeline_cfg = queue_config.get("pipelines", {}).get(_TEST_QUEUE_PIPELINE)
+    if pipeline_cfg is None:
+        message = f"Pipeline {_TEST_QUEUE_PIPELINE!r} not found in '{cwd / 'queue_config.json'}'."
+        raise ValueError(message)
+
+    for version in pipeline_cfg.get("version_priority", []):
+        submission_version = _strip_commit_hash_suffix(version)
+        for params in pipeline_cfg.get("params_priority", []):
+            print(f"Preparing test queue entry for {_TEST_QUEUE_PIPELINE}/{submission_version}/{params}")
+            prepare_aind_ephys_job(
+                content_id=_TEST_QUEUE_CONTENT_ID,
+                parameters_key=params,
+                pipeline_version=submission_version,
+                pipeline_directory=pipeline_directory,
+                config_file_path=config_file_path,
+                silent=True,
+            )
+
+
 def prepare_queue(
     *,
     cwd: pathlib.Path,
@@ -557,11 +602,7 @@ def prepare_queue(
                 asset_overrides = pipeline_cfg.get("asset_overrides") or {}
 
                 # Strip the trailing commit-hash suffix before passing to prepare_aind_ephys_job.
-                version_parts = version.split("+")
-                if len(version_parts) > 1 and re.fullmatch(r"[0-9a-f]{7,40}", version_parts[-1]):
-                    submission_version = "+".join(version_parts[:-1])
-                else:
-                    submission_version = version
+                submission_version = _strip_commit_hash_suffix(version)
 
                 for content_id in sorted(qualifying_aind_content_ids):
                     if limit is not None and prepared_count >= limit:
