@@ -1358,14 +1358,14 @@ def test_clean_unsubmitted_capsules_skips_entries_with_logs(tmp_path: pathlib.Pa
 
 
 @pytest.mark.ai_generated
-def test_clean_unsubmitted_capsules_removes_when_logs_dir_has_only_dataset_description(
+def test_clean_unsubmitted_capsules_ignores_dataset_description_in_logs(
     tmp_path: pathlib.Path,
 ) -> None:
     """clean_unsubmitted_capsules removes a capsule whose logs/ dir contains only dataset_description.json.
 
     When prepare_job uploads an empty logs/ directory to DANDI, a dataset_description.json
-    metadata file may be added inside it.  That file must not be treated as evidence of
-    actual job logs, so the capsule should still qualify for cleaning.
+    metadata file may be added inside it. That file must not be treated as evidence of
+    actual job logs. The capsule should still qualify for cleaning.
     """
     dandiset_dir = tmp_path / "dandiset"
     queue_dir = tmp_path / "queue"
