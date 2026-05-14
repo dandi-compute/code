@@ -701,6 +701,43 @@ def test_submit_next_appends_submitted_entry_to_last_submitted_jsonl(tmp_path: p
     assert submitted_entries[0]["dandiset_id"] == "000001"
 
 
+@pytest.mark.ai_generated
+def test_submit_next_logs_explicit_run_capsule_directory(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """_submit_next prints the full run capsule directory being submitted."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+
+    entry = _make_state_entry(
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+    _write_jsonl(queue_dir / "waiting.jsonl", [entry])
+    attempt_dir = _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+
+    with mock.patch("subprocess.run") as mock_run:
+        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+        _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
+
+    captured = capsys.readouterr()
+    assert f"Submitting run capsule directory: {attempt_dir}" in captured.out
+
+
 # ---------------------------------------------------------------------------
 # Tests for process_queue (top-level orchestration)
 # ---------------------------------------------------------------------------
