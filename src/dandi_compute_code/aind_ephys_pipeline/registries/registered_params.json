@@ -3,12 +3,24 @@
     "path": "name-original.json",
     "md5": "98fd947595f60b65812a4b0ea29b7141"
   },
-  "no+motion": {
+  "no+motion_v0": {
     "path": "name-no+motion_revision-0.json",
     "md5": "aa073df2761666edbf0bb66cab85ca4c"
   },
+  "no+motion_v1": {
+    "path": "name-no+motion_revision-1.json",
+    "md5": "?"
+  },
+  "deterministic": {
+    "path": "deterministic.json",
+    "md5": "?"
+  },
+  "no+motion": {
+    "path": "name-no+motion_revision-1.json",
+    "md5": "?"
+  },
   "default": {
-    "path": "name-original.json",
-    "md5": "98fd947595f60b65812a4b0ea29b7141"
+    "path": "deterministic.json",
+    "md5": "?"
   },
 }
