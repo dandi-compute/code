@@ -13,7 +13,7 @@ from .dandiset import (
     scan_version_directories,
     write_state_and_waiting_jsonl,
 )
-from .queue import order_queue, prepare_queue, process_queue
+from .queue import prepare_queue, process_queue, refresh_waiting_queue
 
 
 # dandicompute
@@ -195,7 +195,7 @@ def _queue_group() -> None:
 )
 def _queue_order_command(directory: pathlib.Path | None = None, limit: int | None = None) -> None:
     cwd = directory if directory is not None else pathlib.Path.cwd()
-    order_queue(cwd=cwd, limit=limit)
+    refresh_waiting_queue(cwd=cwd, limit=limit)
 
 
 # dandicompute queue process [OPTIONS]

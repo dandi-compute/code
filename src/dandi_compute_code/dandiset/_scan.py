@@ -3,7 +3,7 @@ import json
 import pathlib
 import re
 
-from dandi_compute_code.queue import order_queue
+from ..queue import order_queue
 
 _ATTEMPT_DIR_RE = re.compile(r"params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)")
 _ATTEMPT_SUFFIX_RE = re.compile(r"_attempt-\d+$")
@@ -182,4 +182,9 @@ def write_state_and_waiting_jsonl(dandiset_directory: pathlib.Path, queue_direct
         for record in records:
             file_stream.write(json.dumps(record) + "\n")
 
-    order_queue(cwd=queue_directory)
+    queue_config = json.loads(queue_config_file.read_text())
+    ordered_entries = order_queue(state_entries=records, queue_config=queue_config)
+    waiting_file = queue_directory / "waiting.jsonl"
+    with waiting_file.open(mode="w") as file_stream:
+        for entry in ordered_entries:
+            file_stream.write(json.dumps(entry) + "\n")
