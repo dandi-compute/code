@@ -21,7 +21,7 @@ dandicompute aind prepare --id [full content ID] --submit
 To test automatically on the example asset:
 
 ```bash
-dandicompute aind prepare --id 048d1ee9-83b7-491f-8f02-1ca615b1d455 --submit
+dandicompute prepare test --queue-directory ./queue --pipeline ./aind-ephys-pipeline.cody/
 ```
 
 To clean unsubmitted job capsules:
