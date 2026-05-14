@@ -17,6 +17,7 @@ from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
 from dandi_compute_code.queue._process_queue import (
+    _AIND_EPHYS_PARAMS_REGISTRY,
     _attempt_dir_candidates,
     _build_processing_order,
     _count_dandiset_failures,
@@ -52,15 +53,9 @@ _EXAMPLE_QUEUE_CONFIG = {
     }
 }
 
-_AIND_EPHYS_PARAMS_REGISTRY_PATH = (
-    pathlib.Path(__file__).parent.parent
-    / "src"
-    / "dandi_compute_code"
-    / "aind_ephys_pipeline"
-    / "registries"
-    / "registered_params.json"
-)
-_AIND_EPHYS_DEFAULT_PARAMS_ID = json.loads(_AIND_EPHYS_PARAMS_REGISTRY_PATH.read_text())["default"]["md5"][:7]
+
+def _default_aind_ephys_params_id() -> str:
+    return _AIND_EPHYS_PARAMS_REGISTRY["default"]["md5"][:7]
 
 
 def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
@@ -200,7 +195,7 @@ def _make_attempt_dir_with_script(
 def test_resolve_params_key_to_id_aind_ephys_default() -> None:
     """_resolve_params_key_to_id returns the 7-char hash for a known aind+ephys key."""
     result = _resolve_params_key_to_id("aind+ephys", "default")
-    assert result == _AIND_EPHYS_DEFAULT_PARAMS_ID
+    assert result == _default_aind_ephys_params_id()
 
 
 @pytest.mark.ai_generated
@@ -372,7 +367,7 @@ def test_build_processing_order_resolves_aind_ephys_params_key_to_id() -> None:
     entry = _make_state_entry(
         pipeline="aind+ephys",
         version="v1.1.1+b268fd2",
-        params=_AIND_EPHYS_DEFAULT_PARAMS_ID,
+        params=_default_aind_ephys_params_id(),
         dandiset_id="000233",
     )
     result = _build_processing_order(state_entries=[entry], queue_config=config)
@@ -420,7 +415,7 @@ def test_build_processing_order_matches_new_style_version_with_code_hash() -> No
     entry = _make_state_entry(
         pipeline="aind+ephys",
         version="v1.1.1+b268fd2+abcdef1",
-        params=_AIND_EPHYS_DEFAULT_PARAMS_ID,
+        params=_default_aind_ephys_params_id(),
         dandiset_id="000233",
     )
     result = _build_processing_order(state_entries=[entry], queue_config=config)
