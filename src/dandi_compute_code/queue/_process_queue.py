@@ -12,6 +12,7 @@ from dandi_compute_code.aind_ephys_pipeline import prepare_aind_ephys_job
 _AIND_EPHYS_PARAMS_REGISTRY_PATH = (
     pathlib.Path(__file__).parent.parent / "aind_ephys_pipeline" / "registries" / "registered_params.json"
 )
+_FLAT_ATTEMPT_DIR_RE = re.compile(r"^version-(?P<version>.+)_params-[^_]+_config-.+_attempt-\d+$")
 _TEST_QUEUE_CONTENT_ID = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
 _TEST_QUEUE_PIPELINE = "aind+ephys"
 
@@ -201,7 +202,6 @@ def _count_dandiset_failures(
     failure_count = 0
     attempt_re = re.compile(r"_attempt-\d+$")
     version_dir_name = f"version-{version}"
-    flat_attempt_re = re.compile(r"^version-(?P<version>.+)_params-[^_]+_config-.+_attempt-\d+$")
 
     for dandiset_path in derivatives.iterdir():
         if not dandiset_path.is_dir() or not dandiset_path.name.startswith("dandiset-"):
@@ -215,7 +215,7 @@ def _count_dandiset_failures(
             if parent_name == version_dir_name:
                 is_matching_version = True
             elif parent_name.startswith("pipeline-"):
-                flat_match = flat_attempt_re.fullmatch(attempt_dir.name)
+                flat_match = _FLAT_ATTEMPT_DIR_RE.fullmatch(attempt_dir.name)
                 is_matching_version = bool(flat_match and flat_match.group("version") == version)
             else:
                 is_matching_version = False
