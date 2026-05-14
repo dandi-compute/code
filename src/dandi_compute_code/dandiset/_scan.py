@@ -172,5 +172,7 @@ def write_scan_jsonl(dandiset_directory: pathlib.Path, output_file: pathlib.Path
         for record in records:
             file_stream.write(json.dumps(record) + "\n")
 
+    # Queue mode convention: writing `<queue_dir>/state.jsonl` should also refresh
+    # `<queue_dir>/waiting.jsonl` from that freshly written state.
     if output_file.name == "state.jsonl" and (output_file.parent / "queue_config.json").exists():
         order_queue(cwd=output_file.parent)
