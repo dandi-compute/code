@@ -1,14 +1,17 @@
 {
   "v0": {
-    "path": "mit_engaging.config",
-    "md5": "6568ddacdedabc7b855769340ed8874f"
+    "path": "name-mit+engaging_revision-0.config",
+    "md5": "6568ddacdedabc7b855769340ed8874f",
+    "description": "The original default recommended SLURM configuration set on the AIND ephys pipeline repo."
   },
   "v1": {
     "path": "name-mit+engaging_revision-1.config",
-    "md5": "0d4bf36ddb61418ae7714e7d6e5ff8b8"
+    "md5": "0d4bf36ddb61418ae7714e7d6e5ff8b8",
+    "description": "Revised configuration to decrease memory and CPU requests in hopes of faster priorities in SLURM queue."
   },
   "default": {
     "path": "name-mit+engaging_revision-1.config",
-    "md5": "0d4bf36ddb61418ae7714e7d6e5ff8b8"
+    "md5": "0d4bf36ddb61418ae7714e7d6e5ff8b8",
+    "description": "The current recommended configuration."
   }
 }

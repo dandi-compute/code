@@ -7,6 +7,7 @@ than touching the network or a SLURM cluster.
 """
 
 import gzip
+import importlib.resources
 import json
 import os
 import pathlib
@@ -51,6 +52,13 @@ _EXAMPLE_QUEUE_CONFIG = {
         }
     }
 }
+
+
+def _get_default_params_id() -> str:
+    params_registry_path = importlib.resources.files("dandi_compute_code.aind_ephys_pipeline").joinpath(
+        "registries/registered_params.json"
+    )
+    return json.loads(params_registry_path.read_text())["default"]["md5"][:7]
 
 
 def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
@@ -190,8 +198,7 @@ def _make_attempt_dir_with_script(
 def test_resolve_params_key_to_id_aind_ephys_default() -> None:
     """_resolve_params_key_to_id returns the 7-char hash for a known aind+ephys key."""
     result = _resolve_params_key_to_id("aind+ephys", "default")
-    # The 'default' params key maps to MD5 starting with '98fd947'
-    assert result == "98fd947"
+    assert result == _get_default_params_id()
 
 
 @pytest.mark.ai_generated
@@ -352,8 +359,6 @@ def test_build_processing_order_ignores_unknown_pipeline() -> None:
 @pytest.mark.ai_generated
 def test_build_processing_order_resolves_aind_ephys_params_key_to_id() -> None:
     """_build_processing_order matches state entries whose params is a hash ID when queue_config uses the key name."""
-    # Simulates the real scenario: queue_config uses 'default' as the params key,
-    # but state.jsonl entries have the 7-char hash '98fd947' derived from the params file MD5.
     config = {
         "pipelines": {
             "aind+ephys": {
@@ -362,7 +367,12 @@ def test_build_processing_order_resolves_aind_ephys_params_key_to_id() -> None:
             }
         }
     }
-    entry = _make_state_entry(pipeline="aind+ephys", version="v1.1.1+b268fd2", params="98fd947", dandiset_id="000233")
+    entry = _make_state_entry(
+        pipeline="aind+ephys",
+        version="v1.1.1+b268fd2",
+        params=_get_default_params_id(),
+        dandiset_id="000233",
+    )
     result = _build_processing_order(state_entries=[entry], queue_config=config)
     assert len(result) == 1
     assert result[0]["dandiset_id"] == "000233"
@@ -406,7 +416,10 @@ def test_build_processing_order_matches_new_style_version_with_code_hash() -> No
         }
     }
     entry = _make_state_entry(
-        pipeline="aind+ephys", version="v1.1.1+b268fd2+abcdef1", params="98fd947", dandiset_id="000233"
+        pipeline="aind+ephys",
+        version="v1.1.1+b268fd2+abcdef1",
+        params=_get_default_params_id(),
+        dandiset_id="000233",
     )
     result = _build_processing_order(state_entries=[entry], queue_config=config)
     assert len(result) == 1
