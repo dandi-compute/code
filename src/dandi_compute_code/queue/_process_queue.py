@@ -271,8 +271,11 @@ def _prune_last_submitted(*, cwd: pathlib.Path, state_entries: list[dict]) -> No
 
 def _remove_empty_parents(*, start: pathlib.Path, stop: pathlib.Path) -> None:
     """Remove empty directories from ``start`` up to but not including ``stop``."""
+    if stop not in start.parents:
+        return
+
     current = start
-    while current != stop and stop in current.parents:
+    while current != stop:
         if not current.exists() or not current.is_dir():
             break
         try:
