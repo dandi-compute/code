@@ -68,6 +68,7 @@ def _aind_group() -> None:
     default=None,
 )
 @click.option(
+    "--config",
     "--config-key",
     "config_key",
     help="Registered configuration key to use.",
@@ -223,6 +224,7 @@ def _prepare_group() -> None:
     default=None,
 )
 @click.option(
+    "--config",
     "--config-key",
     "config_key",
     help="Registered configuration key to use.",
@@ -296,6 +298,7 @@ def _queue_process_command(
     default=None,
 )
 @click.option(
+    "--config",
     "--config-key",
     "config_key",
     help="Registered configuration key to use.",

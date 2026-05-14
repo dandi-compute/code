@@ -1246,7 +1246,7 @@ def test_cli_prepare_test_calls_helper(tmp_path: pathlib.Path) -> None:
 
 @pytest.mark.ai_generated
 def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
-    """dandicompute prepare test forwards --config-key to prepare_test_queue."""
+    """dandicompute prepare test forwards --config to prepare_test_queue."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     runner = CliRunner()
@@ -1257,7 +1257,7 @@ def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
     ):
         result = runner.invoke(
             _dandicompute_group,
-            ["prepare", "test", "--queue-directory", str(queue_dir), "--config-key", "mit+engaging+revision-1"],
+            ["prepare", "test", "--queue-directory", str(queue_dir), "--config", "mit+engaging+revision-1"],
         )
 
     assert result.exit_code == 0
@@ -1270,7 +1270,7 @@ def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
 
 @pytest.mark.ai_generated
 def test_cli_aind_prepare_passes_config_key() -> None:
-    """dandicompute aind prepare forwards --config-key to prepare_aind_ephys_job."""
+    """dandicompute aind prepare forwards --config to prepare_aind_ephys_job."""
     runner = CliRunner()
 
     with mock.patch("dandi_compute_code._cli.prepare_aind_ephys_job") as mock_prepare:
@@ -1284,7 +1284,7 @@ def test_cli_aind_prepare_passes_config_key() -> None:
                 "abc123",
                 "--version",
                 "v1.2.3",
-                "--config-key",
+                "--config",
                 "mit+engaging+revision-1",
             ],
         )
