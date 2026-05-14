@@ -1,9 +1,13 @@
 {
-  "default": {
+  "v0": {
     "path": "mit_engaging.config",
     "md5": "6568ddacdedabc7b855769340ed8874f"
   },
-  "mit+engaging+revision-1": {
+  "v1": {
+    "path": "name-mit+engaging_revision-1.config",
+    "md5": "0d4bf36ddb61418ae7714e7d6e5ff8b8"
+  },
+  "default": {
     "path": "name-mit+engaging_revision-1.config",
     "md5": "0d4bf36ddb61418ae7714e7d6e5ff8b8"
   }
