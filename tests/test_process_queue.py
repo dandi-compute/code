@@ -1018,8 +1018,8 @@ _FAKE_CONFIG_ID = "def5678"
 
 
 @pytest.mark.ai_generated
-def test_submit_next_submits_first_entry_even_when_failures_exceed_max(tmp_path: pathlib.Path) -> None:
-    """_submit_next submits the first waiting entry even if failure count would exceed max."""
+def test_submit_next_submits_first_entry_directly(tmp_path: pathlib.Path) -> None:
+    """_submit_next submits the first waiting entry directly."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "001697"
 
@@ -1056,7 +1056,7 @@ def test_submit_next_submits_first_entry_even_when_failures_exceed_max(tmp_path:
 
 @pytest.mark.ai_generated
 def test_submit_next_submits_first_entry_with_existing_failure_dirs(tmp_path: pathlib.Path) -> None:
-    """_submit_next submits the first waiting entry directly even when failures exist."""
+    """_submit_next submits the first waiting entry directly."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "001697"
 
