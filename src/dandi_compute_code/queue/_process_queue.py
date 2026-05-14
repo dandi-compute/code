@@ -1,4 +1,3 @@
-import collections
 import gzip
 import json
 import pathlib
@@ -192,46 +191,6 @@ def _count_dandiset_failures(
     return failure_count
 
 
-def _fetch_counts(
-    *,
-    file_path: pathlib.Path,
-    pipeline: str,
-    version: str,
-    params: str,
-) -> collections.Counter:
-    """
-    Count how many times each content_id has been submitted for a given pipeline/version/params combination.
-
-    Parameters
-    ----------
-    file_path : pathlib.Path
-        Path to the JSONL file (e.g., submitted.jsonl).
-    pipeline : str
-        Pipeline name (e.g., 'aind+ephys').
-    version : str
-        Version string (e.g., 'v1.0.0+fixes+47bd492').
-    params : str
-        Params string (e.g., 'default').
-
-    Returns
-    -------
-    collections.Counter
-        A Counter mapping content_id to its submission count.
-    """
-    content_ids = []
-    for line in file_path.read_text().splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        entry = json.loads(stripped)
-        if entry.get("pipeline") != pipeline or entry.get("version") != version or entry.get("params") != params:
-            continue
-        content_id = entry.get("content_id", "")
-        if content_id:
-            content_ids.append(content_id)
-    return collections.Counter(content_ids)
-
-
 def _determine_running() -> bool:
     """
     Check whether any AIND jobs are currently running via the SLURM scheduler.
@@ -256,35 +215,6 @@ def _determine_running() -> bool:
     return False
 
 
-def _entry_identity(entry: dict) -> tuple:
-    """Return a stable tuple key for matching queue/state/last-submitted entries."""
-    return (
-        entry.get("dandiset_id"),
-        entry.get("subject"),
-        entry.get("session"),
-        entry.get("pipeline"),
-        entry.get("version"),
-        entry.get("params"),
-        entry.get("config"),
-        entry.get("attempt"),
-    )
-
-
-def _prune_last_submitted(*, cwd: pathlib.Path, state_entries: list[dict]) -> None:
-    """Remove last_submitted entries that now have logs or output in state."""
-    last_submitted_file = cwd / "last_submitted.jsonl"
-    if not last_submitted_file.exists():
-        return
-
-    entries_to_prune = {_entry_identity(e) for e in state_entries if e.get("has_output") or e.get("has_logs")}
-
-    last_submitted_entries = [
-        json.loads(line.strip()) for line in last_submitted_file.read_text().splitlines() if line.strip()
-    ]
-    filtered = [entry for entry in last_submitted_entries if _entry_identity(entry) not in entries_to_prune]
-    last_submitted_file.write_text("".join(json.dumps(entry) + "\n" for entry in filtered))
-
-
 def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool:
     """
     Submit the next pending entry from ``waiting.jsonl``.
@@ -296,8 +226,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     from ``state.jsonl``.  If still empty after that, returns ``False``.
 
     The first entry from ``waiting.jsonl`` is submitted and then removed from
-    ``waiting.jsonl``; the entry is simultaneously appended to
-    ``last_submitted.jsonl``. The waiting queue is produced upstream by
+    ``waiting.jsonl``. The waiting queue is produced upstream by
     :func:`refresh_waiting_queue`; this function applies no additional
     submission gating beyond requiring the submit script to exist.
 
@@ -371,11 +300,6 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     waiting_entries.pop(0)
     waiting_file.write_text("".join(json.dumps(e) + "\n" for e in waiting_entries))
 
-    # Append to last_submitted.jsonl.
-    last_submitted_file = cwd / "last_submitted.jsonl"
-    with last_submitted_file.open("a") as f:
-        f.write(json.dumps(entry) + "\n")
-
     return True
 
 
@@ -440,7 +364,6 @@ def refresh_waiting_queue(*, cwd: pathlib.Path, limit: int | None = None) -> Non
     ordered = order_queue(state_entries=state_entries, queue_config=queue_config, limit=limit)
     waiting_file = cwd / "waiting.jsonl"
     waiting_file.write_text("".join(json.dumps(e) + "\n" for e in ordered))
-    _prune_last_submitted(cwd=cwd, state_entries=state_entries)
 
 
 def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
@@ -530,8 +453,7 @@ def prepare_queue(
     En-masse preparation of all qualifying assets based on the current queue config.
 
     For every pipeline/version/params combination declared in ``queue_config.json``
-    this function fetches the qualifying AIND content IDs, applies attempt-limit
-    filtering, and calls
+    this function fetches the qualifying AIND content IDs and calls
     :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job` for each
     asset — generating the ``code/`` directory and its parent directories without
     submitting a job.
@@ -554,10 +476,6 @@ def prepare_queue(
         If provided, stop after preparing *limit* assets in total (across all
         pipeline/version/params combinations).  Useful for testing.
     """
-    submitted_file = cwd / "submitted.jsonl"
-    if not submitted_file.exists():
-        submitted_file.write_text("")
-
     queue_config = json.loads((cwd / "queue_config.json").read_text())
 
     qualifying_aind_content_ids_url = (
@@ -593,25 +511,12 @@ def prepare_queue(
                         )
                         continue
 
-                done_counter = _fetch_counts(
-                    file_path=submitted_file,
-                    pipeline=pipeline_name,
-                    version=version,
-                    params=params,
-                )
-                global_max_attempts = pipeline_cfg["max_attempts_per_asset"]
-                asset_overrides = pipeline_cfg.get("asset_overrides") or {}
-
                 # Strip the trailing commit-hash suffix before passing to prepare_aind_ephys_job.
                 submission_version = _strip_commit_hash_suffix(version)
 
                 for content_id in sorted(qualifying_aind_content_ids):
                     if limit is not None and prepared_count >= limit:
                         break
-                    if (
-                        asset_override := asset_overrides.get(content_id, global_max_attempts)
-                    ) is not None and done_counter.get(content_id, 0) >= asset_override:
-                        continue
 
                     print(f"Preparing content ID: {content_id}")
                     prepare_aind_ephys_job(

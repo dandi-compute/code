@@ -6,7 +6,6 @@ core helper functions using an in-memory, temporary queue directory rather
 than touching the network or a SLURM cluster.
 """
 
-import collections
 import gzip
 import json
 import pathlib
@@ -20,7 +19,6 @@ from dandi_compute_code.queue._process_queue import (
     _build_processing_order,
     _count_dandiset_failures,
     _determine_running,
-    _fetch_counts,
     _resolve_params_key_to_id,
     _submit_next,
     order_queue,
@@ -58,13 +56,11 @@ def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
     Structure
     ---------
     queue/
-        submitted.jsonl
         queue_config.json   (single consolidated config for all pipelines/versions/params)
     """
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
 
-    (queue_dir / "submitted.jsonl").write_text("")
     (queue_dir / "queue_config.json").write_text(json.dumps(_EXAMPLE_QUEUE_CONFIG))
 
     return queue_dir
@@ -151,76 +147,6 @@ def _make_attempt_dir_with_script(
     if with_script:
         (code_dir / "submit.sh").write_text("#!/bin/bash\necho hello\n")
     return attempt_dir
-
-
-# ---------------------------------------------------------------------------
-# Tests for _fetch_counts
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.ai_generated
-def test_fetch_counts_empty_file(tmp_path: pathlib.Path) -> None:
-    """_fetch_counts returns an empty Counter when the file is empty."""
-    jsonl_file = tmp_path / "submitted.jsonl"
-    jsonl_file.write_text("")
-
-    result = _fetch_counts(
-        file_path=jsonl_file,
-        pipeline="test",
-        version="v1.0",
-        params="default",
-    )
-
-    assert result == collections.Counter()
-
-
-@pytest.mark.ai_generated
-def test_fetch_counts_matches_pipeline(tmp_path: pathlib.Path) -> None:
-    """_fetch_counts only counts entries that match pipeline/version/params."""
-    jsonl_file = tmp_path / "submitted.jsonl"
-    _write_jsonl(
-        jsonl_file,
-        [
-            {"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-aaa"},
-            {"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-aaa"},
-            {"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-bbb"},
-            # Different pipeline – should NOT be counted
-            {"pipeline": "other", "version": "v1.0", "params": "default", "content_id": "asset-aaa"},
-            # Different params – should NOT be counted
-            {"pipeline": "test", "version": "v1.0", "params": "other", "content_id": "asset-bbb"},
-        ],
-    )
-
-    result = _fetch_counts(
-        file_path=jsonl_file,
-        pipeline="test",
-        version="v1.0",
-        params="default",
-    )
-
-    assert result["asset-aaa"] == 2
-    assert result["asset-bbb"] == 1
-    assert result["asset-ccc"] == 0
-
-
-@pytest.mark.ai_generated
-def test_fetch_counts_ignores_blank_lines(tmp_path: pathlib.Path) -> None:
-    """_fetch_counts gracefully skips blank lines in the JSONL file."""
-    jsonl_file = tmp_path / "submitted.jsonl"
-    jsonl_file.write_text(
-        "\n"
-        + json.dumps({"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-ccc"})
-        + "\n\n"
-    )
-
-    result = _fetch_counts(
-        file_path=jsonl_file,
-        pipeline="test",
-        version="v1.0",
-        params="default",
-    )
-
-    assert result["asset-ccc"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -649,42 +575,6 @@ def test_submit_next_pops_submitted_entry_from_waiting_jsonl(tmp_path: pathlib.P
     assert remaining[0]["dandiset_id"] == "000002"
 
 
-@pytest.mark.ai_generated
-def test_submit_next_appends_submitted_entry_to_last_submitted_jsonl(tmp_path: pathlib.Path) -> None:
-    """_submit_next appends the submitted entry to last_submitted.jsonl."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
-
-    entry = _make_state_entry(
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    _write_jsonl(queue_dir / "waiting.jsonl", [entry])
-    _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
-        _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
-
-    submitted_entries = _read_jsonl(queue_dir / "last_submitted.jsonl")
-    assert len(submitted_entries) == 1
-    assert submitted_entries[0]["dandiset_id"] == "000001"
-
-
 # ---------------------------------------------------------------------------
 # Tests for process_queue (top-level orchestration)
 # ---------------------------------------------------------------------------
@@ -837,25 +727,6 @@ def test_order_queue_limit_truncates_waiting_jsonl(tmp_path: pathlib.Path) -> No
 
     waiting_entries = _read_jsonl(queue_dir / "waiting.jsonl")
     assert len(waiting_entries) == 2
-
-
-@pytest.mark.ai_generated
-def test_refresh_waiting_queue_prunes_last_submitted_entries_with_output_or_logs(tmp_path: pathlib.Path) -> None:
-    """refresh_waiting_queue removes finished/running entries from last_submitted.jsonl."""
-    queue_dir = _make_queue_dir(tmp_path)
-
-    pending_entry = _make_state_entry(dandiset_id="000001", has_code=True, has_output=False, has_logs=False)
-    with_output_entry = _make_state_entry(dandiset_id="000002", has_code=True, has_output=True, has_logs=False)
-    with_logs_entry = _make_state_entry(dandiset_id="000003", has_code=True, has_output=False, has_logs=True)
-    _write_jsonl(queue_dir / "state.jsonl", [pending_entry, with_output_entry, with_logs_entry])
-
-    _write_jsonl(queue_dir / "last_submitted.jsonl", [pending_entry, with_output_entry, with_logs_entry])
-
-    refresh_waiting_queue(cwd=queue_dir)
-
-    last_submitted_entries = _read_jsonl(queue_dir / "last_submitted.jsonl")
-    assert len(last_submitted_entries) == 1
-    assert last_submitted_entries[0]["dandiset_id"] == "000001"
 
 
 @pytest.mark.ai_generated
@@ -1117,33 +988,6 @@ def test_prepare_queue_calls_prepare_for_each_qualifying_asset(tmp_path: pathlib
     assert mock_prepare.call_count == 2
     prepared_ids = {call.kwargs["content_id"] for call in mock_prepare.call_args_list}
     assert prepared_ids == {"asset-bbb", "asset-ccc"}
-
-
-@pytest.mark.ai_generated
-def test_prepare_queue_respects_max_attempts(tmp_path: pathlib.Path) -> None:
-    """prepare_queue skips content IDs that have already reached max_attempts_per_asset."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "001697"
-    dandiset_dir.mkdir()
-
-    # asset-aaa has an override limit of 1; pre-populate submitted with one entry for it.
-    _write_jsonl(
-        queue_dir / "submitted.jsonl",
-        [{"pipeline": "test", "version": "v1.0", "params": "default", "content_id": "asset-aaa"}],
-    )
-
-    qualifying_ids = ["asset-aaa", "asset-bbb"]
-
-    with (
-        mock.patch("urllib.request.urlopen") as mock_urlopen,
-        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
-    ):
-        mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
-
-    prepared_ids = {call.kwargs["content_id"] for call in mock_prepare.call_args_list}
-    assert "asset-aaa" not in prepared_ids
-    assert "asset-bbb" in prepared_ids
 
 
 @pytest.mark.ai_generated
