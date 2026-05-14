@@ -549,11 +549,11 @@ def refresh_waiting_queue(*, cwd: pathlib.Path, limit: int | None = None) -> Non
 
 def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
     """
-    Submit the next job from the priority-ordered ``waiting.jsonl``.
+    Submit up to two jobs from the priority-ordered ``waiting.jsonl``.
 
     If ``waiting.jsonl`` is absent or empty, :func:`refresh_waiting_queue` is called
     first to populate it from ``state.jsonl``.  Then, if no AIND jobs are
-    currently running via SLURM, the next valid entry is submitted.
+    currently running via SLURM, up to two valid entries are submitted.
 
     Parameters
     ----------
@@ -576,7 +576,10 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
 
     any_running = _determine_running()
     if not any_running:
-        _submit_next(cwd=cwd, dandiset_directory=dandiset_directory)
+        for _ in range(2):
+            submitted = _submit_next(cwd=cwd, dandiset_directory=dandiset_directory)
+            if not submitted:
+                break
 
 
 def _strip_commit_hash_suffix(version: str) -> str:

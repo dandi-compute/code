@@ -753,7 +753,7 @@ def test_process_queue_skips_order_queue_when_waiting_non_empty(tmp_path: pathli
 
 @pytest.mark.ai_generated
 def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> None:
-    """process_queue calls _submit_next when no AIND jobs are running."""
+    """process_queue calls _submit_next twice when no AIND jobs are running."""
     queue_dir = _make_queue_dir(tmp_path)
     _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
@@ -761,11 +761,17 @@ def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> N
 
     with (
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
-        mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
+        mock.patch("dandi_compute_code.queue._process_queue._submit_next", return_value=True) as mock_submit,
     ):
         process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
-    mock_submit.assert_called_once_with(cwd=queue_dir, dandiset_directory=dandiset_dir)
+    assert mock_submit.call_count == 2
+    mock_submit.assert_has_calls(
+        [
+            mock.call(cwd=queue_dir, dandiset_directory=dandiset_dir),
+            mock.call(cwd=queue_dir, dandiset_directory=dandiset_dir),
+        ]
+    )
 
 
 @pytest.mark.ai_generated
@@ -787,7 +793,7 @@ def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path)
 
 @pytest.mark.ai_generated
 def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathlib.Path) -> None:
-    """process_queue forwards dandiset_directory to _submit_next."""
+    """process_queue forwards dandiset_directory to each _submit_next call."""
     queue_dir = _make_queue_dir(tmp_path)
     _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
@@ -795,11 +801,29 @@ def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathli
 
     with (
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
-        mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
+        mock.patch("dandi_compute_code.queue._process_queue._submit_next", return_value=True) as mock_submit,
     ):
         process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
-    mock_submit.assert_called_once_with(cwd=queue_dir, dandiset_directory=dandiset_dir)
+    assert mock_submit.call_count == 2
+    assert all(call == mock.call(cwd=queue_dir, dandiset_directory=dandiset_dir) for call in mock_submit.call_args_list)
+
+
+@pytest.mark.ai_generated
+def test_process_queue_stops_submitting_when_queue_exhausted(tmp_path: pathlib.Path) -> None:
+    """process_queue stops early when _submit_next reports no further submissions."""
+    queue_dir = _make_queue_dir(tmp_path)
+    _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    with (
+        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
+        mock.patch("dandi_compute_code.queue._process_queue._submit_next", side_effect=[True, False]) as mock_submit,
+    ):
+        process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+
+    assert mock_submit.call_count == 2
 
 
 # ---------------------------------------------------------------------------
