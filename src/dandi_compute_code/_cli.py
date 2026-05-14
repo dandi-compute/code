@@ -19,6 +19,7 @@ from .queue import clean_unsubmitted_capsules, prepare_queue, prepare_test_queue
 # dandicompute
 @click.group(name="dandicompute")
 def _dandicompute_group():
+    """Run compute workflows and queue management tasks for DANDI assets."""
     pass
 
 
@@ -32,6 +33,7 @@ def _dandicompute_group():
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 def _clean_command(directory: pathlib.Path) -> None:
+    """Remove all files and directories under a work directory except apptainer cache."""
     clean_work_directory(directory=directory)
     _styled_echo(text="\nWork directory cleaned!", color="green")
 
@@ -39,6 +41,7 @@ def _clean_command(directory: pathlib.Path) -> None:
 # dandicompute aind
 @_dandicompute_group.group(name="aind")
 def _aind_group() -> None:
+    """Prepare and submit AIND ephys pipeline jobs."""
     pass
 
 
@@ -123,6 +126,7 @@ def _aind_prepare_command(
     submit: bool = False,
     silent: bool = False,
 ) -> None:
+    """Prepare an AIND ephys submission script, and optionally submit it."""
     if submit and "DANDI_API_KEY" not in os.environ:
         message = "`DANDI_API_KEY` environment variable is not set."
         raise RuntimeError(message)
@@ -166,12 +170,14 @@ def _aind_prepare_command(
     type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
 )
 def _aind_submit_command(script_file_path: pathlib.Path) -> None:
+    """Submit a previously prepared AIND ephys script."""
     submit_aind_ephys_job(script_file_path=script_file_path)
 
 
 # dandicompute queue
 @_dandicompute_group.group(name="queue")
 def _queue_group() -> None:
+    """Manage queue ordering, preparation, and execution."""
     pass
 
 
@@ -194,6 +200,7 @@ def _queue_group() -> None:
     default=None,
 )
 def _queue_refresh_command(directory: pathlib.Path | None = None, limit: int | None = None) -> None:
+    """Regenerate waiting.jsonl from state.jsonl and optional queue limits."""
     cwd = directory if directory is not None else pathlib.Path.cwd()
     refresh_waiting_queue(cwd=cwd, limit=limit)
 
@@ -219,6 +226,7 @@ def _queue_clean_command(
     directory: pathlib.Path | None = None,
     dandiset_directory: pathlib.Path = pathlib.Path("."),
 ) -> None:
+    """Delete unsubmitted capsules that are no longer present in the queue."""
     cwd = directory if directory is not None else pathlib.Path.cwd()
     removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_directory, queue_directory=cwd)
     if removed:
@@ -233,6 +241,7 @@ def _queue_clean_command(
 # dandicompute prepare
 @_dandicompute_group.group(name="prepare")
 def _prepare_group() -> None:
+    """Run preparation workflows that generate queue entries or scripts."""
     pass
 
 
@@ -267,6 +276,7 @@ def _prepare_test_command(
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
 ) -> None:
+    """Prepare test queue entries for configured AIND ephys versions and params."""
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
     cwd = directory if directory is not None else pathlib.Path.cwd()
@@ -298,6 +308,7 @@ def _queue_process_command(
     directory: pathlib.Path | None = None,
     dandiset_directory: pathlib.Path = pathlib.Path("."),
 ) -> None:
+    """Submit queued jobs when no active dandicompute jobs are running."""
     cwd = directory if directory is not None else pathlib.Path.cwd()
     process_queue(cwd=cwd, dandiset_directory=dandiset_directory)
 
@@ -350,6 +361,7 @@ def _queue_prepare_command(
     config_key: str = "default",
     limit: int | None = None,
 ) -> None:
+    """Prepare queued jobs across configured pipelines without submitting them."""
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
     cwd = directory if directory is not None else pathlib.Path.cwd()
@@ -365,6 +377,7 @@ def _queue_prepare_command(
 # dandicompute dandiset
 @_dandicompute_group.group(name="dandiset")
 def _dandiset_group() -> None:
+    """Inspect dandiset derivatives and write queue state files."""
     pass
 
 
@@ -389,6 +402,7 @@ def _dandiset_scan_command(
     dandiset_directory: pathlib.Path,
     output_file: pathlib.Path | None = None,
 ) -> None:
+    """Scan a local dandiset clone and emit attempt records as JSONL."""
     if output_file is None:
         records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
         for record in records:
@@ -416,6 +430,7 @@ def _dandiset_scan_command(
 # dandicompute delete
 @_dandicompute_group.group(name="delete")
 def _delete_group() -> None:
+    """Delete remote and local derivatives for specific version patterns."""
     pass
 
 
@@ -440,6 +455,7 @@ def _delete_group() -> None:
     type=str,
 )
 def _delete_version_command(dandiset_directory: pathlib.Path, version: str) -> None:
+    """Delete version-matching derivatives from the archive and local filesystem."""
     if not os.environ.get("DANDI_API_KEY", "").strip():
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set or is blank.")
     version_dirs = scan_version_directories(dandiset_directory=dandiset_directory, version=version)
