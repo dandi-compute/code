@@ -3,6 +3,8 @@ import json
 import pathlib
 import re
 
+from dandi_compute_code.queue import order_queue
+
 _ATTEMPT_DIR_RE = re.compile(r"params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)")
 _ATTEMPT_SUFFIX_RE = re.compile(r"_attempt-\d+$")
 
@@ -171,6 +173,4 @@ def write_scan_jsonl(dandiset_directory: pathlib.Path, output_file: pathlib.Path
             file_stream.write(json.dumps(record) + "\n")
 
     if output_file.name == "state.jsonl" and (output_file.parent / "queue_config.json").exists():
-        from dandi_compute_code.queue import order_queue
-
         order_queue(cwd=output_file.parent)
