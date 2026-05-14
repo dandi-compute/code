@@ -26,6 +26,7 @@ def prepare_aind_ephys_job(
     dandiset_id: str | None = None,
     dandiset_path: str | None = None,
     config_file_path: pathlib.Path | None = None,
+    config_key: str = "default",
     parameters_key: str = "default",
     pipeline_directory: pathlib.Path | None = None,
     silent: bool = False,
@@ -47,6 +48,9 @@ def prepare_aind_ephys_job(
         is not provided and will be used to look up the content ID if `content_id` is not provided.
     config_file_path : pathlib.Path, optional
         Path to the configuration file.
+    config_key : str
+        The short name of the configuration to use. Must be a key registered in
+        `registries/registered_configs.json` when `config_file_path` is not provided.
     parameters_key : str
         The short name of the parameters to use. Must be a key registered in `registries/registered_params.json`.
     pipeline_directory : pathlib.Path, optional
@@ -75,7 +79,6 @@ def prepare_aind_ephys_job(
     config_registry = json.loads(config_registry_path.read_text())
     expected_config_md5: str | None = None
     if config_file_path is None:
-        config_key = "default"
         if config_key not in config_registry:
             registered_keys = list(config_registry.keys())
             message = (

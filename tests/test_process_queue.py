@@ -1137,7 +1137,7 @@ def test_prepare_queue_strips_commit_suffix_from_version(tmp_path: pathlib.Path)
 
 @pytest.mark.ai_generated
 def test_prepare_queue_passes_optional_args_through(tmp_path: pathlib.Path) -> None:
-    """prepare_queue forwards pipeline_directory and config_file_path to prepare_aind_ephys_job."""
+    """prepare_queue forwards optional args to prepare_aind_ephys_job."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
@@ -1159,12 +1159,14 @@ def test_prepare_queue_passes_optional_args_through(tmp_path: pathlib.Path) -> N
             dandiset_directory=dandiset_dir,
             pipeline_directory=fake_pipeline_dir,
             config_file_path=fake_config,
+            config_key="mit+engaging+revision-1",
         )
 
     assert mock_prepare.call_count == 1
     call_kwargs = mock_prepare.call_args.kwargs
     assert call_kwargs["pipeline_directory"] == fake_pipeline_dir
     assert call_kwargs["config_file_path"] == fake_config
+    assert call_kwargs["config_key"] == "mit+engaging+revision-1"
 
 
 @pytest.mark.ai_generated
@@ -1211,6 +1213,7 @@ def test_prepare_test_queue_calls_prepare_for_each_version_and_param(tmp_path: p
     assert all(
         call.kwargs["content_id"] == "048d1ee9-83b7-491f-8f02-1ca615b1d455" for call in mock_prepare.call_args_list
     )
+    assert all(call.kwargs["config_key"] == "default" for call in mock_prepare.call_args_list)
     assert all(call.kwargs["silent"] is True for call in mock_prepare.call_args_list)
 
 
@@ -1242,4 +1245,55 @@ def test_cli_prepare_test_calls_helper(tmp_path: pathlib.Path) -> None:
         cwd=queue_dir,
         pipeline_directory=None,
         config_file_path=None,
+        config_key="default",
     )
+
+
+@pytest.mark.ai_generated
+def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
+    """dandicompute prepare test forwards --config-key to prepare_test_queue."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    runner = CliRunner()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
+        mock.patch("dandi_compute_code._cli.prepare_test_queue") as mock_prepare_test_queue,
+    ):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["prepare", "test", "--queue-directory", str(queue_dir), "--config-key", "mit+engaging+revision-1"],
+        )
+
+    assert result.exit_code == 0
+    mock_prepare_test_queue.assert_called_once_with(
+        cwd=queue_dir,
+        pipeline_directory=None,
+        config_file_path=None,
+        config_key="mit+engaging+revision-1",
+    )
+
+
+@pytest.mark.ai_generated
+def test_cli_aind_prepare_passes_config_key() -> None:
+    """dandicompute aind prepare forwards --config-key to prepare_aind_ephys_job."""
+    runner = CliRunner()
+
+    with mock.patch("dandi_compute_code._cli.prepare_aind_ephys_job") as mock_prepare:
+        mock_prepare.return_value = pathlib.Path("/tmp/submit.sh")
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "aind",
+                "prepare",
+                "--id",
+                "abc123",
+                "--version",
+                "v1.2.3",
+                "--config-key",
+                "mit+engaging+revision-1",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert mock_prepare.call_args.kwargs["config_key"] == "mit+engaging+revision-1"
