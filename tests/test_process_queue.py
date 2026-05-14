@@ -15,9 +15,9 @@ from unittest import mock
 import pytest
 from click.testing import CliRunner
 
+import dandi_compute_code.aind_ephys_pipeline as aind_ephys_pipeline
 from dandi_compute_code._cli import _dandicompute_group
 from dandi_compute_code.queue._process_queue import (
-    _AIND_EPHYS_PARAMS_REGISTRY,
     _attempt_dir_candidates,
     _build_processing_order,
     _count_dandiset_failures,
@@ -55,7 +55,8 @@ _EXAMPLE_QUEUE_CONFIG = {
 
 
 def _default_aind_ephys_params_id() -> str:
-    return _AIND_EPHYS_PARAMS_REGISTRY["default"]["md5"][:7]
+    params_registry_path = pathlib.Path(aind_ephys_pipeline.__file__).parent / "registries" / "registered_params.json"
+    return json.loads(params_registry_path.read_text())["default"]["md5"][:7]
 
 
 def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
