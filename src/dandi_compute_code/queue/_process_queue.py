@@ -261,9 +261,9 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     Submit the next pending entry from ``waiting.jsonl``.
 
     Reads ``waiting.jsonl`` from the queue directory — this file is written by
-    :func:`order_queue` and contains the priority-ordered list of pending
-    entries produced by :func:`_build_processing_order`.  If the file is absent
-    or empty, :func:`order_queue` is called once to attempt to repopulate it
+    :func:`refresh_waiting_queue` and contains the priority-ordered list of pending
+    entries produced by :func:`order_queue`.  If the file is absent
+    or empty, :func:`refresh_waiting_queue` is called once to attempt to repopulate it
     from ``state.jsonl``.  If still empty after that, returns ``False``.
 
     The first entry that is not blocked by the ``max_fail_per_dandiset`` limit
@@ -297,7 +297,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     if not waiting_entries:
         # Attempt to repopulate from state.jsonl before giving up.
         # Use a small limit to avoid building a runaway queue.
-        order_queue(cwd=cwd, limit=3)
+        refresh_waiting_queue(cwd=cwd, limit=3)
         waiting_entries = _read_waiting()
 
     if not waiting_entries:
@@ -379,14 +379,39 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     return True
 
 
-def order_queue(*, cwd: pathlib.Path, limit: int | None = None) -> None:
+def order_queue(*, state_entries: list[dict], queue_config: dict, limit: int | None = None) -> list[dict]:
     """
-    Build the priority-ordered waiting list from ``state.jsonl``.
+    Build the priority-ordered waiting list from in-memory state entries.
+
+    Parameters
+    ----------
+    state_entries : list[dict]
+        Records produced by :func:`~dandi_compute_code.dandiset.scan_dandiset_directory`
+        (or loaded from a ``state.jsonl`` file).
+    queue_config : dict
+        Parsed contents of ``queue_config.json``.
+    limit : int, optional
+        If provided, truncate output to the first *limit* entries.
+
+    Returns
+    -------
+    list[dict]
+        Ordered queue entries.
+    """
+    ordered = _build_processing_order(state_entries=state_entries, queue_config=queue_config)
+    if limit is not None:
+        ordered = ordered[:limit]
+    return ordered
+
+
+def refresh_waiting_queue(*, cwd: pathlib.Path, limit: int | None = None) -> None:
+    """
+    Build and write ``waiting.jsonl`` from ``state.jsonl`` in the queue directory.
 
     Reads ``state.jsonl`` (produced by ``dandicompute dandiset scan``) to find
     entries that are prepared (``has_code=True``) but not yet run
     (``has_logs=False``, ``has_output=False``).  The entries are ordered
-    via :func:`_build_processing_order` and written to ``waiting.jsonl`` so
+    via :func:`order_queue` and written to ``waiting.jsonl`` so
     that subsequent calls to :func:`process_queue` can read them directly.
 
     Parameters
@@ -412,9 +437,7 @@ def order_queue(*, cwd: pathlib.Path, limit: int | None = None) -> None:
 
     state_entries = [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
     queue_config = json.loads((cwd / "queue_config.json").read_text())
-    ordered = _build_processing_order(state_entries=state_entries, queue_config=queue_config)
-    if limit is not None:
-        ordered = ordered[:limit]
+    ordered = order_queue(state_entries=state_entries, queue_config=queue_config, limit=limit)
     waiting_file = cwd / "waiting.jsonl"
     waiting_file.write_text("".join(json.dumps(e) + "\n" for e in ordered))
 
@@ -423,7 +446,7 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
     """
     Submit the next job from the priority-ordered ``waiting.jsonl``.
 
-    If ``waiting.jsonl`` is absent or empty, :func:`order_queue` is called
+    If ``waiting.jsonl`` is absent or empty, :func:`refresh_waiting_queue` is called
     first to populate it from ``state.jsonl``.  Then, if no AIND jobs are
     currently running via SLURM, the next valid entry is submitted.
 
@@ -440,11 +463,11 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
     ------
     FileNotFoundError
         If ``waiting.jsonl`` is absent or empty and ``state.jsonl`` is not
-        found in *cwd* (raised by :func:`order_queue`).
+        found in *cwd* (raised by :func:`refresh_waiting_queue`).
     """
     waiting_file = cwd / "waiting.jsonl"
     if not waiting_file.exists() or not waiting_file.read_text().strip():
-        order_queue(cwd=cwd)
+        refresh_waiting_queue(cwd=cwd)
 
     any_running = _determine_running()
     if not any_running:

@@ -3,6 +3,8 @@ import json
 import pathlib
 import re
 
+from ..queue import order_queue
+
 _ATTEMPT_DIR_RE = re.compile(r"params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)")
 _ATTEMPT_SUFFIX_RE = re.compile(r"_attempt-\d+$")
 
@@ -153,19 +155,36 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
     return records
 
 
-def write_scan_jsonl(dandiset_directory: pathlib.Path, output_file: pathlib.Path) -> None:
+def write_state_and_waiting_jsonl(dandiset_directory: pathlib.Path, queue_directory: pathlib.Path) -> None:
     """
-    Scan *dandiset_directory* and write the result as a JSONL file.
+    Scan *dandiset_directory* and write queue ``state.jsonl`` and ``waiting.jsonl``.
 
     Parameters
     ----------
     dandiset_directory : pathlib.Path
         Path to a local clone of the dandiset repository.
-    output_file : pathlib.Path
-        Destination path for the output JSONL file.  The file is created or
-        overwritten.  Each line is a JSON object; there is a trailing newline.
+    queue_directory : pathlib.Path
+        Path to the queue root directory containing ``queue_config.json``.
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``queue_config.json`` is not found in *queue_directory*.
     """
+    queue_config_file = queue_directory / "queue_config.json"
+    if not queue_config_file.exists():
+        message = f"'queue_config.json' not found in '{queue_directory}'."
+        raise FileNotFoundError(message)
+
     records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
-    with output_file.open(mode="w") as file_stream:
+    state_file = queue_directory / "state.jsonl"
+    with state_file.open(mode="w") as file_stream:
         for record in records:
             file_stream.write(json.dumps(record) + "\n")
+
+    queue_config = json.loads(queue_config_file.read_text())
+    ordered_entries = order_queue(state_entries=records, queue_config=queue_config)
+    waiting_file = queue_directory / "waiting.jsonl"
+    with waiting_file.open(mode="w") as file_stream:
+        for entry in ordered_entries:
+            file_stream.write(json.dumps(entry) + "\n")

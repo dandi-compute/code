@@ -11,9 +11,9 @@ from .dandiset import (
     delete_dandiset_version,
     scan_dandiset_directory,
     scan_version_directories,
-    write_scan_jsonl,
+    write_state_and_waiting_jsonl,
 )
-from .queue import order_queue, prepare_queue, prepare_test_queue, process_queue
+from .queue import prepare_queue, prepare_test_queue, process_queue, refresh_waiting_queue
 
 
 # dandicompute
@@ -175,6 +175,29 @@ def _queue_group() -> None:
     pass
 
 
+# dandicompute queue refresh [OPTIONS]
+@_queue_group.command(name="refresh")
+@click.option(
+    "--queue-directory",
+    "directory",
+    help="Path to the queue root directory. Defaults to the current working directory.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--limit",
+    "limit",
+    help="Truncate waiting.jsonl to the first N entries. Useful for testing.",
+    required=False,
+    type=click.IntRange(min=1),
+    default=None,
+)
+def _queue_refresh_command(directory: pathlib.Path | None = None, limit: int | None = None) -> None:
+    cwd = directory if directory is not None else pathlib.Path.cwd()
+    refresh_waiting_queue(cwd=cwd, limit=limit)
+
+
 # dandicompute prepare
 @_dandicompute_group.group(name="prepare")
 def _prepare_group() -> None:
@@ -220,29 +243,6 @@ def _prepare_test_command(
         pipeline_directory=pipeline_directory,
         config_file_path=config_file_path,
     )
-
-
-# dandicompute queue order [OPTIONS]
-@_queue_group.command(name="order")
-@click.option(
-    "--queue-directory",
-    "directory",
-    help="Path to the queue root directory. Defaults to the current working directory.",
-    required=False,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
-)
-@click.option(
-    "--limit",
-    "limit",
-    help="Truncate waiting.jsonl to the first N entries. Useful for testing.",
-    required=False,
-    type=click.IntRange(min=1),
-    default=None,
-)
-def _queue_order_command(directory: pathlib.Path | None = None, limit: int | None = None) -> None:
-    cwd = directory if directory is not None else pathlib.Path.cwd()
-    order_queue(cwd=cwd, limit=limit)
 
 
 # dandicompute queue process [OPTIONS]
@@ -362,7 +362,22 @@ def _dandiset_scan_command(
         for record in records:
             sys.stdout.write(json.dumps(record) + "\n")
     else:
-        write_scan_jsonl(dandiset_directory=dandiset_directory, output_file=output_file)
+        if output_file.name == "state.jsonl":
+            try:
+                write_state_and_waiting_jsonl(
+                    dandiset_directory=dandiset_directory,
+                    queue_directory=output_file.parent,
+                )
+            except FileNotFoundError as error:
+                message = (
+                    f"{error} When writing to state.jsonl, ensure " "queue_config.json exists in the parent directory."
+                )
+                raise click.ClickException(message) from error
+        else:
+            records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
+            with output_file.open(mode="w") as file_stream:
+                for record in records:
+                    file_stream.write(json.dumps(record) + "\n")
         _styled_echo(text=f"\nScan complete! Output written to: {output_file}", color="green")
 
 
