@@ -156,6 +156,16 @@ def prepare_aind_ephys_job(
         raise ValueError(message)
     pipeline_commit_head = pipeline_commit_hash[0:7]
 
+    dandi_compute_code_commit_hash = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"],
+        cwd=dandi_compute_code_source_dir,
+        text=True,
+    ).strip()
+    if not re.match(r"^[0-9a-f]{40}$", dandi_compute_code_commit_hash):
+        message = f"Unexpected commit hash format: {dandi_compute_code_commit_hash}"
+        raise ValueError(message)
+    dandi_compute_code_commit_head = dandi_compute_code_commit_hash[0:7]
+
     dandi_compute_code_version = subprocess.check_output(
         ["git", "describe", "--tags", "--always"],
         cwd=dandi_compute_code_source_dir,
@@ -167,7 +177,7 @@ def prepare_aind_ephys_job(
     if "ses" in entities:
         output_dandiset_path_base += f"ses-{entities['ses']}/"
     output_dandiset_path_base += (
-        f"pipeline-aind+ephys/version-{bidsy_pipeline_version}+{pipeline_commit_head}/"
+        f"pipeline-aind+ephys/version-{bidsy_pipeline_version}+{pipeline_commit_head}+{dandi_compute_code_commit_head}/"
         f"params-{params_id}_config-{config_id}"
     )
 

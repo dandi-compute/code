@@ -57,6 +57,25 @@ def _resolve_params_key_to_id(pipeline: str, params_key: str) -> str:
     return params_key
 
 
+def _version_matches(state_version: str, config_version: str) -> bool:
+    """
+    Return True if *state_version* matches *config_version*.
+
+    An exact match is always accepted.  Additionally, a *state_version* that
+    extends *config_version* by appending ``+<7 hex chars>`` (the first 7
+    characters of the dandi-compute/code repo commit hash) is also accepted,
+    providing backward-compatible matching when the queue config does not yet
+    include the code-repo suffix.  The suffix is validated against the pattern
+    ``[0-9a-f]{7,40}`` to accommodate any valid git short-hash length.
+    """
+    if state_version == config_version:
+        return True
+    if state_version.startswith(config_version + "+"):
+        extra = state_version[len(config_version) + 1 :]
+        return bool(re.fullmatch(r"[0-9a-f]{7,40}", extra))
+    return False
+
+
 def _build_processing_order(
     *,
     state_entries: list[dict],
@@ -104,7 +123,11 @@ def _build_processing_order(
         params_priority = pipeline_data.get("params_priority", [])
 
         for version in version_priority:
-            version_entries = [e for e in pending if e.get("pipeline") == pipeline_name and e.get("version") == version]
+            version_entries = [
+                e
+                for e in pending
+                if e.get("pipeline") == pipeline_name and _version_matches(e.get("version", ""), version)
+            ]
 
             # Group by dandiset instance: (dandiset_id, subject, session, config)
             instance_groups: dict[tuple, list[dict]] = {}
