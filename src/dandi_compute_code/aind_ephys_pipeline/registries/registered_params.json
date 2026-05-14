@@ -12,15 +12,15 @@
     "md5": "?"
   },
   "deterministic": {
-    "path": "deterministic.json",
-    "md5": "?"
+    "path": "name-deterministic.json",
+    "md5": "4af6a25e20e376c81895ce9350a9cbd4"
   },
   "no+motion": {
     "path": "name-no+motion_revision-1.json",
     "md5": "?"
   },
   "default": {
-    "path": "deterministic.json",
-    "md5": "?"
+    "path": "name-deterministic.json",
+    "md5": "4af6a25e20e376c81895ce9350a9cbd4"
   },
 }
