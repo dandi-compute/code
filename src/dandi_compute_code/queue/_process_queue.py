@@ -1,4 +1,3 @@
-import collections
 import gzip
 import json
 import pathlib
@@ -190,46 +189,6 @@ def _count_dandiset_failures(
                 failure_count += 1
 
     return failure_count
-
-
-def _fetch_counts(
-    *,
-    file_path: pathlib.Path,
-    pipeline: str,
-    version: str,
-    params: str,
-) -> collections.Counter:
-    """
-    Count how many times each content_id has been submitted for a given pipeline/version/params combination.
-
-    Parameters
-    ----------
-    file_path : pathlib.Path
-        Path to the JSONL file (e.g., submitted.jsonl).
-    pipeline : str
-        Pipeline name (e.g., 'aind+ephys').
-    version : str
-        Version string (e.g., 'v1.0.0+fixes+47bd492').
-    params : str
-        Params string (e.g., 'default').
-
-    Returns
-    -------
-    collections.Counter
-        A Counter mapping content_id to its submission count.
-    """
-    content_ids = []
-    for line in file_path.read_text().splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        entry = json.loads(stripped)
-        if entry.get("pipeline") != pipeline or entry.get("version") != version or entry.get("params") != params:
-            continue
-        content_id = entry.get("content_id", "")
-        if content_id:
-            content_ids.append(content_id)
-    return collections.Counter(content_ids)
 
 
 def _determine_running() -> bool:
@@ -530,8 +489,7 @@ def prepare_queue(
     En-masse preparation of all qualifying assets based on the current queue config.
 
     For every pipeline/version/params combination declared in ``queue_config.json``
-    this function fetches the qualifying AIND content IDs, applies attempt-limit
-    filtering, and calls
+    this function fetches the qualifying AIND content IDs and calls
     :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job` for each
     asset — generating the ``code/`` directory and its parent directories without
     submitting a job.
@@ -554,10 +512,6 @@ def prepare_queue(
         If provided, stop after preparing *limit* assets in total (across all
         pipeline/version/params combinations).  Useful for testing.
     """
-    submitted_file = cwd / "submitted.jsonl"
-    if not submitted_file.exists():
-        submitted_file.write_text("")
-
     queue_config = json.loads((cwd / "queue_config.json").read_text())
 
     qualifying_aind_content_ids_url = (
@@ -593,25 +547,12 @@ def prepare_queue(
                         )
                         continue
 
-                done_counter = _fetch_counts(
-                    file_path=submitted_file,
-                    pipeline=pipeline_name,
-                    version=version,
-                    params=params,
-                )
-                global_max_attempts = pipeline_cfg["max_attempts_per_asset"]
-                asset_overrides = pipeline_cfg.get("asset_overrides") or {}
-
                 # Strip the trailing commit-hash suffix before passing to prepare_aind_ephys_job.
                 submission_version = _strip_commit_hash_suffix(version)
 
                 for content_id in sorted(qualifying_aind_content_ids):
                     if limit is not None and prepared_count >= limit:
                         break
-                    if (
-                        asset_override := asset_overrides.get(content_id, global_max_attempts)
-                    ) is not None and done_counter.get(content_id, 0) >= asset_override:
-                        continue
 
                     print(f"Preparing content ID: {content_id}")
                     prepare_aind_ephys_job(
