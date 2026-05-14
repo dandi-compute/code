@@ -1027,7 +1027,7 @@ def test_submit_next_submits_first_entry_even_when_failures_exceed_max(tmp_path:
     _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 1, with_logs=True)
     _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 2, with_logs=True)
 
-    # waiting.jsonl: first entry should still be submitted directly.
+    # waiting.jsonl: first entry will be submitted directly.
     _write_jsonl(
         queue_dir / "waiting.jsonl",
         [
