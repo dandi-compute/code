@@ -1,7 +1,9 @@
 import gzip
 import json
+import os
 import pathlib
 import re
+import shutil
 import subprocess
 import urllib.request
 
@@ -265,6 +267,101 @@ def _prune_last_submitted(*, cwd: pathlib.Path, state_entries: list[dict]) -> No
     ]
     filtered = [entry for entry in last_submitted_entries if _entry_identity(entry) not in entries_to_prune]
     last_submitted_file.write_text("".join(json.dumps(entry) + "\n" for entry in filtered))
+
+
+def clean_unsubmitted_capsules(
+    *,
+    dandiset_directory: pathlib.Path,
+    queue_directory: pathlib.Path,
+) -> list[pathlib.Path]:
+    """
+    Remove all queued (unsubmitted) capsule directories from the dandiset tree.
+
+    A capsule is considered *queued* (prepared but not yet submitted) when its
+    attempt directory has a ``code/`` subdirectory but neither a non-empty
+    ``logs/`` subdirectory nor a ``derivatives/`` subdirectory, **and** the
+    entry is not present in ``last_submitted.jsonl`` (which tracks recently
+    submitted in-flight jobs).
+
+    The function scans *dandiset_directory* for all attempt directories using
+    the local filesystem as the ground truth, filters to the queued subset,
+    then deletes each matching attempt directory tree from the DANDI archive
+    (via ``dandi delete``) and from the local filesystem.
+
+    Parameters
+    ----------
+    dandiset_directory : pathlib.Path
+        Path to a local clone of the dandiset repository.  The function scans
+        ``{dandiset_directory}/derivatives/dandiset-*/`` to locate attempt
+        directories.
+    queue_directory : pathlib.Path
+        Path to the queue root directory.  ``last_submitted.jsonl`` is read
+        from here to exclude in-flight submissions from deletion.
+
+    Returns
+    -------
+    list[pathlib.Path]
+        List of attempt directory paths that were deleted.
+    """
+    if not os.environ.get("DANDI_API_KEY", "").strip():
+        message = "`DANDI_API_KEY` environment variable is not set or is blank."
+        raise RuntimeError(message)
+
+    from ..dandiset import scan_dandiset_directory
+
+    state_entries = scan_dandiset_directory(dandiset_directory=dandiset_directory)
+
+    # Build the set of identities that have been recently submitted (in-flight).
+    last_submitted_file = queue_directory / "last_submitted.jsonl"
+    submitted_identities: set[tuple] = set()
+    if last_submitted_file.exists():
+        submitted_identities = {
+            _entry_identity(json.loads(line.strip()))
+            for line in last_submitted_file.read_text().splitlines()
+            if line.strip()
+        }
+
+    # Filter to queued entries: has code, no logs, no output, not submitted.
+    queued_entries = [
+        e
+        for e in state_entries
+        if e.get("has_code")
+        and not e.get("has_output")
+        and not e.get("has_logs")
+        and _entry_identity(e) not in submitted_identities
+    ]
+
+    removed: list[pathlib.Path] = []
+    for entry in queued_entries:
+        dandiset_id = entry["dandiset_id"]
+        subject = entry["subject"]
+        session = entry.get("session")
+        pipeline = entry["pipeline"]
+        version = entry["version"]
+        params = entry["params"]
+        config = entry["config"]
+        attempt = entry["attempt"]
+
+        attempt_dir = dandiset_directory / "derivatives" / f"dandiset-{dandiset_id}" / f"sub-{subject}"
+        if session:
+            attempt_dir = attempt_dir / f"ses-{session}"
+        attempt_dir = (
+            attempt_dir
+            / f"pipeline-{pipeline}"
+            / f"version-{version}"
+            / f"params-{params}_config-{config}_attempt-{attempt}"
+        )
+
+        if attempt_dir.is_dir():
+            subprocess.run(
+                ["dandi", "delete", str(attempt_dir)],
+                input=b"y\n",
+                check=True,
+            )
+            shutil.rmtree(attempt_dir)
+            removed.append(attempt_dir)
+
+    return removed
 
 
 def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool:
