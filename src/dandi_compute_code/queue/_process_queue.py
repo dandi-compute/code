@@ -269,6 +269,19 @@ def _prune_last_submitted(*, cwd: pathlib.Path, state_entries: list[dict]) -> No
     last_submitted_file.write_text("".join(json.dumps(entry) + "\n" for entry in filtered))
 
 
+def _remove_empty_parents(*, start: pathlib.Path, stop: pathlib.Path) -> None:
+    """Remove empty directories from ``start`` up to but not including ``stop``."""
+    current = start
+    while current != stop and stop in current.parents:
+        if not current.exists() or not current.is_dir():
+            break
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        current = current.parent
+
+
 def clean_unsubmitted_capsules(
     *,
     dandiset_directory: pathlib.Path,
@@ -359,6 +372,7 @@ def clean_unsubmitted_capsules(
                 check=True,
             )
             shutil.rmtree(attempt_dir)
+            _remove_empty_parents(start=attempt_dir.parent, stop=dandiset_directory / "derivatives")
             removed.append(attempt_dir)
 
     return removed

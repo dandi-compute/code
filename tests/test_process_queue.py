@@ -1526,6 +1526,70 @@ def test_clean_unsubmitted_capsules_handles_session_in_path(tmp_path: pathlib.Pa
 
 
 @pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_removes_empty_parent_directories(tmp_path: pathlib.Path) -> None:
+    """clean_unsubmitted_capsules removes now-empty pipeline/version parent directories."""
+    dandiset_dir = tmp_path / "dandiset"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+
+    queued_dir = _make_full_attempt_dir(
+        dandiset_dir,
+        "001371",
+        "S25",
+        "aind+ephys",
+        "v1.1.1+b268fd2",
+        "abc1234",
+        "def5678",
+        1,
+        session="S25-210913",
+        with_code=True,
+    )
+    version_dir = queued_dir.parent
+    pipeline_dir = version_dir.parent
+
+    with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+
+    assert removed == [queued_dir]
+    assert not version_dir.exists()
+    assert not pipeline_dir.exists()
+
+
+@pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_keeps_non_empty_parent_directories(tmp_path: pathlib.Path) -> None:
+    """clean_unsubmitted_capsules keeps parent directories when sibling attempts still exist."""
+    dandiset_dir = tmp_path / "dandiset"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+
+    queued_dir = _make_full_attempt_dir(
+        dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
+    )
+    remaining_dir = _make_full_attempt_dir(
+        dandiset_dir,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        2,
+        with_code=True,
+        with_output=True,
+    )
+    version_dir = queued_dir.parent
+    pipeline_dir = version_dir.parent
+
+    with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+
+    assert removed == [queued_dir]
+    assert remaining_dir.exists()
+    assert version_dir.exists()
+    assert pipeline_dir.exists()
+
+
+@pytest.mark.ai_generated
 def test_clean_unsubmitted_capsules_removes_only_queued_not_submitted(tmp_path: pathlib.Path) -> None:
     """clean_unsubmitted_capsules only removes queued capsules, leaving submitted ones intact."""
     dandiset_dir = tmp_path / "dandiset"
