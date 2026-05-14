@@ -46,8 +46,7 @@ def _make_attempt_dir(
         parts.append(f"ses-{session}")
     parts += [
         f"pipeline-{pipeline}",
-        f"version-{version}",
-        f"params-{params}_config-{config}_attempt-{attempt}",
+        f"version-{version}_params-{params}_config-{config}_attempt-{attempt}",
     ]
     attempt_dir = pathlib.Path(*parts)
     attempt_dir.mkdir(parents=True)
@@ -277,6 +276,28 @@ def test_scan_config_with_underscores(tmp_path: pathlib.Path) -> None:
     records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
     assert records[0]["config"] == "def5678_date-2024+01+01"
+
+
+@pytest.mark.ai_generated
+def test_scan_supports_legacy_version_subdirectory_layout(tmp_path: pathlib.Path) -> None:
+    """Legacy attempt paths with a version subdirectory are still parsed."""
+    legacy_attempt_dir = (
+        tmp_path
+        / "derivatives"
+        / "dandiset-000001"
+        / "sub-mouse01"
+        / "pipeline-aind+ephys"
+        / "version-v1.0"
+        / "params-abc1234_config-def5678_attempt-1"
+    )
+    legacy_attempt_dir.mkdir(parents=True)
+    (legacy_attempt_dir / "code").mkdir()
+
+    records = scan_dandiset_directory(dandiset_directory=tmp_path)
+
+    assert len(records) == 1
+    assert records[0]["version"] == "v1.0"
+    assert records[0]["params"] == "abc1234"
 
 
 # ---------------------------------------------------------------------------
