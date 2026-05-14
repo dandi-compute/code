@@ -369,13 +369,14 @@ def clean_unsubmitted_capsules(
         )
 
         if attempt_dir.is_dir():
+            parent_dir = attempt_dir.parent
             subprocess.run(
                 ["dandi", "delete", str(attempt_dir)],
                 input=b"y\n",
                 check=True,
             )
             shutil.rmtree(attempt_dir)
-            _remove_empty_parents(start=attempt_dir.parent, stop=dandiset_directory / "derivatives")
+            _remove_empty_parents(start=parent_dir, stop=dandiset_directory / "derivatives")
             removed.append(attempt_dir)
 
     return removed
