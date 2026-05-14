@@ -297,7 +297,8 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
 
     The first entry from ``waiting.jsonl`` is submitted and then removed from
     ``waiting.jsonl``; the entry is simultaneously appended to
-    ``last_submitted.jsonl``.
+    ``last_submitted.jsonl``. This function intentionally does not scan for
+    later submittable entries if the first entry is blocked.
 
     Parameters
     ----------
@@ -337,6 +338,9 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     entry = waiting_entries[0]
     pipeline = entry.get("pipeline", "")
     version = entry.get("version", "")
+    if not pipeline or not version:
+        print(f"Skipping first waiting entry with missing pipeline/version in `{waiting_file}`")
+        return False
     pipeline_cfg = queue_config.get("pipelines", {}).get(pipeline)
     max_fail = pipeline_cfg.get("max_fail_per_dandiset") if pipeline_cfg is not None else None
     if max_fail is not None and version:
