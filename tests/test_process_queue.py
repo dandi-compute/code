@@ -650,8 +650,8 @@ def test_submit_next_pops_submitted_entry_from_waiting_jsonl(tmp_path: pathlib.P
 
 
 @pytest.mark.ai_generated
-def test_submit_next_appends_submitted_entry_to_submitted_jsonl(tmp_path: pathlib.Path) -> None:
-    """_submit_next appends the submitted entry to submitted.jsonl."""
+def test_submit_next_appends_submitted_entry_to_last_submitted_jsonl(tmp_path: pathlib.Path) -> None:
+    """_submit_next appends the submitted entry to last_submitted.jsonl."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "dandiset"
 
@@ -680,7 +680,7 @@ def test_submit_next_appends_submitted_entry_to_submitted_jsonl(tmp_path: pathli
         mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
         _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
-    submitted_entries = _read_jsonl(queue_dir / "submitted.jsonl")
+    submitted_entries = _read_jsonl(queue_dir / "last_submitted.jsonl")
     assert len(submitted_entries) == 1
     assert submitted_entries[0]["dandiset_id"] == "000001"
 
@@ -837,6 +837,25 @@ def test_order_queue_limit_truncates_waiting_jsonl(tmp_path: pathlib.Path) -> No
 
     waiting_entries = _read_jsonl(queue_dir / "waiting.jsonl")
     assert len(waiting_entries) == 2
+
+
+@pytest.mark.ai_generated
+def test_refresh_waiting_queue_prunes_last_submitted_entries_with_output_or_logs(tmp_path: pathlib.Path) -> None:
+    """refresh_waiting_queue removes finished/running entries from last_submitted.jsonl."""
+    queue_dir = _make_queue_dir(tmp_path)
+
+    pending_entry = _make_state_entry(dandiset_id="000001", has_code=True, has_output=False, has_logs=False)
+    with_output_entry = _make_state_entry(dandiset_id="000002", has_code=True, has_output=True, has_logs=False)
+    with_logs_entry = _make_state_entry(dandiset_id="000003", has_code=True, has_output=False, has_logs=True)
+    _write_jsonl(queue_dir / "state.jsonl", [pending_entry, with_output_entry, with_logs_entry])
+
+    _write_jsonl(queue_dir / "last_submitted.jsonl", [pending_entry, with_output_entry, with_logs_entry])
+
+    refresh_waiting_queue(cwd=queue_dir)
+
+    last_submitted_entries = _read_jsonl(queue_dir / "last_submitted.jsonl")
+    assert len(last_submitted_entries) == 1
+    assert last_submitted_entries[0]["dandiset_id"] == "000001"
 
 
 @pytest.mark.ai_generated

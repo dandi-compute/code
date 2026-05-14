@@ -370,6 +370,104 @@ def test_write_state_and_waiting_jsonl_includes_only_pending_in_waiting(tmp_path
     assert waiting_record["dandiset_id"] == "000001"
 
 
+@pytest.mark.ai_generated
+def test_write_state_and_waiting_jsonl_prunes_last_submitted_entries_with_output_or_logs(
+    tmp_path: pathlib.Path,
+) -> None:
+    """write_state_and_waiting_jsonl removes entries from last_submitted.jsonl when logs/output are present."""
+    _make_attempt_dir(tmp_path, "000001", "mouse01", "test-pipeline", "v1.0", "abc1234", "def5678", 1, with_code=True)
+    _make_attempt_dir(
+        tmp_path,
+        "000002",
+        "mouse02",
+        "test-pipeline",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        with_code=True,
+        with_output=True,
+    )
+    _make_attempt_dir(
+        tmp_path,
+        "000003",
+        "mouse03",
+        "test-pipeline",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        with_code=True,
+        with_logs=True,
+    )
+
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(
+        json.dumps(
+            {
+                "pipelines": {
+                    "test-pipeline": {
+                        "version_priority": ["v1.0"],
+                        "params_priority": ["abc1234"],
+                    }
+                }
+            }
+        )
+    )
+    (queue_dir / "last_submitted.jsonl").write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "dandiset_id": "000001",
+                        "subject": "mouse01",
+                        "session": None,
+                        "pipeline": "test-pipeline",
+                        "version": "v1.0",
+                        "params": "abc1234",
+                        "config": "def5678",
+                        "attempt": 1,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "dandiset_id": "000002",
+                        "subject": "mouse02",
+                        "session": None,
+                        "pipeline": "test-pipeline",
+                        "version": "v1.0",
+                        "params": "abc1234",
+                        "config": "def5678",
+                        "attempt": 1,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "dandiset_id": "000003",
+                        "subject": "mouse03",
+                        "session": None,
+                        "pipeline": "test-pipeline",
+                        "version": "v1.0",
+                        "params": "abc1234",
+                        "config": "def5678",
+                        "attempt": 1,
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+
+    write_state_and_waiting_jsonl(dandiset_directory=tmp_path, queue_directory=queue_dir)
+
+    remaining = [
+        json.loads(line) for line in (queue_dir / "last_submitted.jsonl").read_text().splitlines() if line.strip()
+    ]
+    assert len(remaining) == 1
+    assert remaining[0]["dandiset_id"] == "000001"
+
+
 # ---------------------------------------------------------------------------
 # Tests for the CLI command
 # ---------------------------------------------------------------------------
