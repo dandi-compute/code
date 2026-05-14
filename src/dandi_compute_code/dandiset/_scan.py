@@ -65,7 +65,7 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     has_code = (attempt_dir / "code").is_dir()
     has_output = (attempt_dir / "derivatives").is_dir()
     logs_dir = attempt_dir / "logs"
-    has_logs = logs_dir.is_dir() and any(logs_dir.iterdir())
+    has_logs = logs_dir.is_dir() and any(f for f in logs_dir.iterdir() if f.name != "dataset_description.json")
     created_at = datetime.datetime.fromtimestamp(attempt_dir.stat().st_ctime, tz=datetime.timezone.utc).isoformat()
 
     return {

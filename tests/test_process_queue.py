@@ -8,6 +8,7 @@ than touching the network or a SLURM cluster.
 
 import gzip
 import json
+import os
 import pathlib
 from unittest import mock
 
@@ -22,6 +23,7 @@ from dandi_compute_code.queue._process_queue import (
     _resolve_params_key_to_id,
     _submit_next,
     _version_matches,
+    clean_unsubmitted_capsules,
     order_queue,
     prepare_queue,
     prepare_test_queue,
@@ -1243,3 +1245,325 @@ def test_cli_prepare_test_calls_helper(tmp_path: pathlib.Path) -> None:
         pipeline_directory=None,
         config_file_path=None,
     )
+
+
+# ---------------------------------------------------------------------------
+# Tests for clean_unsubmitted_capsules
+# ---------------------------------------------------------------------------
+
+
+def _make_full_attempt_dir(
+    base: pathlib.Path,
+    dandiset_id: str,
+    subject: str,
+    pipeline: str,
+    version: str,
+    params: str,
+    config: str,
+    attempt: int,
+    *,
+    session: str | None = None,
+    with_code: bool = True,
+    with_output: bool = False,
+    with_logs: bool = False,
+) -> pathlib.Path:
+    """Create a mock attempt directory with optional code/, derivatives/, and logs/."""
+    parts = [base, "derivatives", f"dandiset-{dandiset_id}", f"sub-{subject}"]
+    if session is not None:
+        parts.append(f"ses-{session}")
+    parts += [
+        f"pipeline-{pipeline}",
+        f"version-{version}",
+        f"params-{params}_config-{config}_attempt-{attempt}",
+    ]
+    attempt_dir = pathlib.Path(*parts)
+    attempt_dir.mkdir(parents=True)
+    if with_code:
+        (attempt_dir / "code").mkdir()
+    if with_output:
+        (attempt_dir / "derivatives").mkdir()
+    if with_logs:
+        logs_dir = attempt_dir / "logs"
+        logs_dir.mkdir()
+        (logs_dir / "run.log").write_text("job output\n")
+    return attempt_dir
+
+
+@pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_raises_without_dandi_api_key(tmp_path: pathlib.Path) -> None:
+    """clean_unsubmitted_capsules raises RuntimeError when DANDI_API_KEY is not set."""
+    env_without_key = {k: v for k, v in os.environ.items() if k != "DANDI_API_KEY"}
+    with mock.patch.dict(os.environ, env_without_key, clear=True):
+        with pytest.raises(RuntimeError, match="DANDI_API_KEY"):
+            clean_unsubmitted_capsules(dandiset_directory=tmp_path, queue_directory=tmp_path)
+
+
+@pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_removes_queued_directories(tmp_path: pathlib.Path) -> None:
+    """clean_unsubmitted_capsules removes capsule dirs that are queued (code, no logs, no output)."""
+    dandiset_dir = tmp_path / "dandiset"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+
+    queued_dir = _make_full_attempt_dir(
+        dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
+    )
+
+    with mock.patch("subprocess.run") as mock_run, mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+
+    assert removed == [queued_dir]
+    assert not queued_dir.exists()
+    mock_run.assert_called_once_with(
+        ["dandi", "delete", str(queued_dir)],
+        input=b"y\n",
+        check=True,
+    )
+
+
+@pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_skips_entries_with_output(tmp_path: pathlib.Path) -> None:
+    """clean_unsubmitted_capsules does not remove capsules that already have output."""
+    dandiset_dir = tmp_path / "dandiset"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+
+    completed_dir = _make_full_attempt_dir(
+        dandiset_dir,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        with_code=True,
+        with_output=True,
+    )
+
+    with mock.patch("subprocess.run") as mock_run, mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+
+    assert removed == []
+    assert completed_dir.exists()
+    mock_run.assert_not_called()
+
+
+@pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_skips_entries_with_logs(tmp_path: pathlib.Path) -> None:
+    """clean_unsubmitted_capsules does not remove capsules that have logs (already run)."""
+    dandiset_dir = tmp_path / "dandiset"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+
+    failed_dir = _make_full_attempt_dir(
+        dandiset_dir,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        with_code=True,
+        with_logs=True,
+    )
+
+    with mock.patch("subprocess.run") as mock_run, mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+
+    assert removed == []
+    assert failed_dir.exists()
+    mock_run.assert_not_called()
+
+
+@pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_ignores_dataset_description_in_logs(
+    tmp_path: pathlib.Path,
+) -> None:
+    """clean_unsubmitted_capsules removes a capsule whose logs/ dir contains only dataset_description.json.
+
+    When prepare_job uploads an empty logs/ directory to DANDI, a dataset_description.json
+    metadata file may be added inside it. That file must not be treated as evidence of
+    actual job logs. The capsule should still qualify for cleaning.
+    """
+    dandiset_dir = tmp_path / "dandiset"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+
+    queued_dir = _make_full_attempt_dir(
+        dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
+    )
+    # Simulate a logs/ directory that contains only a dataset_description.json metadata file.
+    logs_dir = queued_dir / "logs"
+    logs_dir.mkdir()
+    (logs_dir / "dataset_description.json").write_text("{}\n")
+
+    with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+
+    assert removed == [queued_dir]
+    assert not queued_dir.exists()
+
+
+@pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_skips_last_submitted_entries(tmp_path: pathlib.Path) -> None:
+    """clean_unsubmitted_capsules does not remove capsules listed in last_submitted.jsonl."""
+    dandiset_dir = tmp_path / "dandiset"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+
+    queued_dir = _make_full_attempt_dir(
+        dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
+    )
+
+    submitted_entry = {
+        "dandiset_id": "000001",
+        "subject": "mouse01",
+        "session": None,
+        "pipeline": "aind+ephys",
+        "version": "v1.0",
+        "params": "abc1234",
+        "config": "def5678",
+        "attempt": 1,
+    }
+    (queue_dir / "last_submitted.jsonl").write_text(json.dumps(submitted_entry) + "\n")
+
+    with mock.patch("subprocess.run") as mock_run, mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+
+    assert removed == []
+    assert queued_dir.exists()
+    mock_run.assert_not_called()
+
+
+@pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_returns_empty_list_when_nothing_queued(tmp_path: pathlib.Path) -> None:
+    """clean_unsubmitted_capsules returns an empty list when there are no queued capsules."""
+    dandiset_dir = tmp_path / "dandiset"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+
+    with mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+
+    assert removed == []
+
+
+@pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_handles_session_in_path(tmp_path: pathlib.Path) -> None:
+    """clean_unsubmitted_capsules correctly handles attempt dirs with a session component."""
+    dandiset_dir = tmp_path / "dandiset"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+
+    queued_dir = _make_full_attempt_dir(
+        dandiset_dir,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        session="ses001",
+        with_code=True,
+    )
+
+    with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+
+    assert removed == [queued_dir]
+    assert not queued_dir.exists()
+
+
+@pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_removes_only_queued_not_submitted(tmp_path: pathlib.Path) -> None:
+    """clean_unsubmitted_capsules only removes queued capsules, leaving submitted ones intact."""
+    dandiset_dir = tmp_path / "dandiset"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+
+    # Queued (should be removed)
+    queued_dir = _make_full_attempt_dir(
+        dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
+    )
+    # Submitted (in last_submitted.jsonl – should be kept)
+    submitted_dir = _make_full_attempt_dir(
+        dandiset_dir, "000002", "mouse02", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
+    )
+
+    submitted_entry = {
+        "dandiset_id": "000002",
+        "subject": "mouse02",
+        "session": None,
+        "pipeline": "aind+ephys",
+        "version": "v1.0",
+        "params": "abc1234",
+        "config": "def5678",
+        "attempt": 1,
+    }
+    (queue_dir / "last_submitted.jsonl").write_text(json.dumps(submitted_entry) + "\n")
+
+    with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+
+    assert removed == [queued_dir]
+    assert not queued_dir.exists()
+    assert submitted_dir.exists()
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue clean delegates to clean_unsubmitted_capsules and reports removed paths."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+
+    fake_removed = [dandiset_dir / "derivatives" / "dandiset-000001" / "sub-mouse01" / "attempt-1"]
+    runner = CliRunner()
+
+    with mock.patch("dandi_compute_code._cli.clean_unsubmitted_capsules", return_value=fake_removed) as mock_clean:
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "queue",
+                "clean",
+                "--queue-directory",
+                str(queue_dir),
+                "--dandiset-directory",
+                str(dandiset_dir),
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_clean.assert_called_once_with(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    assert "Cleaned 1 unsubmitted capsule" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue clean reports when no unsubmitted capsules are found."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+
+    runner = CliRunner()
+
+    with mock.patch("dandi_compute_code._cli.clean_unsubmitted_capsules", return_value=[]):
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "queue",
+                "clean",
+                "--queue-directory",
+                str(queue_dir),
+                "--dandiset-directory",
+                str(dandiset_dir),
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert "No unsubmitted capsules found" in result.output
