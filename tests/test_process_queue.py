@@ -1527,7 +1527,7 @@ def test_clean_unsubmitted_capsules_handles_session_in_path(tmp_path: pathlib.Pa
 
 @pytest.mark.ai_generated
 def test_clean_unsubmitted_capsules_removes_empty_parent_directories(tmp_path: pathlib.Path) -> None:
-    """clean_unsubmitted_capsules removes now-empty pipeline/version parent directories."""
+    """clean_unsubmitted_capsules removes empty pipeline/version dirs after last capsule removal."""
     dandiset_dir = tmp_path / "dandiset"
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
@@ -1557,7 +1557,7 @@ def test_clean_unsubmitted_capsules_removes_empty_parent_directories(tmp_path: p
 
 @pytest.mark.ai_generated
 def test_clean_unsubmitted_capsules_keeps_non_empty_parent_directories(tmp_path: pathlib.Path) -> None:
-    """clean_unsubmitted_capsules keeps parent directories when sibling attempts still exist."""
+    """clean_unsubmitted_capsules keeps pipeline/version dirs when a sibling attempt remains."""
     dandiset_dir = tmp_path / "dandiset"
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
