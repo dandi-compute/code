@@ -257,10 +257,11 @@ def _determine_running() -> bool:
 
 
 def _entry_identity(entry: dict) -> tuple:
+    session = entry.get("session")
     return (
         entry.get("dandiset_id"),
         entry.get("subject"),
-        entry.get("session") or "",
+        session if session is not None else "",
         entry.get("pipeline"),
         entry.get("version"),
         entry.get("params"),
