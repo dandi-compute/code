@@ -1379,7 +1379,7 @@ def _make_full_attempt_dir_legacy_nested(
     with_output: bool = False,
     with_logs: bool = False,
 ) -> pathlib.Path:
-    """Create a mock attempt directory in the legacy nested version/params layout."""
+    """Create a mock attempt dir in legacy layout: pipeline/version/params_config_attempt."""
     parts = [base, "derivatives", f"dandiset-{dandiset_id}", f"sub-{subject}"]
     if session is not None:
         parts.append(f"ses-{session}")
