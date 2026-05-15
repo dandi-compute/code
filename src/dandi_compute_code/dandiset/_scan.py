@@ -1,5 +1,4 @@
 import datetime
-import json
 import pathlib
 import re
 
@@ -170,11 +169,9 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
     return records
 
 
-def write_state_and_waiting_jsonl(
-    dandiset_directory: pathlib.Path, queue_directory: pathlib.Path, limit: int | None = None
-) -> None:
+def write_state_and_waiting_jsonl(dandiset_directory: pathlib.Path, queue_directory: pathlib.Path) -> None:
     """
-    Scan *dandiset_directory* and write queue ``state.jsonl`` and ``waiting.jsonl``.
+    Scan *dandiset_directory* and refresh queue ``state.jsonl`` and ``waiting.jsonl``.
 
     Parameters
     ----------
@@ -182,23 +179,9 @@ def write_state_and_waiting_jsonl(
         Path to a local clone of the dandiset repository.
     queue_directory : pathlib.Path
         Path to the queue root directory containing ``queue_config.json``.
-    limit : int, optional
-        If provided, truncate ``waiting.jsonl`` to the first *limit* entries.
-
-    Raises
-    ------
-    FileNotFoundError
-        If ``queue_config.json`` is not found in *queue_directory*.
+    Notes
+    -----
+    This delegates to :func:`dandi_compute_code.queue.refresh_waiting_queue`
+    to keep queue refresh logic in one place.
     """
-    queue_config_file = queue_directory / "queue_config.json"
-    if not queue_config_file.exists():
-        message = f"'queue_config.json' not found in '{queue_directory}'."
-        raise FileNotFoundError(message)
-
-    records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
-    state_file = queue_directory / "state.jsonl"
-    with state_file.open(mode="w") as file_stream:
-        for record in records:
-            file_stream.write(json.dumps(record) + "\n")
-
-    refresh_waiting_queue(cwd=queue_directory, limit=limit)
+    refresh_waiting_queue(cwd=queue_directory, dandiset_directory=dandiset_directory)

@@ -8,7 +8,6 @@ from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
 from .dandiset import (
     delete_dandiset_version,
     scan_version_directories,
-    write_state_and_waiting_jsonl,
 )
 from .queue import clean_unsubmitted_capsules, prepare_queue, prepare_test_queue, process_queue, refresh_waiting_queue
 
@@ -226,31 +225,16 @@ def _queue_group() -> None:
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
     default=None,
 )
-@click.option(
-    "--limit",
-    "limit",
-    help="Truncate waiting.jsonl to the first N entries. Useful for testing.",
-    required=False,
-    type=click.IntRange(min=1),
-    default=None,
-)
 def _queue_refresh_command(
     queue_directory: pathlib.Path | None = None,
     dandiset_directory: pathlib.Path | None = None,
-    limit: int | None = None,
 ) -> None:
     """Regenerate waiting.jsonl from state.jsonl, optionally scanning a dandiset directory first."""
     cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
-    if dandiset_directory is not None:
-        if not (cwd / "queue_config.json").exists():
-            raise click.ClickException(f"'queue_config.json' not found in '{cwd}'.")
-        write_state_and_waiting_jsonl(
-            dandiset_directory=dandiset_directory,
-            queue_directory=cwd,
-            limit=limit,
-        )
-    else:
-        refresh_waiting_queue(cwd=cwd, limit=limit)
+    try:
+        refresh_waiting_queue(cwd=cwd, dandiset_directory=dandiset_directory)
+    except FileNotFoundError as error:
+        raise click.ClickException(str(error)) from error
 
 
 # dandicompute queue clean [OPTIONS]

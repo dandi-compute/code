@@ -461,7 +461,7 @@ def test_submit_next_returns_false_when_no_waiting_file(tmp_path: pathlib.Path) 
     with mock.patch("dandi_compute_code.queue._process_queue.refresh_waiting_queue") as mock_refresh:
         result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
 
-    mock_refresh.assert_called_once_with(cwd=queue_dir, limit=3)
+    mock_refresh.assert_called_once_with(cwd=queue_dir)
     assert result is False
 
 
@@ -476,7 +476,7 @@ def test_submit_next_returns_false_when_no_pending_entries(tmp_path: pathlib.Pat
     with mock.patch("dandi_compute_code.queue._process_queue.refresh_waiting_queue") as mock_refresh:
         result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
 
-    mock_refresh.assert_called_once_with(cwd=queue_dir, limit=3)
+    mock_refresh.assert_called_once_with(cwd=queue_dir)
     assert result is False
 
 
@@ -510,7 +510,7 @@ def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: 
         attempt=1,
     )
 
-    def _fill_waiting(*, cwd: pathlib.Path, limit: int | None = None) -> None:
+    def _fill_waiting(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path | None = None) -> None:
         # Simulate refresh_waiting_queue populating waiting.jsonl
         _write_jsonl(cwd / "waiting.jsonl", [entry])
 
@@ -523,7 +523,7 @@ def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: 
     ):
         result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
-    mock_refresh.assert_called_once_with(cwd=queue_dir, limit=3)
+    mock_refresh.assert_called_once_with(cwd=queue_dir)
     assert result is True
 
 
@@ -889,8 +889,8 @@ def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.P
 
 
 @pytest.mark.ai_generated
-def test_order_queue_limit_truncates_waiting_jsonl(tmp_path: pathlib.Path) -> None:
-    """refresh_waiting_queue respects the limit parameter and truncates waiting.jsonl."""
+def test_refresh_waiting_queue_writes_all_ordered_pending_entries(tmp_path: pathlib.Path) -> None:
+    """refresh_waiting_queue writes all ordered pending entries without truncation."""
     queue_dir = _make_queue_dir(tmp_path)
 
     entries = [
@@ -898,10 +898,10 @@ def test_order_queue_limit_truncates_waiting_jsonl(tmp_path: pathlib.Path) -> No
     ]
     _write_jsonl(queue_dir / "state.jsonl", entries)
 
-    refresh_waiting_queue(cwd=queue_dir, limit=2)
+    refresh_waiting_queue(cwd=queue_dir)
 
     waiting_entries = _read_jsonl(queue_dir / "waiting.jsonl")
-    assert len(waiting_entries) == 2
+    assert len(waiting_entries) == 5
 
 
 @pytest.mark.ai_generated

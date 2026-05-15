@@ -446,8 +446,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
 
     if not waiting_entries:
         # Attempt to repopulate from state.jsonl before giving up.
-        # Use a small limit to avoid building a runaway queue.
-        refresh_waiting_queue(cwd=cwd, limit=3)
+        refresh_waiting_queue(cwd=cwd)
         waiting_entries = _read_waiting()
 
     if not waiting_entries:
@@ -504,31 +503,45 @@ def order_queue(*, state_entries: list[dict], queue_config: dict, limit: int | N
     return ordered
 
 
-def refresh_waiting_queue(*, cwd: pathlib.Path, limit: int | None = None) -> None:
+def refresh_waiting_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path | None = None) -> None:
     """
     Build and write ``waiting.jsonl`` from ``state.jsonl`` in the queue directory.
 
-    Reads ``state.jsonl`` (produced by ``dandicompute dandiset scan``) to find
-    entries that are prepared (``has_code=True``) but not yet run
-    (``has_logs=False``, ``has_output=False``).  The entries are ordered
-    via :func:`order_queue` and written to ``waiting.jsonl`` so
-    that subsequent calls to :func:`process_queue` can read them directly.
+    If *dandiset_directory* is provided, ``state.jsonl`` is regenerated first
+    by scanning that dandiset directory.  Then entries that are prepared
+    (``has_code=True``) but not yet run (``has_logs=False``,
+    ``has_output=False``) are ordered via :func:`order_queue` and written to
+    ``waiting.jsonl`` so that subsequent calls to :func:`process_queue` can
+    read them directly.
 
     Parameters
     ----------
     cwd : pathlib.Path
         Path to the queue root directory.
-    limit : int, optional
-        If provided, truncate ``waiting.jsonl`` to the first *limit* entries.
-        Useful for testing without submitting the full queue.
+    dandiset_directory : pathlib.Path, optional
+        Path to a local dandiset clone. When provided, ``state.jsonl`` is
+        rewritten before ``waiting.jsonl`` is regenerated.
 
     Raises
     ------
     FileNotFoundError
-        If ``state.jsonl`` is not found in *cwd*.
+        If ``queue_config.json`` or ``state.jsonl`` is not found in *cwd*.
     """
+    queue_config_file = cwd / "queue_config.json"
+    if not queue_config_file.exists():
+        message = f"'queue_config.json' not found in '{cwd}'."
+        raise FileNotFoundError(message)
+
     state_file = cwd / "state.jsonl"
-    if not state_file.exists():
+    if dandiset_directory is not None:
+        # Local import avoids a circular dependency with dandi_compute_code.dandiset._scan.
+        from ..dandiset._scan import scan_dandiset_directory
+
+        records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
+        with state_file.open(mode="w") as file_stream:
+            for record in records:
+                file_stream.write(json.dumps(record) + "\n")
+    elif not state_file.exists():
         message = (
             f"'state.jsonl' not found in '{cwd}'. "
             "Generate it with: dandicompute queue refresh --dandiset-directory <dandiset_dir>"
@@ -536,8 +549,8 @@ def refresh_waiting_queue(*, cwd: pathlib.Path, limit: int | None = None) -> Non
         raise FileNotFoundError(message)
 
     state_entries = [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
-    queue_config = json.loads((cwd / "queue_config.json").read_text())
-    ordered = order_queue(state_entries=state_entries, queue_config=queue_config, limit=limit)
+    queue_config = json.loads(queue_config_file.read_text())
+    ordered = order_queue(state_entries=state_entries, queue_config=queue_config)
     waiting_file = cwd / "waiting.jsonl"
     waiting_file.write_text("".join(json.dumps(e) + "\n" for e in ordered))
     _prune_last_submitted(cwd=cwd, state_entries=state_entries)
