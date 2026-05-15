@@ -242,14 +242,13 @@ def _queue_refresh_command(
     """Regenerate waiting.jsonl from state.jsonl, optionally scanning a dandiset directory first."""
     cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
     if dandiset_directory is not None:
-        try:
-            write_state_and_waiting_jsonl(
-                dandiset_directory=dandiset_directory,
-                queue_directory=cwd,
-                limit=limit,
-            )
-        except FileNotFoundError as error:
-            raise click.ClickException(str(error)) from error
+        if not (cwd / "queue_config.json").exists():
+            raise click.ClickException(f"'queue_config.json' not found in '{cwd}'.")
+        write_state_and_waiting_jsonl(
+            dandiset_directory=dandiset_directory,
+            queue_directory=cwd,
+            limit=limit,
+        )
     else:
         refresh_waiting_queue(cwd=cwd, limit=limit)
 
