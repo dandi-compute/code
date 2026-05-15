@@ -535,7 +535,7 @@ def refresh_waiting_queue(*, cwd: pathlib.Path, limit: int | None = None) -> Non
     if not state_file.exists():
         message = (
             f"'state.jsonl' not found in '{cwd}'. "
-            "Generate it with: dandicompute dandiset scan --directory <dandiset_dir> --output <queue_dir>/state.jsonl"
+            "Generate it with: dandicompute queue refresh --dandiset-directory <dandiset_dir>"
         )
         raise FileNotFoundError(message)
 

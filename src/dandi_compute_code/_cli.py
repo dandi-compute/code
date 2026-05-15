@@ -1,7 +1,5 @@
-import json
 import os
 import pathlib
-import sys
 
 import click
 
@@ -9,7 +7,6 @@ from ._utils import _styled_echo, clean_work_directory
 from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
 from .dandiset import (
     delete_dandiset_version,
-    scan_dandiset_directory,
     scan_version_directories,
     write_state_and_waiting_jsonl,
 )
@@ -222,6 +219,14 @@ def _queue_group() -> None:
     default=None,
 )
 @click.option(
+    "--dandiset-directory",
+    "dandiset_directory",
+    help="Path to a local dandiset clone. When provided, state.jsonl is updated before regenerating waiting.jsonl.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
     "--limit",
     "limit",
     help="Truncate waiting.jsonl to the first N entries. Useful for testing.",
@@ -229,10 +234,24 @@ def _queue_group() -> None:
     type=click.IntRange(min=1),
     default=None,
 )
-def _queue_refresh_command(directory: pathlib.Path | None = None, limit: int | None = None) -> None:
-    """Regenerate waiting.jsonl from state.jsonl and optional queue limits."""
+def _queue_refresh_command(
+    directory: pathlib.Path | None = None,
+    dandiset_directory: pathlib.Path | None = None,
+    limit: int | None = None,
+) -> None:
+    """Regenerate waiting.jsonl from state.jsonl, optionally scanning a dandiset directory first."""
     cwd = directory if directory is not None else pathlib.Path.cwd()
-    refresh_waiting_queue(cwd=cwd, limit=limit)
+    if dandiset_directory is not None:
+        try:
+            write_state_and_waiting_jsonl(
+                dandiset_directory=dandiset_directory,
+                queue_directory=cwd,
+                limit=limit,
+            )
+        except FileNotFoundError as error:
+            raise click.ClickException(str(error)) from error
+    else:
+        refresh_waiting_queue(cwd=cwd, limit=limit)
 
 
 # dandicompute queue clean [OPTIONS]
@@ -353,52 +372,6 @@ def _queue_prepare_command(
         config_key=config_key,
         limit=limit,
     )
-
-
-# dandicompute queue scan [OPTIONS]
-@_queue_group.command(name="scan")
-@click.option(
-    "--directory",
-    "dandiset_directory",
-    help="Path to a local clone of the dandiset repository to scan.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
-@click.option(
-    "--output",
-    "output_file",
-    help="Path to the output JSONL file. Defaults to stdout if not provided.",
-    required=False,
-    type=click.Path(dir_okay=False, path_type=pathlib.Path),
-    default=None,
-)
-def _queue_scan_command(
-    dandiset_directory: pathlib.Path,
-    output_file: pathlib.Path | None = None,
-) -> None:
-    """Scan a local dandiset clone and emit attempt records as JSONL."""
-    if output_file is None:
-        records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
-        for record in records:
-            sys.stdout.write(json.dumps(record) + "\n")
-    else:
-        if output_file.name == "state.jsonl":
-            try:
-                write_state_and_waiting_jsonl(
-                    dandiset_directory=dandiset_directory,
-                    queue_directory=output_file.parent,
-                )
-            except FileNotFoundError as error:
-                message = (
-                    f"{error} When writing to state.jsonl, ensure " "queue_config.json exists in the parent directory."
-                )
-                raise click.ClickException(message) from error
-        else:
-            records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
-            with output_file.open(mode="w") as file_stream:
-                for record in records:
-                    file_stream.write(json.dumps(record) + "\n")
-        _styled_echo(text=f"\nScan complete! Output written to: {output_file}", color="green")
 
 
 # dandicompute delete
