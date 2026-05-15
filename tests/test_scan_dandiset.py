@@ -584,7 +584,7 @@ def test_cli_queue_refresh_fails_without_queue_config(tmp_path: pathlib.Path) ->
 
 
 @pytest.mark.ai_generated
-def test_cli_queue_refresh_requires_queue_directory(tmp_path: pathlib.Path) -> None:
+def test_cli_queue_refresh_required_queue_directory(tmp_path: pathlib.Path) -> None:
     """dandicompute queue refresh requires --queue-directory."""
     dandiset_dir = tmp_path / "dandiset_directory"
     dandiset_dir.mkdir()

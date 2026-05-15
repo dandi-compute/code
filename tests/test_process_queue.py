@@ -1359,7 +1359,7 @@ def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.ai_generated
-def test_cli_prepare_test_requires_queue_directory() -> None:
+def test_cli_prepare_test_required_queue_directory() -> None:
     """dandicompute prepare aind --test requires --queue-directory."""
     runner = CliRunner()
     with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
@@ -1858,7 +1858,7 @@ def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
         "prepare",
     ],
 )
-def test_cli_queue_subcommands_require_queue_directory(tmp_path: pathlib.Path, subcommand: str) -> None:
+def test_cli_queue_subcommands_required_queue_directory(tmp_path: pathlib.Path, subcommand: str) -> None:
     """Queue clean/process/prepare commands require --queue-directory."""
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
