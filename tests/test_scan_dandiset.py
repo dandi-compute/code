@@ -568,11 +568,11 @@ def test_cli_queue_refresh_without_dandiset_directory(tmp_path: pathlib.Path) ->
 
 
 @pytest.mark.ai_generated
-def test_cli_queue_refresh_requires_queue_config_when_scanning(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh --dandiset-directory fails clearly when queue_config.json is missing."""
-    dandiset_dir = tmp_path / "dandiset"
+def test_cli_queue_refresh_fails_without_queue_config(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue refresh --dandiset-directory fails when queue_config.json is missing."""
+    dandiset_dir = tmp_path / "dandiset_directory"
     dandiset_dir.mkdir()
-    queue_dir = tmp_path / "queue"
+    queue_dir = tmp_path / "queue_directory"
     queue_dir.mkdir()
     runner = CliRunner()
     result = runner.invoke(
