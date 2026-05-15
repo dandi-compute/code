@@ -212,7 +212,7 @@ def _queue_group() -> None:
 @_queue_group.command(name="refresh")
 @click.option(
     "--queue-directory",
-    "directory",
+    "queue_directory",
     help="Path to the queue root directory. Defaults to the current working directory.",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -235,12 +235,12 @@ def _queue_group() -> None:
     default=None,
 )
 def _queue_refresh_command(
-    directory: pathlib.Path | None = None,
+    queue_directory: pathlib.Path | None = None,
     dandiset_directory: pathlib.Path | None = None,
     limit: int | None = None,
 ) -> None:
     """Regenerate waiting.jsonl from state.jsonl, optionally scanning a dandiset directory first."""
-    cwd = directory if directory is not None else pathlib.Path.cwd()
+    cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
     if dandiset_directory is not None:
         try:
             write_state_and_waiting_jsonl(
@@ -258,7 +258,7 @@ def _queue_refresh_command(
 @_queue_group.command(name="clean")
 @click.option(
     "--queue-directory",
-    "directory",
+    "queue_directory",
     help="Path to the queue root directory. Defaults to the current working directory.",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -272,11 +272,11 @@ def _queue_refresh_command(
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 def _queue_clean_command(
-    directory: pathlib.Path | None = None,
+    queue_directory: pathlib.Path | None = None,
     dandiset_directory: pathlib.Path = pathlib.Path("."),
 ) -> None:
     """Delete unsubmitted capsules that are no longer present in the queue."""
-    cwd = directory if directory is not None else pathlib.Path.cwd()
+    cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
     removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_directory, queue_directory=cwd)
     if removed:
         for path in removed:
@@ -291,7 +291,7 @@ def _queue_clean_command(
 @_queue_group.command(name="process")
 @click.option(
     "--queue-directory",
-    "directory",
+    "queue_directory",
     help="Path to the queue root directory. Defaults to the current working directory.",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -305,11 +305,11 @@ def _queue_clean_command(
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 def _queue_process_command(
-    directory: pathlib.Path | None = None,
+    queue_directory: pathlib.Path | None = None,
     dandiset_directory: pathlib.Path = pathlib.Path("."),
 ) -> None:
     """Submit queued jobs when no active dandicompute jobs are running."""
-    cwd = directory if directory is not None else pathlib.Path.cwd()
+    cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
     process_queue(cwd=cwd, dandiset_directory=dandiset_directory)
 
 
@@ -317,7 +317,7 @@ def _queue_process_command(
 @_queue_group.command(name="prepare")
 @click.option(
     "--queue-directory",
-    "directory",
+    "queue_directory",
     help="Path to the queue root directory. Defaults to the current working directory.",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -355,7 +355,7 @@ def _queue_process_command(
     default=None,
 )
 def _queue_prepare_command(
-    directory: pathlib.Path | None = None,
+    queue_directory: pathlib.Path | None = None,
     dandiset_directory: pathlib.Path = pathlib.Path("."),
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
@@ -364,7 +364,7 @@ def _queue_prepare_command(
     """Prepare queued jobs across configured pipelines without submitting them."""
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
-    cwd = directory if directory is not None else pathlib.Path.cwd()
+    cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
     prepare_queue(
         cwd=cwd,
         dandiset_directory=dandiset_directory,
