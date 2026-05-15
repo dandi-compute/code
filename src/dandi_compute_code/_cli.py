@@ -161,9 +161,10 @@ def _prepare_aind_command(
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
 
     if test:
-        cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
+        if queue_directory is None:
+            raise click.UsageError("--queue-directory is required when using --test.")
         prepare_test_queue(
-            cwd=cwd,
+            cwd=queue_directory,
             pipeline_directory=pipeline_directory,
             config_key=config_key,
         )
@@ -213,10 +214,9 @@ def _queue_group() -> None:
 @click.option(
     "--queue-directory",
     "queue_directory",
-    help="Path to the queue root directory. Defaults to the current working directory.",
-    required=False,
+    help="Path to the queue root directory.",
+    required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
 )
 @click.option(
     "--dandiset-directory",
@@ -235,22 +235,21 @@ def _queue_group() -> None:
     default=None,
 )
 def _queue_refresh_command(
-    queue_directory: pathlib.Path | None = None,
+    queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path | None = None,
     limit: int | None = None,
 ) -> None:
     """Regenerate waiting.jsonl from state.jsonl, optionally scanning a dandiset directory first."""
-    cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
     if dandiset_directory is not None:
-        if not (cwd / "queue_config.json").exists():
-            raise click.ClickException(f"'queue_config.json' not found in '{cwd}'.")
+        if not (queue_directory / "queue_config.json").exists():
+            raise click.ClickException(f"'queue_config.json' not found in '{queue_directory}'.")
         write_state_and_waiting_jsonl(
             dandiset_directory=dandiset_directory,
-            queue_directory=cwd,
+            queue_directory=queue_directory,
             limit=limit,
         )
     else:
-        refresh_waiting_queue(cwd=cwd, limit=limit)
+        refresh_waiting_queue(cwd=queue_directory, limit=limit)
 
 
 # dandicompute queue clean [OPTIONS]
@@ -258,10 +257,9 @@ def _queue_refresh_command(
 @click.option(
     "--queue-directory",
     "queue_directory",
-    help="Path to the queue root directory. Defaults to the current working directory.",
-    required=False,
+    help="Path to the queue root directory.",
+    required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
 )
 @click.option(
     "--dandiset-directory",
@@ -271,12 +269,11 @@ def _queue_refresh_command(
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 def _queue_clean_command(
-    queue_directory: pathlib.Path | None = None,
-    dandiset_directory: pathlib.Path = pathlib.Path("."),
+    queue_directory: pathlib.Path,
+    dandiset_directory: pathlib.Path,
 ) -> None:
     """Delete unsubmitted capsules that are no longer present in the queue."""
-    cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
-    removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_directory, queue_directory=cwd)
+    removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
     if removed:
         for path in removed:
             _styled_echo(text=f"  Removed: {path}", color="yellow")
@@ -291,10 +288,9 @@ def _queue_clean_command(
 @click.option(
     "--queue-directory",
     "queue_directory",
-    help="Path to the queue root directory. Defaults to the current working directory.",
-    required=False,
+    help="Path to the queue root directory.",
+    required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
 )
 @click.option(
     "--dandiset-directory",
@@ -304,12 +300,11 @@ def _queue_clean_command(
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 def _queue_process_command(
-    queue_directory: pathlib.Path | None = None,
-    dandiset_directory: pathlib.Path = pathlib.Path("."),
+    queue_directory: pathlib.Path,
+    dandiset_directory: pathlib.Path,
 ) -> None:
     """Submit queued jobs when no active dandicompute jobs are running."""
-    cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
-    process_queue(cwd=cwd, dandiset_directory=dandiset_directory)
+    process_queue(cwd=queue_directory, dandiset_directory=dandiset_directory)
 
 
 # dandicompute queue prepare [OPTIONS]
@@ -317,10 +312,9 @@ def _queue_process_command(
 @click.option(
     "--queue-directory",
     "queue_directory",
-    help="Path to the queue root directory. Defaults to the current working directory.",
-    required=False,
+    help="Path to the queue root directory.",
+    required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
 )
 @click.option(
     "--dandiset-directory",
@@ -354,8 +348,8 @@ def _queue_process_command(
     default=None,
 )
 def _queue_prepare_command(
-    queue_directory: pathlib.Path | None = None,
-    dandiset_directory: pathlib.Path = pathlib.Path("."),
+    queue_directory: pathlib.Path,
+    dandiset_directory: pathlib.Path,
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
     limit: int | None = None,
@@ -363,9 +357,8 @@ def _queue_prepare_command(
     """Prepare queued jobs across configured pipelines without submitting them."""
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
-    cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
     prepare_queue(
-        cwd=cwd,
+        cwd=queue_directory,
         dandiset_directory=dandiset_directory,
         pipeline_directory=pipeline_directory,
         config_key=config_key,
