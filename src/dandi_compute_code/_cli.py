@@ -1,15 +1,12 @@
-import json
 import os
 import pathlib
-import sys
 
 import click
 
 from ._utils import _styled_echo, clean_work_directory
-from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_aind_ephys_job
+from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
 from .dandiset import (
     delete_dandiset_version,
-    scan_dandiset_directory,
     scan_version_directories,
     write_state_and_waiting_jsonl,
 )
@@ -38,15 +35,37 @@ def _clean_command(directory: pathlib.Path) -> None:
     _styled_echo(text="\nWork directory cleaned!", color="green")
 
 
-# dandicompute aind
-@_dandicompute_group.group(name="aind")
-def _aind_group() -> None:
-    """Prepare and submit AIND ephys pipeline jobs."""
+# dandicompute submit [OPTIONS]
+@_dandicompute_group.command(name="submit")
+@click.option(
+    "--script",
+    "script_file_path",
+    help="Path to the submission script file.",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
+)
+def _submit_command(script_file_path: pathlib.Path) -> None:
+    """Submit a previously prepared pipeline script via sbatch."""
+    submit_job(script_file_path=script_file_path)
+
+
+# dandicompute prepare
+@_dandicompute_group.group(name="prepare")
+def _prepare_group() -> None:
+    """Run preparation workflows that generate queue entries or scripts."""
     pass
 
 
-# dandicompute aind prepare [OPTIONS]
-@_aind_group.command(name="prepare")
+# dandicompute prepare aind [OPTIONS]
+@_prepare_group.command(name="aind")
+@click.option(
+    "--test",
+    "test",
+    help="Prepare test queue entries for all configured AIND ephys version/params combinations.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
 @click.option(
     "--id",
     "content_id",
@@ -65,7 +84,7 @@ def _aind_group() -> None:
 @click.option(
     "--dandipath",
     "dandiset_path",
-    help="The local path to the Dandiset data to be processed. Required if --id is not provided.",
+    help="The local path to the Dandiset data to be processed. Required if --id is not provided (ignored with --test).",
     required=False,
     type=str,
     default=None,
@@ -83,40 +102,50 @@ def _aind_group() -> None:
     "pipeline_directory",
     help="Local path to the AIND pipeline repository.",
     required=False,
-    type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
     default=None,
 )
 @click.option(
     "--version",
     "pipeline_version",
-    help="The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.",
-    required=True,
+    help="The version of the pipeline to use (ignored with --test).",
+    required=False,
     type=str,
+    default=None,
 )
 @click.option(
     "--params",
     "parameters_key",
-    help="The name of the parameters to use.",
+    help="The name of the parameters to use (ignored with --test).",
     required=False,
     type=str,
     default="default",
 )
 @click.option(
     "--submit",
-    help="Automatically submit the job.",
+    help="Automatically submit the job after preparation (ignored with --test).",
     required=False,
     is_flag=True,
     default=False,
 )
 @click.option(
     "--silent",
-    help="Suppress output messages.",
+    help="Suppress output messages (ignored with --test).",
     required=False,
     is_flag=True,
     default=False,
 )
-def _aind_prepare_command(
-    pipeline_version: str,
+@click.option(
+    "--queue-directory",
+    "queue_directory",
+    help="Path to the queue root directory containing queue_config.json (only used with --test).",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+def _prepare_aind_command(
+    test: bool = False,
+    pipeline_version: str | None = None,
     content_id: str | None = None,
     dandiset_id: str | None = None,
     dandiset_path: pathlib.Path | None = None,
@@ -125,11 +154,23 @@ def _aind_prepare_command(
     parameters_key: str = "default",
     submit: bool = False,
     silent: bool = False,
+    queue_directory: pathlib.Path | None = None,
 ) -> None:
-    """Prepare an AIND ephys submission script, and optionally submit it."""
-    if submit and "DANDI_API_KEY" not in os.environ:
-        message = "`DANDI_API_KEY` environment variable is not set."
-        raise RuntimeError(message)
+    """Prepare an AIND ephys job, or prepare test queue entries with --test."""
+    if "DANDI_API_KEY" not in os.environ:
+        raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
+
+    if test:
+        cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
+        prepare_test_queue(
+            cwd=cwd,
+            pipeline_directory=pipeline_directory,
+            config_key=config_key,
+        )
+        return
+
+    if pipeline_version is None:
+        raise click.UsageError("--version is required when not using --test.")
 
     script_file_path = prepare_aind_ephys_job(
         content_id=content_id,
@@ -143,7 +184,7 @@ def _aind_prepare_command(
     )
 
     if submit:
-        submit_aind_ephys_job(script_file_path=script_file_path)
+        submit_job(script_file_path=script_file_path)
 
     if silent:
         return
@@ -155,23 +196,9 @@ def _aind_prepare_command(
         return
 
     _styled_echo(
-        text=f"\n\nTo submit the job, run:\n\n\tdandicompute aind submit --script {script_file_path}\n\n",
+        text=f"\n\nTo submit the job, run:\n\n\tdandicompute submit --script {script_file_path}\n\n",
         color="yellow",
     )
-
-
-# dandicompute aind submit [OPTIONS]
-@_aind_group.command(name="submit")
-@click.option(
-    "--script",
-    "script_file_path",
-    help="Path to the submission script file.",
-    required=True,
-    type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
-)
-def _aind_submit_command(script_file_path: pathlib.Path) -> None:
-    """Submit a previously prepared AIND ephys script."""
-    submit_aind_ephys_job(script_file_path=script_file_path)
 
 
 # dandicompute queue
@@ -185,8 +212,16 @@ def _queue_group() -> None:
 @_queue_group.command(name="refresh")
 @click.option(
     "--queue-directory",
-    "directory",
+    "queue_directory",
     help="Path to the queue root directory. Defaults to the current working directory.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--dandiset-directory",
+    "dandiset_directory",
+    help="Path to a local dandiset clone. When provided, state.jsonl is updated before regenerating waiting.jsonl.",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
     default=None,
@@ -199,17 +234,30 @@ def _queue_group() -> None:
     type=click.IntRange(min=1),
     default=None,
 )
-def _queue_refresh_command(directory: pathlib.Path | None = None, limit: int | None = None) -> None:
-    """Regenerate waiting.jsonl from state.jsonl and optional queue limits."""
-    cwd = directory if directory is not None else pathlib.Path.cwd()
-    refresh_waiting_queue(cwd=cwd, limit=limit)
+def _queue_refresh_command(
+    queue_directory: pathlib.Path | None = None,
+    dandiset_directory: pathlib.Path | None = None,
+    limit: int | None = None,
+) -> None:
+    """Regenerate waiting.jsonl from state.jsonl, optionally scanning a dandiset directory first."""
+    cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
+    if dandiset_directory is not None:
+        if not (cwd / "queue_config.json").exists():
+            raise click.ClickException(f"'queue_config.json' not found in '{cwd}'.")
+        write_state_and_waiting_jsonl(
+            dandiset_directory=dandiset_directory,
+            queue_directory=cwd,
+            limit=limit,
+        )
+    else:
+        refresh_waiting_queue(cwd=cwd, limit=limit)
 
 
 # dandicompute queue clean [OPTIONS]
 @_queue_group.command(name="clean")
 @click.option(
     "--queue-directory",
-    "directory",
+    "queue_directory",
     help="Path to the queue root directory. Defaults to the current working directory.",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -223,11 +271,11 @@ def _queue_refresh_command(directory: pathlib.Path | None = None, limit: int | N
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 def _queue_clean_command(
-    directory: pathlib.Path | None = None,
+    queue_directory: pathlib.Path | None = None,
     dandiset_directory: pathlib.Path = pathlib.Path("."),
 ) -> None:
     """Delete unsubmitted capsules that are no longer present in the queue."""
-    cwd = directory if directory is not None else pathlib.Path.cwd()
+    cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
     removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_directory, queue_directory=cwd)
     if removed:
         for path in removed:
@@ -238,60 +286,11 @@ def _queue_clean_command(
         _styled_echo(text="\nNo unsubmitted capsules found.", color="yellow")
 
 
-# dandicompute prepare
-@_dandicompute_group.group(name="prepare")
-def _prepare_group() -> None:
-    """Run preparation workflows that generate queue entries or scripts."""
-    pass
-
-
-# dandicompute prepare test [OPTIONS]
-@_prepare_group.command(name="test")
-@click.option(
-    "--queue-directory",
-    "directory",
-    help="Path to the queue root directory containing queue_config.json. Defaults to the current working directory.",
-    required=False,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
-)
-@click.option(
-    "--pipeline",
-    "pipeline_directory",
-    help="Local path to the AIND pipeline repository.",
-    required=False,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
-)
-@click.option(
-    "--config",
-    "config_key",
-    help="Registered configuration key to use.",
-    required=False,
-    type=str,
-    default="default",
-)
-def _prepare_test_command(
-    directory: pathlib.Path | None = None,
-    pipeline_directory: pathlib.Path | None = None,
-    config_key: str = "default",
-) -> None:
-    """Prepare test queue entries for configured AIND ephys versions and params."""
-    if "DANDI_API_KEY" not in os.environ:
-        raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
-    cwd = directory if directory is not None else pathlib.Path.cwd()
-    prepare_test_queue(
-        cwd=cwd,
-        pipeline_directory=pipeline_directory,
-        config_key=config_key,
-    )
-
-
 # dandicompute queue process [OPTIONS]
 @_queue_group.command(name="process")
 @click.option(
     "--queue-directory",
-    "directory",
+    "queue_directory",
     help="Path to the queue root directory. Defaults to the current working directory.",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -305,11 +304,11 @@ def _prepare_test_command(
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 def _queue_process_command(
-    directory: pathlib.Path | None = None,
+    queue_directory: pathlib.Path | None = None,
     dandiset_directory: pathlib.Path = pathlib.Path("."),
 ) -> None:
     """Submit queued jobs when no active dandicompute jobs are running."""
-    cwd = directory if directory is not None else pathlib.Path.cwd()
+    cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
     process_queue(cwd=cwd, dandiset_directory=dandiset_directory)
 
 
@@ -317,7 +316,7 @@ def _queue_process_command(
 @_queue_group.command(name="prepare")
 @click.option(
     "--queue-directory",
-    "directory",
+    "queue_directory",
     help="Path to the queue root directory. Defaults to the current working directory.",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -355,7 +354,7 @@ def _queue_process_command(
     default=None,
 )
 def _queue_prepare_command(
-    directory: pathlib.Path | None = None,
+    queue_directory: pathlib.Path | None = None,
     dandiset_directory: pathlib.Path = pathlib.Path("."),
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
@@ -364,7 +363,7 @@ def _queue_prepare_command(
     """Prepare queued jobs across configured pipelines without submitting them."""
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
-    cwd = directory if directory is not None else pathlib.Path.cwd()
+    cwd = queue_directory if queue_directory is not None else pathlib.Path.cwd()
     prepare_queue(
         cwd=cwd,
         dandiset_directory=dandiset_directory,
@@ -372,59 +371,6 @@ def _queue_prepare_command(
         config_key=config_key,
         limit=limit,
     )
-
-
-# dandicompute dandiset
-@_dandicompute_group.group(name="dandiset")
-def _dandiset_group() -> None:
-    """Inspect dandiset derivatives and write queue state files."""
-    pass
-
-
-# dandicompute dandiset scan [OPTIONS]
-@_dandiset_group.command(name="scan")
-@click.option(
-    "--directory",
-    "dandiset_directory",
-    help="Path to a local clone of the dandiset repository to scan.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
-@click.option(
-    "--output",
-    "output_file",
-    help="Path to the output JSONL file. Defaults to stdout if not provided.",
-    required=False,
-    type=click.Path(dir_okay=False, path_type=pathlib.Path),
-    default=None,
-)
-def _dandiset_scan_command(
-    dandiset_directory: pathlib.Path,
-    output_file: pathlib.Path | None = None,
-) -> None:
-    """Scan a local dandiset clone and emit attempt records as JSONL."""
-    if output_file is None:
-        records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
-        for record in records:
-            sys.stdout.write(json.dumps(record) + "\n")
-    else:
-        if output_file.name == "state.jsonl":
-            try:
-                write_state_and_waiting_jsonl(
-                    dandiset_directory=dandiset_directory,
-                    queue_directory=output_file.parent,
-                )
-            except FileNotFoundError as error:
-                message = (
-                    f"{error} When writing to state.jsonl, ensure " "queue_config.json exists in the parent directory."
-                )
-                raise click.ClickException(message) from error
-        else:
-            records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
-            with output_file.open(mode="w") as file_stream:
-                for record in records:
-                    file_stream.write(json.dumps(record) + "\n")
-        _styled_echo(text=f"\nScan complete! Output written to: {output_file}", color="green")
 
 
 # dandicompute delete

@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import urllib.request
 
-from dandi_compute_code.aind_ephys_pipeline import prepare_aind_ephys_job
+from dandi_compute_code.aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
 
 _AIND_EPHYS_PARAMS_REGISTRY_PATH = (
     pathlib.Path(__file__).parent.parent / "aind_ephys_pipeline" / "registries" / "registered_params.json"
@@ -465,11 +465,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
         return False
 
     print(f"Submitting run capsule directory: {attempt_dir}")
-    command = ["dandicompute", "aind", "submit", "--script", str(script_file_path)]
-    result = subprocess.run(command, capture_output=True, text=True)
-    if result.returncode != 0 and result.stderr:
-        message = f"command: {command}\nstdout: {result.stdout}\nstderr: {result.stderr}"
-        raise RuntimeError(message)
+    submit_job(script_file_path=script_file_path)
 
     # Pop the submitted entry from waiting.jsonl.
     waiting_entries.pop(0)
@@ -535,7 +531,7 @@ def refresh_waiting_queue(*, cwd: pathlib.Path, limit: int | None = None) -> Non
     if not state_file.exists():
         message = (
             f"'state.jsonl' not found in '{cwd}'. "
-            "Generate it with: dandicompute dandiset scan --directory <dandiset_dir> --output <queue_dir>/state.jsonl"
+            "Generate it with: dandicompute queue refresh --dandiset-directory <dandiset_dir>"
         )
         raise FileNotFoundError(message)
 

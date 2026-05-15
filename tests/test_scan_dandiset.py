@@ -495,45 +495,89 @@ def test_write_state_and_waiting_jsonl_prunes_last_submitted_entries_with_output
 
 
 @pytest.mark.ai_generated
-def test_cli_dandiset_scan_to_stdout(tmp_path: pathlib.Path) -> None:
-    """dandicompute dandiset scan prints JSONL to stdout when no --output given."""
-    _make_attempt_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1)
-    runner = CliRunner()
-    result = runner.invoke(_dandicompute_group, ["dandiset", "scan", "--directory", str(tmp_path)])
-    assert result.exit_code == 0, result.output
-    lines = [line for line in result.output.splitlines() if line.strip()]
-    assert len(lines) == 1
-    record = json.loads(lines[0])
-    assert record["dandiset_id"] == "000001"
-
-
-@pytest.mark.ai_generated
-def test_cli_dandiset_scan_to_file(tmp_path: pathlib.Path) -> None:
-    """dandicompute dandiset scan writes JSONL to a file when --output is given."""
-    _make_attempt_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1)
-    out = tmp_path / "out.jsonl"
+def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue refresh --dandiset-directory scans and writes state.jsonl + waiting.jsonl."""
+    dandiset_dir = tmp_path / "dandiset"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(
+        json.dumps(
+            {
+                "pipelines": {
+                    "aind+ephys": {
+                        "version_priority": ["v1.0+abc1234+def5678"],
+                        "params_priority": ["default"],
+                        "max_fail_per_dandiset": 3,
+                    }
+                }
+            }
+        )
+    )
+    _make_attempt_dir(dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1)
     runner = CliRunner()
     result = runner.invoke(
         _dandicompute_group,
-        ["dandiset", "scan", "--directory", str(tmp_path), "--output", str(out)],
+        ["queue", "refresh", "--queue-directory", str(queue_dir), "--dandiset-directory", str(dandiset_dir)],
     )
     assert result.exit_code == 0, result.output
-    assert out.exists()
-    lines = [line for line in out.read_text().splitlines() if line.strip()]
-    assert len(lines) == 1
-    record = json.loads(lines[0])
-    assert record["dandiset_id"] == "000001"
+    assert (queue_dir / "state.jsonl").exists()
+    state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
+    assert len(state_records) == 1
+    assert state_records[0]["dandiset_id"] == "000001"
 
 
 @pytest.mark.ai_generated
-def test_cli_dandiset_scan_state_output_requires_queue_config(tmp_path: pathlib.Path) -> None:
-    """CLI returns a clear error when writing state.jsonl outside a queue directory."""
-    _make_attempt_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1)
-    out = tmp_path / "state.jsonl"
+def test_cli_queue_refresh_without_dandiset_directory(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue refresh without --dandiset-directory regenerates waiting.jsonl from existing state.jsonl."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    entry = {
+        "dandiset_id": "000001",
+        "subject": "mouse01",
+        "session": None,
+        "pipeline": "aind+ephys",
+        "version": "v1.0",
+        "params": "abc1234",
+        "config": "def5678",
+        "attempt": 1,
+        "has_code": True,
+        "has_output": False,
+        "has_logs": False,
+        "created_at": "2024-01-01T00:00:00+00:00",
+    }
+    (queue_dir / "state.jsonl").write_text(json.dumps(entry) + "\n")
+    (queue_dir / "queue_config.json").write_text(
+        json.dumps(
+            {
+                "pipelines": {
+                    "aind+ephys": {
+                        "version_priority": ["v1.0+abc1234+def5678"],
+                        "params_priority": ["default"],
+                        "max_fail_per_dandiset": 3,
+                    }
+                }
+            }
+        )
+    )
     runner = CliRunner()
     result = runner.invoke(
         _dandicompute_group,
-        ["dandiset", "scan", "--directory", str(tmp_path), "--output", str(out)],
+        ["queue", "refresh", "--queue-directory", str(queue_dir)],
+    )
+    assert result.exit_code == 0, result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_refresh_fails_without_queue_config(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue refresh --dandiset-directory fails when queue_config.json is missing."""
+    dandiset_dir = tmp_path / "dandiset_directory"
+    dandiset_dir.mkdir()
+    queue_dir = tmp_path / "queue_directory"
+    queue_dir.mkdir()
+    runner = CliRunner()
+    result = runner.invoke(
+        _dandicompute_group,
+        ["queue", "refresh", "--queue-directory", str(queue_dir), "--dandiset-directory", str(dandiset_dir)],
     )
     assert result.exit_code != 0
-    assert "ensure queue_config.json exists in the parent directory" in result.output
+    assert "queue_config.json" in result.output

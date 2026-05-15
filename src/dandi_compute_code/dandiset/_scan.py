@@ -170,7 +170,9 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
     return records
 
 
-def write_state_and_waiting_jsonl(dandiset_directory: pathlib.Path, queue_directory: pathlib.Path) -> None:
+def write_state_and_waiting_jsonl(
+    dandiset_directory: pathlib.Path, queue_directory: pathlib.Path, limit: int | None = None
+) -> None:
     """
     Scan *dandiset_directory* and write queue ``state.jsonl`` and ``waiting.jsonl``.
 
@@ -180,6 +182,8 @@ def write_state_and_waiting_jsonl(dandiset_directory: pathlib.Path, queue_direct
         Path to a local clone of the dandiset repository.
     queue_directory : pathlib.Path
         Path to the queue root directory containing ``queue_config.json``.
+    limit : int, optional
+        If provided, truncate ``waiting.jsonl`` to the first *limit* entries.
 
     Raises
     ------
@@ -197,4 +201,4 @@ def write_state_and_waiting_jsonl(dandiset_directory: pathlib.Path, queue_direct
         for record in records:
             file_stream.write(json.dumps(record) + "\n")
 
-    refresh_waiting_queue(cwd=queue_directory)
+    refresh_waiting_queue(cwd=queue_directory, limit=limit)

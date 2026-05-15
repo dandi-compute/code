@@ -6,8 +6,8 @@ import pydantic
 
 
 @pydantic.validate_call
-def submit_aind_ephys_job(script_file_path: pathlib.Path) -> None:
-    """ """
+def submit_job(script_file_path: pathlib.Path) -> None:
+    """Submit a pipeline script via sbatch."""
     if "DANDI_API_KEY" not in os.environ:
         message = "`DANDI_API_KEY` environment variable is not set."
         raise RuntimeError(message)
