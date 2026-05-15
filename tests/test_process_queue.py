@@ -519,9 +519,8 @@ def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: 
             "dandi_compute_code.queue._process_queue.refresh_waiting_queue",
             side_effect=_fill_waiting,
         ) as mock_refresh,
-        mock.patch("subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._process_queue.submit_job"),
     ):
-        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
         result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
     mock_refresh.assert_called_once_with(cwd=queue_dir, limit=3)
@@ -556,14 +555,12 @@ def test_submit_next_submits_first_entry_in_order(tmp_path: pathlib.Path) -> Non
         attempt=1,
     )
 
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+    with mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit:
         result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
-    submitted_command = mock_run.call_args.args[0]
-    assert submitted_command[:2] == ["dandicompute", "submit"]
-    assert "--script" in submitted_command
+    mock_submit.assert_called_once()
+    assert "submit.sh" in str(mock_submit.call_args.kwargs["script_file_path"])
 
 
 @pytest.mark.ai_generated
@@ -576,7 +573,7 @@ def test_submit_next_returns_false_when_script_missing(tmp_path: pathlib.Path) -
     _write_jsonl(queue_dir / "waiting.jsonl", [entry])
     # Deliberately do NOT create the attempt directory / submit.sh
 
-    with mock.patch("subprocess.run"):
+    with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
         result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is False
@@ -612,11 +609,11 @@ def test_submit_next_uses_session_in_path_when_present(tmp_path: pathlib.Path) -
         attempt=1,
     )
 
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+    with mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit:
         result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
+    assert mock_submit.called
 
 
 @pytest.mark.ai_generated
@@ -656,8 +653,7 @@ def test_submit_next_pops_submitted_entry_from_waiting_jsonl(tmp_path: pathlib.P
         attempt=1,
     )
 
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+    with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
         _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
     remaining = _read_jsonl(queue_dir / "waiting.jsonl")
@@ -692,8 +688,7 @@ def test_submit_next_appends_submitted_entry_to_last_submitted_jsonl(tmp_path: p
         attempt=1,
     )
 
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+    with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
         _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
     submitted_entries = _read_jsonl(queue_dir / "last_submitted.jsonl")
@@ -730,8 +725,7 @@ def test_submit_next_logs_explicit_run_capsule_directory(
         attempt=1,
     )
 
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+    with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
         _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
     captured = capsys.readouterr()
@@ -1117,8 +1111,7 @@ def test_submit_next_submits_first_entry_directly(tmp_path: pathlib.Path) -> Non
         attempt=1,
     )
 
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+    with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
         result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
@@ -1156,8 +1149,7 @@ def test_submit_next_submits_first_entry_with_existing_failure_dirs(tmp_path: pa
         attempt=1,
     )
 
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+    with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
         result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
