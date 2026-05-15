@@ -1858,7 +1858,7 @@ def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
         "prepare",
     ],
 )
-def test_cli_queue_commands_require_queue_directory(tmp_path: pathlib.Path, subcommand: str) -> None:
+def test_cli_queue_subcommands_require_queue_directory(tmp_path: pathlib.Path, subcommand: str) -> None:
     """Queue clean/process/prepare commands require --queue-directory."""
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
