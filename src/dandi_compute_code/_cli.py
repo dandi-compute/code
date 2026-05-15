@@ -264,7 +264,7 @@ def _queue_refresh_command(
 @click.option(
     "--dandiset-directory",
     "dandiset_directory",
-    help="Required path to a local clone of the dandiset repository to scan for queued capsules.",
+    help="Path to a local clone of the dandiset repository to scan for queued capsules.",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
@@ -295,7 +295,7 @@ def _queue_clean_command(
 @click.option(
     "--dandiset-directory",
     "dandiset_directory",
-    help="Required path to a local clone of the 001697 dandiset repository, used to count failures per dandiset.",
+    help="Path to a local clone of the 001697 dandiset repository, used to count failures per dandiset.",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
@@ -319,7 +319,7 @@ def _queue_process_command(
 @click.option(
     "--dandiset-directory",
     "dandiset_directory",
-    help="Required path to a local clone of the 001697 dandiset repository, used to count failures per dandiset.",
+    help="Path to a local clone of the 001697 dandiset repository, used to count failures per dandiset.",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
