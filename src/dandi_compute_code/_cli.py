@@ -213,7 +213,7 @@ def _queue_group() -> None:
 @_queue_group.command(name="refresh")
 @click.option(
     "--queue-directory",
-    "queue_directory",
+    "prepare_queue_directory",
     help="Path to the queue root directory.",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -348,7 +348,7 @@ def _queue_process_command(
     default=None,
 )
 def _queue_prepare_command(
-    queue_directory: pathlib.Path,
+    prepare_queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
@@ -358,7 +358,7 @@ def _queue_prepare_command(
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
     prepare_queue(
-        cwd=queue_directory,
+        cwd=prepare_queue_directory,
         dandiset_directory=dandiset_directory,
         pipeline_directory=pipeline_directory,
         config_key=config_key,
