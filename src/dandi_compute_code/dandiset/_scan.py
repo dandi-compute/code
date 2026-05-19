@@ -73,7 +73,16 @@ def _lookup_asset_size_bytes(
         )
         return None
 
-    blob_id = pathlib.PurePosixPath(content_urls[1]).name
+    blob_url = content_urls[1]
+    if not isinstance(blob_url, str):
+        _LOGGER.warning(
+            "Unable to resolve asset_size_bytes for %s: contentUrl[1] is not a string (%r).",
+            content_id,
+            blob_url,
+        )
+        return None
+
+    blob_id = pathlib.PurePosixPath(blob_url).name
     if blob_id != content_id:
         _LOGGER.warning(
             "Unable to resolve asset_size_bytes for %s: metadata blob ID %s does not match content_id.",
