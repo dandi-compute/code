@@ -61,12 +61,12 @@ def mock_scan_dandi_api_asset_lookup() -> Iterator[None]:
     """Prevent network calls from scan-time asset lookup during queue tests."""
 
     class _EmptyDandiset:
-        def get_assets_with_path_prefix(self, *, path: str) -> Iterator[Any]:
+        def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
             assert isinstance(path, str)
             return iter(())
 
     class _EmptyClient:
-        def get_dandiset(self, *, dandiset_id: str) -> _EmptyDandiset:
+        def get_dandiset(self, dandiset_id: str) -> _EmptyDandiset:
             assert isinstance(dandiset_id, str)
             return _EmptyDandiset()
 
