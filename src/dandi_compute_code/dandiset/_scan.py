@@ -99,10 +99,11 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     logs_dir = attempt_dir / "logs"
     has_logs = logs_dir.is_dir() and any(f for f in logs_dir.iterdir() if f.name != "dataset_description.json")
     created_at = datetime.datetime.fromtimestamp(attempt_dir.stat().st_ctime, tz=datetime.timezone.utc).isoformat()
+    content_id = _parse_content_id_from_submission_script(attempt_dir)
 
-    return {
+    record = {
         "dandiset_id": dandiset_id,
-        "content_id": _parse_content_id_from_submission_script(attempt_dir),
+        "content_id": content_id,
         "subject": subject,
         "session": session,
         "pipeline": pipeline,
@@ -115,6 +116,7 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
         "has_logs": has_logs,
         "created_at": created_at,
     }
+    return record
 
 
 def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
