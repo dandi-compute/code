@@ -355,6 +355,24 @@ def test_scan_raises_on_missing_nwb_file_path(tmp_path: pathlib.Path) -> None:
         scan_dandiset_directory(dandiset_directory=tmp_path)
 
 
+@pytest.mark.ai_generated
+def test_scan_raises_on_empty_content_id_in_nwb_file_path(tmp_path: pathlib.Path) -> None:
+    """An NWB_FILE_PATH with an empty trailing path segment raises an error."""
+    attempt_dir = _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+    )
+    (attempt_dir / "code" / "submit.sh").write_text('#!/bin/bash\nNWB_FILE_PATH=""\n')
+    with pytest.raises(ValueError, match="empty content_id"):
+        scan_dandiset_directory(dandiset_directory=tmp_path)
+
+
 # ---------------------------------------------------------------------------
 # Tests for refresh_queue with dandiset_directory
 # ---------------------------------------------------------------------------
