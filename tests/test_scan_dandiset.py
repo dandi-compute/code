@@ -464,7 +464,6 @@ def test_scan_raises_on_empty_content_id_in_nwb_file_path(tmp_path: pathlib.Path
 @pytest.mark.ai_generated
 def test_scan_asset_size_lookup_falls_back_to_none_on_blob_mismatch(
     tmp_path: pathlib.Path,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """asset_size_bytes falls back to None when matching blob ID is not found."""
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
@@ -504,11 +503,10 @@ def test_scan_asset_size_lookup_falls_back_to_none_on_blob_mismatch(
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
     ):
-        caplog.clear()
-        records = scan_dandiset_directory(dandiset_directory=tmp_path)
+        with pytest.warns(UserWarning, match="does not match content_id"):
+            records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
     assert records[0]["asset_size_bytes"] is None
-    assert "does not match content_id" in caplog.text
 
 
 # ---------------------------------------------------------------------------

@@ -1,8 +1,8 @@
 import datetime
-import logging
 import os
 import pathlib
 import re
+import warnings
 
 import dandi.dandiapi
 
@@ -10,7 +10,6 @@ _ATTEMPT_DIR_RE = re.compile(
     r"(?:version-(?P<version_in_name>.+?)_)?params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)"
 )
 _ATTEMPT_SUFFIX_RE = re.compile(r"_attempt-\d+$")
-_LOGGER = logging.getLogger(__name__)
 
 
 def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str:
@@ -54,11 +53,12 @@ def _lookup_asset_size_bytes(
 
     matching_assets = list(dandiset.get_assets_with_path_prefix(path=asset_path))
     if len(matching_assets) != 1:
-        _LOGGER.warning(
-            "Unable to resolve asset_size_bytes for %s. Expected exactly 1 asset at %s but found %d.",
-            content_id,
-            asset_path,
-            len(matching_assets),
+        warnings.warn(
+            (
+                f"Unable to resolve asset_size_bytes for {content_id}. "
+                f"Expected exactly 1 asset at {asset_path} but found {len(matching_assets)}."
+            ),
+            stacklevel=2,
         )
         return None
     asset = matching_assets[0]
@@ -66,27 +66,28 @@ def _lookup_asset_size_bytes(
     metadata = asset.get_raw_metadata()
     content_urls = metadata.get("contentUrl")
     if not isinstance(content_urls, list) or len(content_urls) < 2:
-        _LOGGER.warning(
-            "Unable to resolve asset_size_bytes for %s. Missing expected contentUrl[1] in DANDI metadata.",
-            content_id,
+        warnings.warn(
+            f"Unable to resolve asset_size_bytes for {content_id}. Missing expected contentUrl[1] in DANDI metadata.",
+            stacklevel=2,
         )
         return None
 
     blob_url = content_urls[1]
     if not isinstance(blob_url, str):
-        _LOGGER.warning(
-            "Unable to resolve asset_size_bytes for %s. contentUrl[1] is not a string (%r).",
-            content_id,
-            blob_url,
+        warnings.warn(
+            f"Unable to resolve asset_size_bytes for {content_id}. contentUrl[1] is not a string ({blob_url!r}).",
+            stacklevel=2,
         )
         return None
 
     blob_id = pathlib.PurePosixPath(blob_url).name
     if blob_id != content_id:
-        _LOGGER.warning(
-            "Unable to resolve asset_size_bytes for %s. Metadata blob ID %s does not match content_id.",
-            content_id,
-            blob_id,
+        warnings.warn(
+            (
+                f"Unable to resolve asset_size_bytes for {content_id}. "
+                f"Metadata blob ID {blob_id} does not match content_id."
+            ),
+            stacklevel=2,
         )
         return None
 
@@ -95,10 +96,9 @@ def _lookup_asset_size_bytes(
         return content_size
     if isinstance(content_size, str) and content_size.isdigit():
         return int(content_size)
-    _LOGGER.warning(
-        "Unable to resolve asset_size_bytes for %s. Invalid or missing contentSize value %r.",
-        content_id,
-        content_size,
+    warnings.warn(
+        f"Unable to resolve asset_size_bytes for {content_id}. Invalid or missing contentSize value {content_size!r}.",
+        stacklevel=2,
     )
     return None
 
