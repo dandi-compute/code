@@ -1,5 +1,5 @@
 """
-Unit tests for scan_dandiset_directory and refresh_waiting_queue writing state/waiting files.
+Unit tests for scan_dandiset_directory and writing state/waiting files via refresh_waiting_queue.
 (dandi_compute_code.dandiset).
 """
 
