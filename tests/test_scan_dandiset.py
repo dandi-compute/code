@@ -89,12 +89,11 @@ def mock_dandi_api_asset_lookup() -> Iterator[None]:
 
     class _EmptyDandiset:
         def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
-            assert isinstance(path, str)
             return iter(())
 
     class _EmptyClient:
         def get_dandiset(self, dandiset_id: str) -> _EmptyDandiset:
-            assert dandiset_id
+            assert isinstance(dandiset_id, str) and dandiset_id
             return _EmptyDandiset()
 
     with (
