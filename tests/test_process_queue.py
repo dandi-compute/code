@@ -751,6 +751,7 @@ def test_process_queue_handles_empty_scan_when_waiting_file_missing(tmp_path: pa
         process_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     mock_scan.assert_called_once_with(dandiset_directory=tmp_path)
+    assert (queue_dir / "state.jsonl").read_text() == ""
     assert (queue_dir / "waiting.jsonl").read_text() == ""
 
 
@@ -873,6 +874,18 @@ def test_order_queue_raises_when_queue_config_missing(tmp_path: pathlib.Path) ->
 
     with pytest.raises(FileNotFoundError, match="queue_config.json"):
         refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
+
+
+@pytest.mark.ai_generated
+def test_refresh_queue_handles_missing_dandiset_directory(tmp_path: pathlib.Path) -> None:
+    """refresh_queue writes empty state and waiting files when dandiset path is absent."""
+    queue_dir = _make_queue_dir(tmp_path)
+    missing_dandiset_dir = tmp_path / "missing_dandiset"
+
+    refresh_queue(queue_directory=queue_dir, dandiset_directory=missing_dandiset_dir)
+
+    assert (queue_dir / "state.jsonl").read_text() == ""
+    assert (queue_dir / "waiting.jsonl").read_text() == ""
 
 
 @pytest.mark.ai_generated
