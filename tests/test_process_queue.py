@@ -1209,8 +1209,6 @@ def test_submit_next_submits_first_entry_with_existing_failure_dirs(tmp_path: pa
 def test_prepare_queue_calls_prepare_for_each_qualifying_asset(tmp_path: pathlib.Path) -> None:
     """prepare_queue calls prepare_aind_ephys_job for every qualifying content ID."""
     queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "001697"
-    dandiset_dir.mkdir()
 
     qualifying_ids = ["asset-bbb", "asset-ccc"]
 
@@ -1219,7 +1217,7 @@ def test_prepare_queue_calls_prepare_for_each_qualifying_asset(tmp_path: pathlib
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+        prepare_queue(queue_directory=queue_dir)
 
     assert mock_prepare.call_count == 2
     prepared_ids = {call.kwargs["content_id"] for call in mock_prepare.call_args_list}
@@ -1230,10 +1228,12 @@ def test_prepare_queue_calls_prepare_for_each_qualifying_asset(tmp_path: pathlib
 def test_prepare_queue_skips_when_failures_reach_max(tmp_path: pathlib.Path) -> None:
     """prepare_queue skips all assets when the failure count reaches max_fail_per_dandiset."""
     queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "001697"
-    # Create 2 failed attempt dirs (== max_fail_per_dandiset from _EXAMPLE_QUEUE_CONFIG).
-    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 1, with_logs=True)
-    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 2, with_logs=True)
+    # Write 2 failure entries to state.jsonl (== max_fail_per_dandiset from _EXAMPLE_QUEUE_CONFIG).
+    failure_entries = [
+        _make_state_entry(pipeline="test", version="v1.0", attempt=1, has_code=True, has_logs=True, has_output=False),
+        _make_state_entry(pipeline="test", version="v1.0", attempt=2, has_code=True, has_logs=True, has_output=False),
+    ]
+    _write_jsonl(queue_dir / "state.jsonl", failure_entries)
 
     qualifying_ids = ["asset-bbb", "asset-ccc"]
 
@@ -1242,7 +1242,7 @@ def test_prepare_queue_skips_when_failures_reach_max(tmp_path: pathlib.Path) -> 
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+        prepare_queue(queue_directory=queue_dir)
 
     mock_prepare.assert_not_called()
 
@@ -1254,8 +1254,6 @@ def test_prepare_queue_strips_commit_suffix_from_version(tmp_path: pathlib.Path)
     queue_config = json.loads((queue_dir / "queue_config.json").read_text())
     queue_config["pipelines"]["test"]["version_priority"] = ["v1.1.0+abcdef0"]
     (queue_dir / "queue_config.json").write_text(json.dumps(queue_config))
-    dandiset_dir = tmp_path / "001697"
-    dandiset_dir.mkdir()
 
     qualifying_ids = ["asset-bbb"]
 
@@ -1264,7 +1262,7 @@ def test_prepare_queue_strips_commit_suffix_from_version(tmp_path: pathlib.Path)
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+        prepare_queue(queue_directory=queue_dir)
 
     assert mock_prepare.call_count == 1
     assert mock_prepare.call_args.kwargs["pipeline_version"] == "v1.1.0"
@@ -1274,8 +1272,6 @@ def test_prepare_queue_strips_commit_suffix_from_version(tmp_path: pathlib.Path)
 def test_prepare_queue_passes_optional_args_through(tmp_path: pathlib.Path) -> None:
     """prepare_queue forwards optional args to prepare_aind_ephys_job."""
     queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "001697"
-    dandiset_dir.mkdir()
 
     fake_pipeline_dir = tmp_path / "pipeline"
     fake_pipeline_dir.mkdir()
@@ -1289,7 +1285,6 @@ def test_prepare_queue_passes_optional_args_through(tmp_path: pathlib.Path) -> N
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
         prepare_queue(
             queue_directory=queue_dir,
-            dandiset_directory=dandiset_dir,
             pipeline_directory=fake_pipeline_dir,
             config_key="mit+engaging+revision-1",
         )
@@ -1304,8 +1299,6 @@ def test_prepare_queue_passes_optional_args_through(tmp_path: pathlib.Path) -> N
 def test_prepare_queue_limit_stops_after_n_assets(tmp_path: pathlib.Path) -> None:
     """prepare_queue stops after preparing exactly limit assets when limit is set."""
     queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "001697"
-    dandiset_dir.mkdir()
 
     qualifying_ids = ["asset-aaa", "asset-bbb", "asset-ccc"]
 
@@ -1314,7 +1307,7 @@ def test_prepare_queue_limit_stops_after_n_assets(tmp_path: pathlib.Path) -> Non
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir, limit=2)
+        prepare_queue(queue_directory=queue_dir, limit=2)
 
     assert mock_prepare.call_count == 2
 
@@ -1890,16 +1883,25 @@ def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
     [
         "clean",
         "process",
-        "prepare",
     ],
 )
 def test_cli_queue_subcommands_required_queue_directory(tmp_path: pathlib.Path, subcommand: str) -> None:
-    """Queue clean/process/prepare commands require --queue-directory."""
+    """Queue clean/process commands require --queue-directory."""
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
     args = ["queue", subcommand, "--dandiset-directory", str(dandiset_dir)]
     runner = CliRunner()
     with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
         result = runner.invoke(_dandicompute_group, args)
+    assert result.exit_code != 0
+    assert "Missing option '--queue-directory'" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_prepare_required_queue_directory() -> None:
+    """Queue prepare command requires --queue-directory."""
+    runner = CliRunner()
+    with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
+        result = runner.invoke(_dandicompute_group, ["queue", "prepare"])
     assert result.exit_code != 0
     assert "Missing option '--queue-directory'" in result.output

@@ -594,7 +594,6 @@ def _strip_commit_hash_suffix(version: str) -> str:
 def prepare_queue(
     *,
     queue_directory: pathlib.Path,
-    dandiset_directory: pathlib.Path | None = None,
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
     content_ids: list[str] | None = None,
@@ -609,15 +608,17 @@ def prepare_queue(
     asset — generating the ``code/`` directory and its parent directories without
     submitting a job.
 
+    The per-pipeline failure cap (``max_fail_per_dandiset`` in ``queue_config.json``)
+    is enforced by reading the existing ``state.jsonl`` file inside
+    *queue_directory*.  Entries with ``has_code=True``, ``has_logs=True``, and
+    ``has_output=False`` are counted as failures for the relevant pipeline and
+    version.  Run :func:`refresh_queue` beforehand to ensure ``state.jsonl`` is
+    up to date.
+
     Parameters
     ----------
     queue_directory : pathlib.Path
         Path to the queue root directory.
-    dandiset_directory : pathlib.Path, optional
-        Path to a local clone of the 001697 dandiset repository.  When provided,
-        failure directories are counted and entries are skipped when the total
-        reaches ``max_fail_per_dandiset``.  When ``None``, the failure cap check
-        is skipped entirely.
     pipeline_directory : pathlib.Path, optional
         Local path to the AIND pipeline repository.  Passed directly to
         :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job`.
@@ -643,6 +644,13 @@ def prepare_queue(
         with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
             content_ids = json.loads(gzip.decompress(response.read()))
 
+    state_file = queue_directory / "state.jsonl"
+    state_entries = (
+        [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
+        if state_file.exists()
+        else []
+    )
+
     prepared_count = 0
     for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
         if limit is not None and prepared_count >= limit:
@@ -655,20 +663,24 @@ def prepare_queue(
                     break
                 pipeline_cfg = queue_config["pipelines"][pipeline_name]
 
-                # Respect the per-dandiset failure cap when a dandiset directory is provided.
-                if dandiset_directory is not None:
-                    max_fail = pipeline_cfg.get("max_fail_per_dandiset")
-                    if max_fail is not None:
-                        failure_count = _count_dandiset_failures(
-                            dandiset_directory=dandiset_directory,
-                            version=version,
+                # Respect the per-dandiset failure cap using failures recorded in state.jsonl.
+                max_fail = pipeline_cfg.get("max_fail_per_dandiset")
+                if max_fail is not None:
+                    failure_count = sum(
+                        1
+                        for e in state_entries
+                        if e.get("pipeline") == pipeline_name
+                        and _version_matches(e.get("version", ""), version)
+                        and e.get("has_code")
+                        and e.get("has_logs")
+                        and not e.get("has_output")
+                    )
+                    if failure_count >= max_fail:
+                        print(
+                            f"Skipping preparation for {pipeline_name}/{version}/{params}: "
+                            f"failure count ({failure_count}) has reached max_fail_per_dandiset ({max_fail})."
                         )
-                        if failure_count >= max_fail:
-                            print(
-                                f"Skipping preparation for {pipeline_name}/{version}/{params}: "
-                                f"failure count ({failure_count}) has reached max_fail_per_dandiset ({max_fail})."
-                            )
-                            continue
+                        continue
 
                 # Strip the trailing commit-hash suffix before passing to prepare_aind_ephys_job.
                 submission_version = _strip_commit_hash_suffix(version)
