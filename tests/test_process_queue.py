@@ -1448,7 +1448,11 @@ def _make_full_attempt_dir(
     attempt_dir = pathlib.Path(*parts)
     attempt_dir.mkdir(parents=True)
     if with_code:
-        (attempt_dir / "code").mkdir()
+        code_dir = attempt_dir / "code"
+        code_dir.mkdir()
+        (code_dir / "submit.sh").write_text(
+            f"#!/bin/bash\nNWB_FILE_PATH=s3://dandi/mock/{dandiset_id}-{subject}-{attempt}\n"
+        )
     if with_output:
         (attempt_dir / "derivatives").mkdir()
     if with_logs:
@@ -1485,7 +1489,11 @@ def _make_full_attempt_dir_legacy_nested(
     attempt_dir = pathlib.Path(*parts)
     attempt_dir.mkdir(parents=True)
     if with_code:
-        (attempt_dir / "code").mkdir()
+        code_dir = attempt_dir / "code"
+        code_dir.mkdir()
+        (code_dir / "submit.sh").write_text(
+            f"#!/bin/bash\nNWB_FILE_PATH=s3://dandi/mock/{dandiset_id}-{subject}-{attempt}\n"
+        )
     if with_output:
         (attempt_dir / "derivatives").mkdir()
     if with_logs:

@@ -8,6 +8,30 @@ _ATTEMPT_DIR_RE = re.compile(
 _ATTEMPT_SUFFIX_RE = re.compile(r"_attempt-\d+$")
 
 
+def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str:
+    """Read a content ID from ``code/submit.sh``."""
+    script_file = attempt_dir / "code" / "submit.sh"
+    if not script_file.is_file():
+        raise ValueError(f"Unable to determine content_id for {attempt_dir}: missing {script_file}")
+
+    script_text = script_file.read_text()
+
+    for line in script_text.splitlines():
+        if not line.startswith("NWB_FILE_PATH="):
+            continue
+        nwb_file_path = line.split("=", maxsplit=1)[1].strip().strip('"').strip("'")
+        content_id = pathlib.PurePosixPath(nwb_file_path).name
+        if not content_id:
+            raise ValueError(
+                "Unable to determine content_id for "
+                f"{attempt_dir}: empty content_id from NWB_FILE_PATH in {script_file}"
+            )
+        return content_id
+    raise ValueError(
+        f"Unable to determine content_id for {attempt_dir}: missing/invalid NWB_FILE_PATH in {script_file}"
+    )
+
+
 def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     """
     Parse a single attempt directory into a flat record dict.
@@ -79,9 +103,11 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     logs_dir = attempt_dir / "logs"
     has_logs = logs_dir.is_dir() and any(f for f in logs_dir.iterdir() if f.name != "dataset_description.json")
     created_at = datetime.datetime.fromtimestamp(attempt_dir.stat().st_ctime, tz=datetime.timezone.utc).isoformat()
+    content_id = _parse_content_id_from_submission_script(attempt_dir)
 
-    return {
+    record = {
         "dandiset_id": dandiset_id,
+        "content_id": content_id,
         "subject": subject,
         "session": session,
         "pipeline": pipeline,
@@ -94,6 +120,7 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
         "has_logs": has_logs,
         "created_at": created_at,
     }
+    return record
 
 
 def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
@@ -120,6 +147,7 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         attempt)``.  Each record contains:
 
         * ``dandiset_id`` – value of the ``dandiset-`` BIDS entity
+        * ``content_id``  – input content identifier parsed from ``code/submit.sh``
         * ``subject``     – value of the ``sub-`` BIDS entity
         * ``session``     – value of the ``ses-`` BIDS entity, or ``null``
         * ``pipeline``    – value of the ``pipeline-`` BIDS entity

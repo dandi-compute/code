@@ -13,6 +13,8 @@ from dandi_compute_code._cli import _dandicompute_group
 from dandi_compute_code.dandiset import scan_dandiset_directory
 from dandi_compute_code.queue import refresh_queue
 
+DEFAULT_TEST_CONTENT_ID = "00000000-0000-0000-0000-000000000000"
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -33,6 +35,7 @@ def _make_attempt_dir(
     with_output: bool = False,
     with_logs: bool = False,
     logs_empty: bool = False,
+    content_id: str | None = None,
 ) -> pathlib.Path:
     """
     Create a mock attempt directory inside a fake dandiset clone rooted at *base*.
@@ -53,6 +56,15 @@ def _make_attempt_dir(
     attempt_dir.mkdir(parents=True)
     if with_code:
         (attempt_dir / "code").mkdir()
+        resolved_content_id = content_id if content_id is not None else DEFAULT_TEST_CONTENT_ID
+        blob_prefix = resolved_content_id[:3]
+        blob_subprefix = resolved_content_id[3:6]
+        (attempt_dir / "code" / "submit.sh").write_text(
+            (
+                "#!/bin/bash\n"
+                f'NWB_FILE_PATH="/orcd/data/dandi/001/s3dandiarchive/blobs/{blob_prefix}/{blob_subprefix}/{resolved_content_id}"\n'
+            )
+        )
     if with_output:
         (attempt_dir / "derivatives").mkdir()
     if with_logs:
@@ -94,6 +106,7 @@ def test_scan_single_failed_attempt(tmp_path: pathlib.Path) -> None:
     assert len(records) == 1
     r = records[0]
     assert r["dandiset_id"] == "000001"
+    assert r["content_id"] == DEFAULT_TEST_CONTENT_ID
     assert r["subject"] == "mouse01"
     assert r["session"] is None
     assert r["pipeline"] == "aind+ephys"
@@ -293,12 +306,71 @@ def test_scan_supports_legacy_version_subdirectory_layout(tmp_path: pathlib.Path
     )
     legacy_attempt_dir.mkdir(parents=True)
     (legacy_attempt_dir / "code").mkdir()
+    (legacy_attempt_dir / "code" / "submit.sh").write_text(
+        f'#!/bin/bash\nNWB_FILE_PATH="/orcd/data/dandi/001/s3dandiarchive/blobs/000/000/{DEFAULT_TEST_CONTENT_ID}"\n'
+    )
 
     records = scan_dandiset_directory(dandiset_directory=tmp_path)
 
     assert len(records) == 1
     assert records[0]["version"] == "v1.0"
     assert records[0]["params"] == "abc1234"
+
+
+@pytest.mark.ai_generated
+def test_scan_parses_content_id_from_submission_script(tmp_path: pathlib.Path) -> None:
+    """content_id is read from the NWB_FILE_PATH in code/submit.sh when present."""
+    content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+    _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        content_id=content_id,
+    )
+    records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    assert records[0]["content_id"] == content_id
+
+
+@pytest.mark.ai_generated
+def test_scan_raises_on_missing_nwb_file_path(tmp_path: pathlib.Path) -> None:
+    """A missing NWB_FILE_PATH in submit.sh raises an error."""
+    attempt_dir = _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+    )
+    (attempt_dir / "code" / "submit.sh").write_text("#!/bin/bash\n")
+    with pytest.raises(ValueError, match="Unable to determine content_id"):
+        scan_dandiset_directory(dandiset_directory=tmp_path)
+
+
+@pytest.mark.ai_generated
+def test_scan_raises_on_empty_content_id_in_nwb_file_path(tmp_path: pathlib.Path) -> None:
+    """An NWB_FILE_PATH with an empty trailing path segment raises an error."""
+    attempt_dir = _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+    )
+    (attempt_dir / "code" / "submit.sh").write_text('#!/bin/bash\nNWB_FILE_PATH=""\n')
+    with pytest.raises(ValueError, match="empty content_id"):
+        scan_dandiset_directory(dandiset_directory=tmp_path)
 
 
 # ---------------------------------------------------------------------------
@@ -309,7 +381,18 @@ def test_scan_supports_legacy_version_subdirectory_layout(tmp_path: pathlib.Path
 @pytest.mark.ai_generated
 def test_refresh_queue_with_dandiset_directory_creates_valid_files(tmp_path: pathlib.Path) -> None:
     """refresh_queue writes state.jsonl and waiting.jsonl when scanning dandiset_directory."""
-    _make_attempt_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1)
+    content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+    _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        content_id=content_id,
+    )
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     (queue_dir / "queue_config.json").write_text(
@@ -333,6 +416,7 @@ def test_refresh_queue_with_dandiset_directory_creates_valid_files(tmp_path: pat
     assert len(lines) == 1
     record = json.loads(lines[0])
     assert record["dandiset_id"] == "000001"
+    assert record["content_id"] == content_id
 
 
 @pytest.mark.ai_generated
@@ -514,7 +598,18 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
             }
         )
     )
-    _make_attempt_dir(dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1)
+    content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+    _make_attempt_dir(
+        dandiset_dir,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        content_id=content_id,
+    )
     runner = CliRunner()
     result = runner.invoke(
         _dandicompute_group,
@@ -525,6 +620,7 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
     state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
     assert len(state_records) == 1
     assert state_records[0]["dandiset_id"] == "000001"
+    assert state_records[0]["content_id"] == content_id
 
 
 @pytest.mark.ai_generated
