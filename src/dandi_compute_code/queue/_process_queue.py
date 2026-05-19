@@ -410,15 +410,15 @@ def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.P
     Submit the next pending entry from ``waiting.jsonl``.
 
     Reads ``waiting.jsonl`` from the queue directory — this file is written by
-    :func:`refresh_waiting_queue` and contains the priority-ordered list of pending
+    :func:`refresh_queue` and contains the priority-ordered list of pending
     entries produced by :func:`order_queue`.  If the file is absent
-    or empty, :func:`refresh_waiting_queue` is called once to attempt to repopulate it
+    or empty, :func:`refresh_queue` is called once to attempt to repopulate it
     from ``state.jsonl``.  If still empty after that, returns ``False``.
 
     The first entry from ``waiting.jsonl`` is submitted and then removed from
     ``waiting.jsonl``; the entry is simultaneously appended to
     ``last_submitted.jsonl``. The waiting queue is produced upstream by
-    :func:`refresh_waiting_queue`; this function applies no additional
+    :func:`refresh_queue`; this function applies no additional
     submission gating beyond requiring the submit script to exist.
 
     Parameters
@@ -446,7 +446,7 @@ def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.P
 
     if not waiting_entries:
         # Attempt to repopulate from state.jsonl before giving up.
-        refresh_waiting_queue(queue_directory=queue_directory)
+        refresh_queue(queue_directory=queue_directory)
         waiting_entries = _read_waiting()
 
     if not waiting_entries:
@@ -503,7 +503,7 @@ def order_queue(*, state_entries: list[dict], queue_config: dict, limit: int | N
     return ordered
 
 
-def refresh_waiting_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path | None = None) -> None:
+def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path | None = None) -> None:
     """
     Build and write ``waiting.jsonl`` from ``state.jsonl`` in the queue directory.
 
@@ -560,7 +560,7 @@ def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
     """
     Submit up to two jobs from the priority-ordered ``waiting.jsonl``.
 
-    If ``waiting.jsonl`` is absent or empty, :func:`refresh_waiting_queue` is called
+    If ``waiting.jsonl`` is absent or empty, :func:`refresh_queue` is called
     first to populate it from ``state.jsonl``.  Then, if no AIND jobs are
     currently running via SLURM, up to two valid entries are submitted.
 
@@ -577,11 +577,11 @@ def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
     ------
     FileNotFoundError
         If ``waiting.jsonl`` is absent or empty and ``state.jsonl`` is not
-        found in *queue_directory* (raised by :func:`refresh_waiting_queue`).
+        found in *queue_directory* (raised by :func:`refresh_queue`).
     """
     waiting_file = queue_directory / "waiting.jsonl"
     if not waiting_file.exists() or not waiting_file.read_text().strip():
-        refresh_waiting_queue(queue_directory=queue_directory)
+        refresh_queue(queue_directory=queue_directory)
 
     any_running = _determine_running()
     if not any_running:

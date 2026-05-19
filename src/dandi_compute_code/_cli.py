@@ -9,7 +9,7 @@ from .dandiset import (
     delete_dandiset_version,
     scan_version_directories,
 )
-from .queue import clean_unsubmitted_capsules, prepare_queue, prepare_test_queue, process_queue, refresh_waiting_queue
+from .queue import clean_unsubmitted_capsules, prepare_queue, prepare_test_queue, process_queue, refresh_queue
 
 
 # dandicompute
@@ -231,7 +231,7 @@ def _queue_refresh_command(
 ) -> None:
     """Regenerate waiting.jsonl from state.jsonl, optionally scanning a dandiset directory first."""
     try:
-        refresh_waiting_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
+        refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
     except FileNotFoundError as error:
         raise click.ClickException(str(error)) from error
 
