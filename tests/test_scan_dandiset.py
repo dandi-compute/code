@@ -56,13 +56,13 @@ def _make_attempt_dir(
     attempt_dir.mkdir(parents=True)
     if with_code:
         (attempt_dir / "code").mkdir()
-        content_id_value = content_id if content_id is not None else DEFAULT_TEST_CONTENT_ID
-        blob_prefix = content_id_value[:3]
-        blob_subprefix = content_id_value[3:6]
+        resolved_content_id = content_id if content_id is not None else DEFAULT_TEST_CONTENT_ID
+        blob_prefix = resolved_content_id[:3]
+        blob_subprefix = resolved_content_id[3:6]
         (attempt_dir / "code" / "submit.sh").write_text(
             (
                 "#!/bin/bash\n"
-                f'NWB_FILE_PATH="/orcd/data/dandi/001/s3dandiarchive/blobs/{blob_prefix}/{blob_subprefix}/{content_id_value}"\n'
+                f'NWB_FILE_PATH="/orcd/data/dandi/001/s3dandiarchive/blobs/{blob_prefix}/{blob_subprefix}/{resolved_content_id}"\n'
             )
         )
     if with_output:
