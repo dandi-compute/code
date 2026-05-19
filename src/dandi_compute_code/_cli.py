@@ -9,7 +9,7 @@ from .dandiset import (
     delete_dandiset_version,
     scan_version_directories,
 )
-from .queue import clean_unsubmitted_capsules, prepare_queue, prepare_test_queue, process_queue, refresh_queue
+from .queue import TEST_QUEUE_CONTENT_ID, clean_unsubmitted_capsules, prepare_queue, process_queue, refresh_queue
 
 
 def _require_dandi_api_key() -> None:
@@ -167,8 +167,9 @@ def _prepare_aind_command(
     if test:
         if queue_directory is None:
             raise click.UsageError("--queue-directory is required when using --test.")
-        prepare_test_queue(
+        prepare_queue(
             queue_directory=queue_directory,
+            content_ids=[TEST_QUEUE_CONTENT_ID],
             pipeline_directory=pipeline_directory,
             config_key=config_key,
         )

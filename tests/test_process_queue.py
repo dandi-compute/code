@@ -20,6 +20,7 @@ from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
 from dandi_compute_code.queue._process_queue import (
+    TEST_QUEUE_CONTENT_ID,
     _attempt_dir_candidates,
     _build_processing_order,
     _count_dandiset_failures,
@@ -30,7 +31,6 @@ from dandi_compute_code.queue._process_queue import (
     clean_unsubmitted_capsules,
     order_queue,
     prepare_queue,
-    prepare_test_queue,
     process_queue,
     refresh_queue,
 )
@@ -1320,60 +1320,39 @@ def test_prepare_queue_limit_stops_after_n_assets(tmp_path: pathlib.Path) -> Non
 
 
 @pytest.mark.ai_generated
-def test_prepare_test_queue_calls_prepare_for_each_version_and_param(tmp_path: pathlib.Path) -> None:
-    """prepare_test_queue prepares one test run for each configured version/params pair."""
+def test_prepare_queue_uses_explicit_content_ids_when_provided(tmp_path: pathlib.Path) -> None:
+    """prepare_queue uses provided content_ids directly and skips the network fetch."""
     queue_dir = _make_queue_dir(tmp_path)
-    queue_config = {
-        "pipelines": {
-            "aind+ephys": {
-                "version_priority": ["v1.1.0+abcdef0", "v1.2.0"],
-                "params_priority": ["default", "fast"],
-            }
-        }
-    }
-    (queue_dir / "queue_config.json").write_text(json.dumps(queue_config))
+    explicit_ids = ["explicit-asset-001"]
 
-    with mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare:
-        prepare_test_queue(queue_directory=queue_dir)
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+    ):
+        prepare_queue(queue_directory=queue_dir, content_ids=explicit_ids)
 
-    assert mock_prepare.call_count == 4
-    observed = {
-        (call.kwargs["pipeline_version"], call.kwargs["parameters_key"]) for call in mock_prepare.call_args_list
-    }
-    assert observed == {("v1.1.0", "default"), ("v1.1.0", "fast"), ("v1.2.0", "default"), ("v1.2.0", "fast")}
-    assert all(
-        call.kwargs["content_id"] == "048d1ee9-83b7-491f-8f02-1ca615b1d455" for call in mock_prepare.call_args_list
-    )
-    assert all(call.kwargs["config_key"] == "default" for call in mock_prepare.call_args_list)
-    assert all(call.kwargs["silent"] is True for call in mock_prepare.call_args_list)
+    mock_urlopen.assert_not_called()
+    assert mock_prepare.call_count == 1
+    assert mock_prepare.call_args.kwargs["content_id"] == "explicit-asset-001"
 
 
 @pytest.mark.ai_generated
-def test_prepare_test_queue_raises_when_aind_ephys_missing(tmp_path: pathlib.Path) -> None:
-    """prepare_test_queue raises when queue_config has no aind+ephys pipeline entry."""
-    queue_dir = _make_queue_dir(tmp_path)
-    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {"test": {}}}))
-
-    with pytest.raises(ValueError, match="aind\\+ephys"):
-        prepare_test_queue(queue_directory=queue_dir)
-
-
-@pytest.mark.ai_generated
-def test_cli_prepare_test_calls_helper(tmp_path: pathlib.Path) -> None:
-    """dandicompute prepare aind --test delegates to prepare_test_queue."""
+def test_cli_prepare_test_calls_prepare_queue_with_test_content_id(tmp_path: pathlib.Path) -> None:
+    """dandicompute prepare aind --test calls prepare_queue with the known test content ID."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     runner = CliRunner()
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
-        mock.patch("dandi_compute_code._cli.prepare_test_queue") as mock_prepare_test_queue,
+        mock.patch("dandi_compute_code._cli.prepare_queue") as mock_prepare_queue,
     ):
         result = runner.invoke(_dandicompute_group, ["prepare", "aind", "--test", "--queue-directory", str(queue_dir)])
 
     assert result.exit_code == 0
-    mock_prepare_test_queue.assert_called_once_with(
+    mock_prepare_queue.assert_called_once_with(
         queue_directory=queue_dir,
+        content_ids=[TEST_QUEUE_CONTENT_ID],
         pipeline_directory=None,
         config_key="default",
     )
@@ -1381,14 +1360,14 @@ def test_cli_prepare_test_calls_helper(tmp_path: pathlib.Path) -> None:
 
 @pytest.mark.ai_generated
 def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
-    """dandicompute prepare aind --test forwards --config to prepare_test_queue."""
+    """dandicompute prepare aind --test forwards --config to prepare_queue."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     runner = CliRunner()
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
-        mock.patch("dandi_compute_code._cli.prepare_test_queue") as mock_prepare_test_queue,
+        mock.patch("dandi_compute_code._cli.prepare_queue") as mock_prepare_queue,
     ):
         result = runner.invoke(
             _dandicompute_group,
@@ -1396,8 +1375,9 @@ def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
         )
 
     assert result.exit_code == 0
-    mock_prepare_test_queue.assert_called_once_with(
+    mock_prepare_queue.assert_called_once_with(
         queue_directory=queue_dir,
+        content_ids=[TEST_QUEUE_CONTENT_ID],
         pipeline_directory=None,
         config_key="mit+engaging+revision-1",
     )
