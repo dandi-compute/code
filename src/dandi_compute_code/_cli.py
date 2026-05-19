@@ -137,7 +137,7 @@ def _prepare_group() -> None:
 )
 @click.option(
     "--queue-directory",
-    "queue_directory",
+    "test_queue_directory",
     help="Path to the queue root directory containing queue_config.json (only used with --test).",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -154,17 +154,17 @@ def _prepare_aind_command(
     parameters_key: str = "default",
     submit: bool = False,
     silent: bool = False,
-    queue_directory: pathlib.Path | None = None,
+    test_queue_directory: pathlib.Path | None = None,
 ) -> None:
     """Prepare an AIND ephys job, or prepare test queue entries with --test."""
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
 
     if test:
-        if queue_directory is None:
+        if test_queue_directory is None:
             raise click.UsageError("--queue-directory is required when using --test.")
         prepare_test_queue(
-            cwd=queue_directory,
+            cwd=test_queue_directory,
             pipeline_directory=pipeline_directory,
             config_key=config_key,
         )
