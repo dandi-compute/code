@@ -46,8 +46,6 @@ def _lookup_asset_size_bytes(
     api_token = os.environ.get("DANDI_API_KEY", "").strip()
     if not api_token:
         return None
-    if api_token.startswith(("test-", "mock-")):
-        return None
 
     try:
         client = dandi.dandiapi.DandiAPIClient(token=api_token)

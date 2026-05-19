@@ -11,6 +11,8 @@ import importlib.resources
 import json
 import os
 import pathlib
+from collections.abc import Iterator
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -52,6 +54,22 @@ _EXAMPLE_QUEUE_CONFIG = {
         }
     }
 }
+
+
+@pytest.fixture(autouse=True)
+def mock_scan_dandi_api_asset_lookup() -> Iterator[None]:
+    """Prevent network calls from scan-time asset lookup during queue tests."""
+
+    class _EmptyDandiset:
+        def get_assets_with_path_prefix(self, _path: str) -> Iterator[Any]:
+            return iter(())
+
+    class _EmptyClient:
+        def get_dandiset(self, _dandiset_id: str) -> _EmptyDandiset:
+            return _EmptyDandiset()
+
+    with mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_EmptyClient()):
+        yield
 
 
 def _get_default_params_id() -> str:
