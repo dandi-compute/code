@@ -512,6 +512,7 @@ def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: 
 
     def _fill_waiting(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
         # Simulate refresh_queue populating waiting.jsonl
+        _ = dandiset_directory
         _write_jsonl(queue_directory / "waiting.jsonl", [entry])
 
     with (
@@ -878,7 +879,7 @@ def test_order_queue_raises_when_queue_config_missing(tmp_path: pathlib.Path) ->
 
 @pytest.mark.ai_generated
 def test_refresh_queue_handles_missing_dandiset_directory(tmp_path: pathlib.Path) -> None:
-    """refresh_queue writes empty state and waiting files when dandiset path is absent."""
+    """refresh_queue writes empty state and waiting files when dandiset directory does not exist."""
     queue_dir = _make_queue_dir(tmp_path)
     missing_dandiset_dir = tmp_path / "missing_dandiset"
 
