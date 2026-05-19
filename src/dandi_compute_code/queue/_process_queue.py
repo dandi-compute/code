@@ -7,8 +7,8 @@ import shutil
 import subprocess
 import urllib.request
 
-from dandi_compute_code.aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
-from dandi_compute_code.dandiset import scan_dandiset_directory
+from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
+from ..dandiset import scan_dandiset_directory
 
 _AIND_EPHYS_PARAMS_REGISTRY_PATH = (
     pathlib.Path(__file__).parent.parent / "aind_ephys_pipeline" / "registries" / "registered_params.json"
