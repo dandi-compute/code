@@ -9,7 +9,7 @@ from .dandiset import (
     delete_dandiset_version,
     scan_version_directories,
 )
-from .queue import clean_unsubmitted_capsules, prepare_queue, prepare_test_queue, process_queue, refresh_queue
+from .queue import TEST_QUEUE_CONTENT_ID, clean_unsubmitted_capsules, prepare_queue, process_queue, refresh_queue
 
 
 def _require_dandi_api_key() -> None:
@@ -167,8 +167,9 @@ def _prepare_aind_command(
     if test:
         if queue_directory is None:
             raise click.UsageError("--queue-directory is required when using --test.")
-        prepare_test_queue(
+        prepare_queue(
             queue_directory=queue_directory,
+            content_ids=[TEST_QUEUE_CONTENT_ID],
             pipeline_directory=pipeline_directory,
             config_key=config_key,
         )
@@ -308,13 +309,6 @@ def _queue_process_command(
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 @click.option(
-    "--dandiset-directory",
-    "dandiset_directory",
-    help="Path to a local clone of the 001697 dandiset repository, used to count failures per dandiset.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
-@click.option(
     "--pipeline",
     "pipeline_directory",
     help="Local path to the AIND pipeline repository.",
@@ -340,7 +334,6 @@ def _queue_process_command(
 )
 def _queue_prepare_command(
     queue_directory: pathlib.Path,
-    dandiset_directory: pathlib.Path,
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
     limit: int | None = None,
@@ -350,7 +343,6 @@ def _queue_prepare_command(
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
     prepare_queue(
         queue_directory=queue_directory,
-        dandiset_directory=dandiset_directory,
         pipeline_directory=pipeline_directory,
         config_key=config_key,
         limit=limit,

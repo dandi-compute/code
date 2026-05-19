@@ -14,8 +14,7 @@ _AIND_EPHYS_PARAMS_REGISTRY_PATH = (
     pathlib.Path(__file__).parent.parent / "aind_ephys_pipeline" / "registries" / "registered_params.json"
 )
 _FLAT_ATTEMPT_DIR_RE = re.compile(r"^version-(?P<version>.+?)_params-[^_]+_config-.+_attempt-\d+$")
-_TEST_QUEUE_CONTENT_ID = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
-_TEST_QUEUE_PIPELINE = "aind+ephys"
+TEST_QUEUE_CONTENT_ID = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
 
 try:
     _AIND_EPHYS_PARAMS_REGISTRY: dict = json.loads(_AIND_EPHYS_PARAMS_REGISTRY_PATH.read_text())
@@ -592,85 +591,65 @@ def _strip_commit_hash_suffix(version: str) -> str:
     return version
 
 
-def prepare_test_queue(
-    *,
-    queue_directory: pathlib.Path,
-    pipeline_directory: pathlib.Path | None = None,
-    config_key: str = "default",
-) -> None:
-    """
-    Prepare a new test run for each configured aind+ephys version/params pair.
-
-    Reads ``queue_config.json`` from *queue_directory* and, for every combination of
-    ``version_priority`` and ``params_priority`` in the ``aind+ephys`` pipeline
-    configuration, calls
-    :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job` for
-    the canonical test content ID.  The preparation helper determines the next
-    available attempt number, effectively bumping the attempt counter each run.
-    """
-    queue_config = json.loads((queue_directory / "queue_config.json").read_text())
-    pipeline_cfg = queue_config.get("pipelines", {}).get(_TEST_QUEUE_PIPELINE)
-    if pipeline_cfg is None:
-        message = f"Pipeline {_TEST_QUEUE_PIPELINE!r} not found in '{queue_directory / 'queue_config.json'}'."
-        raise ValueError(message)
-
-    for version in pipeline_cfg.get("version_priority", []):
-        submission_version = _strip_commit_hash_suffix(version)
-        for params in pipeline_cfg.get("params_priority", []):
-            print(f"Preparing test queue entry for {_TEST_QUEUE_PIPELINE}/{submission_version}/{params}")
-            prepare_aind_ephys_job(
-                content_id=_TEST_QUEUE_CONTENT_ID,
-                parameters_key=params,
-                pipeline_version=submission_version,
-                pipeline_directory=pipeline_directory,
-                config_key=config_key,
-                silent=True,
-            )
-
-
 def prepare_queue(
     *,
     queue_directory: pathlib.Path,
-    dandiset_directory: pathlib.Path,
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
+    content_ids: list[str] | None = None,
     limit: int | None = None,
 ) -> None:
     """
-    En-masse preparation of all qualifying assets based on the current queue config.
+    En-masse preparation of qualifying assets based on the current queue config.
 
     For every pipeline/version/params combination declared in ``queue_config.json``
-    this function fetches the qualifying AIND content IDs and calls
+    this function determines which content IDs to prepare and calls
     :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job` for each
     asset — generating the ``code/`` directory and its parent directories without
     submitting a job.
+
+    The per-pipeline failure cap (``max_fail_per_dandiset`` in ``queue_config.json``)
+    is enforced by reading the existing ``state.jsonl`` file inside
+    *queue_directory*.  Entries with ``has_code=True``, ``has_logs=True``, and
+    ``has_output=False`` are counted as failures for the relevant pipeline and
+    version.  Run :func:`refresh_queue` beforehand to ensure ``state.jsonl`` is
+    up to date.
 
     Parameters
     ----------
     queue_directory : pathlib.Path
         Path to the queue root directory.
-    dandiset_directory : pathlib.Path
-        Path to a local clone of the 001697 dandiset repository.  Failure
-        directories are counted across all source dandisets and entries are
-        skipped when the total reaches ``max_fail_per_dandiset``.
     pipeline_directory : pathlib.Path, optional
         Local path to the AIND pipeline repository.  Passed directly to
         :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job`.
     config_key : str
         Key for a registered job configuration. Passed directly to
         :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job`.
+    content_ids : list of str, optional
+        Explicit list of content IDs to prepare.  When provided, the qualifying
+        content IDs list is not fetched from the network and these IDs are used
+        directly instead.  Useful for targeted runs such as testing with one or
+        more known content IDs.
     limit : int, optional
         If provided, stop after preparing *limit* assets in total (across all
         pipeline/version/params combinations).  Useful for testing.
     """
     queue_config = json.loads((queue_directory / "queue_config.json").read_text())
 
-    qualifying_aind_content_ids_url = (
-        "https://raw.githubusercontent.com/dandi-cache/qualifying-aind-content-ids/refs/heads/min/"
-        "derivatives/qualifying_aind_content_ids.min.json.gz"
+    if content_ids is None:
+        qualifying_aind_content_ids_url = (
+            "https://raw.githubusercontent.com/dandi-cache/qualifying-aind-content-ids/refs/heads/min/"
+            "derivatives/qualifying_aind_content_ids.min.json.gz"
+        )
+        with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
+            content_ids = json.loads(gzip.decompress(response.read()))
+
+    state_file = queue_directory / "state.jsonl"
+    state_entries = (
+        [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
+        if state_file.exists()
+        else []
     )
-    with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
-        qualifying_aind_content_ids = json.loads(gzip.decompress(response.read()))
 
     prepared_count = 0
     for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
@@ -684,12 +663,17 @@ def prepare_queue(
                     break
                 pipeline_cfg = queue_config["pipelines"][pipeline_name]
 
-                # Respect the per-dandiset failure cap.
+                # Respect the per-dandiset failure cap using failures recorded in state.jsonl.
                 max_fail = pipeline_cfg.get("max_fail_per_dandiset")
                 if max_fail is not None:
-                    failure_count = _count_dandiset_failures(
-                        dandiset_directory=dandiset_directory,
-                        version=version,
+                    failure_count = sum(
+                        1
+                        for e in state_entries
+                        if e.get("pipeline") == pipeline_name
+                        and _version_matches(e.get("version", ""), version)
+                        and e.get("has_code")
+                        and e.get("has_logs")
+                        and not e.get("has_output")
                     )
                     if failure_count >= max_fail:
                         print(
@@ -701,7 +685,7 @@ def prepare_queue(
                 # Strip the trailing commit-hash suffix before passing to prepare_aind_ephys_job.
                 submission_version = _strip_commit_hash_suffix(version)
 
-                for content_id in sorted(qualifying_aind_content_ids):
+                for content_id in sorted(content_ids):
                     if limit is not None and prepared_count >= limit:
                         break
 
