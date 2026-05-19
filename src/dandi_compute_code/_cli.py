@@ -164,7 +164,7 @@ def _prepare_aind_command(
         if test_queue_directory is None:
             raise click.UsageError("--queue-directory is required when using --test.")
         prepare_test_queue(
-            cwd=test_queue_directory,
+            queue_directory=test_queue_directory,
             pipeline_directory=pipeline_directory,
             config_key=config_key,
         )
@@ -249,7 +249,7 @@ def _queue_refresh_command(
             limit=limit,
         )
     else:
-        refresh_waiting_queue(cwd=queue_directory, limit=limit)
+        refresh_waiting_queue(queue_directory=queue_directory, limit=limit)
 
 
 # dandicompute queue clean [OPTIONS]
@@ -304,14 +304,14 @@ def _queue_process_command(
     dandiset_directory: pathlib.Path,
 ) -> None:
     """Submit queued jobs when no active dandicompute jobs are running."""
-    process_queue(cwd=queue_directory, dandiset_directory=dandiset_directory)
+    process_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
 
 
 # dandicompute queue prepare [OPTIONS]
 @_queue_group.command(name="prepare")
 @click.option(
     "--queue-directory",
-    "prepare_queue_directory",
+    "queue_directory",
     help="Path to the queue root directory.",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -348,7 +348,7 @@ def _queue_process_command(
     default=None,
 )
 def _queue_prepare_command(
-    prepare_queue_directory: pathlib.Path,
+    queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
@@ -358,7 +358,7 @@ def _queue_prepare_command(
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
     prepare_queue(
-        cwd=prepare_queue_directory,
+        queue_directory=queue_directory,
         dandiset_directory=dandiset_directory,
         pipeline_directory=pipeline_directory,
         config_key=config_key,

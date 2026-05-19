@@ -288,9 +288,9 @@ def _entry_identity(entry: dict) -> tuple:
     )
 
 
-def _prune_last_submitted(*, cwd: pathlib.Path, state_entries: list[dict]) -> None:
+def _prune_last_submitted(*, queue_directory: pathlib.Path, state_entries: list[dict]) -> None:
     """Remove last_submitted entries that now have logs or output in state."""
-    last_submitted_file = cwd / "last_submitted.jsonl"
+    last_submitted_file = queue_directory / "last_submitted.jsonl"
     if not last_submitted_file.exists():
         return
 
@@ -405,7 +405,7 @@ def clean_unsubmitted_capsules(
     return removed
 
 
-def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool:
+def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> bool:
     """
     Submit the next pending entry from ``waiting.jsonl``.
 
@@ -423,7 +423,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
 
     Parameters
     ----------
-    cwd : pathlib.Path
+    queue_directory : pathlib.Path
         Path to the queue root directory.
     dandiset_directory : pathlib.Path
         Path to a local clone of the 001697 dandiset repository.  Used to
@@ -435,7 +435,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
         True if a job was submitted, False if there are no pending entries or
         if the submit script cannot be found.
     """
-    waiting_file = cwd / "waiting.jsonl"
+    waiting_file = queue_directory / "waiting.jsonl"
 
     def _read_waiting() -> list[dict]:
         if not waiting_file.exists():
@@ -447,7 +447,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     if not waiting_entries:
         # Attempt to repopulate from state.jsonl before giving up.
         # Use a small limit to avoid building a runaway queue.
-        refresh_waiting_queue(cwd=cwd, limit=3)
+        refresh_waiting_queue(queue_directory=queue_directory, limit=3)
         waiting_entries = _read_waiting()
 
     if not waiting_entries:
@@ -472,7 +472,7 @@ def _submit_next(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> bool
     waiting_file.write_text("".join(json.dumps(e) + "\n" for e in waiting_entries))
 
     # Append to last_submitted.jsonl.
-    last_submitted_file = cwd / "last_submitted.jsonl"
+    last_submitted_file = queue_directory / "last_submitted.jsonl"
     with last_submitted_file.open("a") as f:
         f.write(json.dumps(entry) + "\n")
 
@@ -504,7 +504,7 @@ def order_queue(*, state_entries: list[dict], queue_config: dict, limit: int | N
     return ordered
 
 
-def refresh_waiting_queue(*, cwd: pathlib.Path, limit: int | None = None) -> None:
+def refresh_waiting_queue(*, queue_directory: pathlib.Path, limit: int | None = None) -> None:
     """
     Build and write ``waiting.jsonl`` from ``state.jsonl`` in the queue directory.
 
@@ -516,7 +516,7 @@ def refresh_waiting_queue(*, cwd: pathlib.Path, limit: int | None = None) -> Non
 
     Parameters
     ----------
-    cwd : pathlib.Path
+    queue_directory : pathlib.Path
         Path to the queue root directory.
     limit : int, optional
         If provided, truncate ``waiting.jsonl`` to the first *limit* entries.
@@ -525,25 +525,25 @@ def refresh_waiting_queue(*, cwd: pathlib.Path, limit: int | None = None) -> Non
     Raises
     ------
     FileNotFoundError
-        If ``state.jsonl`` is not found in *cwd*.
+        If ``state.jsonl`` is not found in *queue_directory*.
     """
-    state_file = cwd / "state.jsonl"
+    state_file = queue_directory / "state.jsonl"
     if not state_file.exists():
         message = (
-            f"'state.jsonl' not found in '{cwd}'. "
+            f"'state.jsonl' not found in '{queue_directory}'. "
             "Generate it with: dandicompute queue refresh --dandiset-directory <dandiset_dir>"
         )
         raise FileNotFoundError(message)
 
     state_entries = [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
-    queue_config = json.loads((cwd / "queue_config.json").read_text())
+    queue_config = json.loads((queue_directory / "queue_config.json").read_text())
     ordered = order_queue(state_entries=state_entries, queue_config=queue_config, limit=limit)
-    waiting_file = cwd / "waiting.jsonl"
+    waiting_file = queue_directory / "waiting.jsonl"
     waiting_file.write_text("".join(json.dumps(e) + "\n" for e in ordered))
-    _prune_last_submitted(cwd=cwd, state_entries=state_entries)
+    _prune_last_submitted(queue_directory=queue_directory, state_entries=state_entries)
 
 
-def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
+def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
     """
     Submit up to two jobs from the priority-ordered ``waiting.jsonl``.
 
@@ -553,7 +553,7 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
 
     Parameters
     ----------
-    cwd : pathlib.Path
+    queue_directory : pathlib.Path
         Path to the queue root directory.
     dandiset_directory : pathlib.Path
         Path to a local clone of the 001697 dandiset repository.  Used to
@@ -564,16 +564,16 @@ def process_queue(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path) -> Non
     ------
     FileNotFoundError
         If ``waiting.jsonl`` is absent or empty and ``state.jsonl`` is not
-        found in *cwd* (raised by :func:`refresh_waiting_queue`).
+        found in *queue_directory* (raised by :func:`refresh_waiting_queue`).
     """
-    waiting_file = cwd / "waiting.jsonl"
+    waiting_file = queue_directory / "waiting.jsonl"
     if not waiting_file.exists() or not waiting_file.read_text().strip():
-        refresh_waiting_queue(cwd=cwd)
+        refresh_waiting_queue(queue_directory=queue_directory)
 
     any_running = _determine_running()
     if not any_running:
         for _ in range(2):
-            submitted = _submit_next(cwd=cwd, dandiset_directory=dandiset_directory)
+            submitted = _submit_next(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
             if not submitted:
                 break
 
@@ -588,24 +588,24 @@ def _strip_commit_hash_suffix(version: str) -> str:
 
 def prepare_test_queue(
     *,
-    cwd: pathlib.Path,
+    queue_directory: pathlib.Path,
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
 ) -> None:
     """
     Prepare a new test run for each configured aind+ephys version/params pair.
 
-    Reads ``queue_config.json`` from *cwd* and, for every combination of
+    Reads ``queue_config.json`` from *queue_directory* and, for every combination of
     ``version_priority`` and ``params_priority`` in the ``aind+ephys`` pipeline
     configuration, calls
     :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job` for
     the canonical test content ID.  The preparation helper determines the next
     available attempt number, effectively bumping the attempt counter each run.
     """
-    queue_config = json.loads((cwd / "queue_config.json").read_text())
+    queue_config = json.loads((queue_directory / "queue_config.json").read_text())
     pipeline_cfg = queue_config.get("pipelines", {}).get(_TEST_QUEUE_PIPELINE)
     if pipeline_cfg is None:
-        message = f"Pipeline {_TEST_QUEUE_PIPELINE!r} not found in '{cwd / 'queue_config.json'}'."
+        message = f"Pipeline {_TEST_QUEUE_PIPELINE!r} not found in '{queue_directory / 'queue_config.json'}'."
         raise ValueError(message)
 
     for version in pipeline_cfg.get("version_priority", []):
@@ -624,7 +624,7 @@ def prepare_test_queue(
 
 def prepare_queue(
     *,
-    cwd: pathlib.Path,
+    queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
@@ -641,7 +641,7 @@ def prepare_queue(
 
     Parameters
     ----------
-    cwd : pathlib.Path
+    queue_directory : pathlib.Path
         Path to the queue root directory.
     dandiset_directory : pathlib.Path
         Path to a local clone of the 001697 dandiset repository.  Failure
@@ -657,7 +657,7 @@ def prepare_queue(
         If provided, stop after preparing *limit* assets in total (across all
         pipeline/version/params combinations).  Useful for testing.
     """
-    queue_config = json.loads((cwd / "queue_config.json").read_text())
+    queue_config = json.loads((queue_directory / "queue_config.json").read_text())
 
     qualifying_aind_content_ids_url = (
         "https://raw.githubusercontent.com/dandi-cache/qualifying-aind-content-ids/refs/heads/min/"
