@@ -24,7 +24,7 @@ def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str |
             continue
         nwb_file_path = line.split("=", maxsplit=1)[1].strip().strip('"').strip("'")
         content_id = pathlib.PurePosixPath(nwb_file_path).name
-        return content_id or None
+        return content_id if content_id else None
     return None
 
 

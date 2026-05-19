@@ -55,10 +55,12 @@ def _make_attempt_dir(
     if with_code:
         (attempt_dir / "code").mkdir()
         if content_id is not None:
+            blob_prefix = content_id[:3]
+            blob_subprefix = content_id[3:6]
             (attempt_dir / "code" / "submit.sh").write_text(
                 (
                     "#!/bin/bash\n"
-                    f'NWB_FILE_PATH="/orcd/data/dandi/001/s3dandiarchive/blobs/{content_id[:3]}/{content_id[3:6]}/{content_id}"\n'
+                    f'NWB_FILE_PATH="/orcd/data/dandi/001/s3dandiarchive/blobs/{blob_prefix}/{blob_subprefix}/{content_id}"\n'
                 )
             )
     if with_output:
