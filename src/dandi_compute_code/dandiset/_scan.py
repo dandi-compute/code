@@ -318,8 +318,9 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
 
                 if record["has_logs"]:
                     logs_dir = attempt_dir / "logs"
+                    # Exclude dataset_description.json as it is a BIDS metadata file, not a log asset
                     first_log_file = next(
-                        (f for f in sorted(logs_dir.iterdir()) if f.name != "dataset_description.json"),
+                        iter(sorted(f for f in logs_dir.iterdir() if f.name != "dataset_description.json")),
                         None,
                     )
                     if first_log_file is not None:
