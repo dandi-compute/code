@@ -140,7 +140,7 @@ def _prepare_group() -> None:
     default=False,
 )
 @click.option(
-    "--queue-directory",
+    "--queue",
     "queue_directory",
     help="Path to the queue root directory containing queue_config.json (only used with --test).",
     required=False,
@@ -166,7 +166,7 @@ def _prepare_aind_command(
 
     if test:
         if queue_directory is None:
-            raise click.UsageError("--queue-directory is required when using --test.")
+            raise click.UsageError("--queue is required when using --test.")
         prepare_queue(
             queue_directory=queue_directory,
             content_ids=[TEST_QUEUE_CONTENT_ID],
@@ -217,14 +217,14 @@ def _queue_group() -> None:
 # dandicompute queue refresh [OPTIONS]
 @_queue_group.command(name="refresh")
 @click.option(
-    "--queue-directory",
+    "--queue",
     "queue_directory",
     help="Path to the queue root directory.",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 @click.option(
-    "--dandiset-directory",
+    "--dandiset",
     "dandiset_directory",
     help="Path to a local dandiset clone used to rescan and regenerate state.jsonl before waiting.jsonl.",
     required=True,
@@ -245,14 +245,14 @@ def _queue_refresh_command(
 # dandicompute queue clean [OPTIONS]
 @_queue_group.command(name="clean")
 @click.option(
-    "--queue-directory",
+    "--queue",
     "queue_directory",
     help="Path to the queue root directory.",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 @click.option(
-    "--dandiset-directory",
+    "--dandiset",
     "dandiset_directory",
     help="Path to a local clone of the dandiset repository to scan for queued capsules.",
     required=True,
@@ -277,14 +277,14 @@ def _queue_clean_command(
 # dandicompute queue process [OPTIONS]
 @_queue_group.command(name="process")
 @click.option(
-    "--queue-directory",
+    "--queue",
     "queue_directory",
     help="Path to the queue root directory.",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 @click.option(
-    "--dandiset-directory",
+    "--dandiset",
     "dandiset_directory",
     help="Path to a local clone of the 001697 dandiset repository, used to count failures per dandiset.",
     required=True,
@@ -302,7 +302,7 @@ def _queue_process_command(
 # dandicompute queue prepare [OPTIONS]
 @_queue_group.command(name="prepare")
 @click.option(
-    "--queue-directory",
+    "--queue",
     "queue_directory",
     help="Path to the queue root directory.",
     required=True,

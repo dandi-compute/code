@@ -729,7 +729,7 @@ def test_refresh_queue_with_dandiset_directory_prunes_last_submitted_entries_wit
 
 @pytest.mark.ai_generated
 def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh --dandiset-directory scans and writes state.jsonl + waiting.jsonl."""
+    """dandicompute queue refresh --dandiset scans and writes state.jsonl + waiting.jsonl."""
     dandiset_dir = tmp_path / "dandiset"
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
@@ -761,7 +761,7 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
     runner = CliRunner()
     result = runner.invoke(
         _dandicompute_group,
-        ["queue", "refresh", "--queue-directory", str(queue_dir), "--dandiset-directory", str(dandiset_dir)],
+        ["queue", "refresh", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
         env={"DANDI_API_KEY": "test-key"},
     )
     assert result.exit_code == 0, result.output
@@ -774,7 +774,7 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
 
 @pytest.mark.ai_generated
 def test_cli_queue_refresh_requires_dandiset_directory(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh requires --dandiset-directory."""
+    """dandicompute queue refresh requires --dandiset."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     entry = {
@@ -808,10 +808,10 @@ def test_cli_queue_refresh_requires_dandiset_directory(tmp_path: pathlib.Path) -
     runner = CliRunner()
     result = runner.invoke(
         _dandicompute_group,
-        ["queue", "refresh", "--queue-directory", str(queue_dir)],
+        ["queue", "refresh", "--queue", str(queue_dir)],
     )
     assert result.exit_code != 0
-    assert "Missing option '--dandiset-directory'" in result.output
+    assert "Missing option '--dandiset'" in result.output
 
 
 @pytest.mark.ai_generated
@@ -828,7 +828,7 @@ def test_cli_queue_refresh_requires_dandi_api_key(tmp_path: pathlib.Path, dandi_
     with mock.patch.dict("os.environ", {}, clear=True):
         result = runner.invoke(
             _dandicompute_group,
-            ["queue", "refresh", "--queue-directory", str(queue_dir), "--dandiset-directory", str(dandiset_dir)],
+            ["queue", "refresh", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
             env={} if dandi_api_key is None else {"DANDI_API_KEY": dandi_api_key},
         )
     assert result.exit_code != 0
@@ -837,7 +837,7 @@ def test_cli_queue_refresh_requires_dandi_api_key(tmp_path: pathlib.Path, dandi_
 
 @pytest.mark.ai_generated
 def test_cli_queue_refresh_fails_without_queue_config(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh --dandiset-directory fails when queue_config.json is missing."""
+    """dandicompute queue refresh --dandiset fails when queue_config.json is missing."""
     dandiset_dir = tmp_path / "dandiset_directory"
     dandiset_dir.mkdir()
     queue_dir = tmp_path / "queue_directory"
@@ -845,7 +845,7 @@ def test_cli_queue_refresh_fails_without_queue_config(tmp_path: pathlib.Path) ->
     runner = CliRunner()
     result = runner.invoke(
         _dandicompute_group,
-        ["queue", "refresh", "--queue-directory", str(queue_dir), "--dandiset-directory", str(dandiset_dir)],
+        ["queue", "refresh", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
         env={"DANDI_API_KEY": "test-key"},
     )
     assert result.exit_code != 0
@@ -854,10 +854,10 @@ def test_cli_queue_refresh_fails_without_queue_config(tmp_path: pathlib.Path) ->
 
 @pytest.mark.ai_generated
 def test_cli_queue_refresh_required_queue_directory(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh requires --queue-directory."""
+    """dandicompute queue refresh requires --queue."""
     dandiset_dir = tmp_path / "dandiset_directory"
     dandiset_dir.mkdir()
     runner = CliRunner()
-    result = runner.invoke(_dandicompute_group, ["queue", "refresh", "--dandiset-directory", str(dandiset_dir)])
+    result = runner.invoke(_dandicompute_group, ["queue", "refresh", "--dandiset", str(dandiset_dir)])
     assert result.exit_code != 0
-    assert "Missing option '--queue-directory'" in result.output
+    assert "Missing option '--queue'" in result.output

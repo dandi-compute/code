@@ -1340,7 +1340,7 @@ def test_cli_prepare_test_calls_prepare_queue_with_test_content_id(tmp_path: pat
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
         mock.patch("dandi_compute_code._cli.prepare_queue") as mock_prepare_queue,
     ):
-        result = runner.invoke(_dandicompute_group, ["prepare", "aind", "--test", "--queue-directory", str(queue_dir)])
+        result = runner.invoke(_dandicompute_group, ["prepare", "aind", "--test", "--queue", str(queue_dir)])
 
     assert result.exit_code == 0
     mock_prepare_queue.assert_called_once_with(
@@ -1364,7 +1364,7 @@ def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
     ):
         result = runner.invoke(
             _dandicompute_group,
-            ["prepare", "aind", "--test", "--queue-directory", str(queue_dir), "--config", "mit+engaging+revision-1"],
+            ["prepare", "aind", "--test", "--queue", str(queue_dir), "--config", "mit+engaging+revision-1"],
         )
 
     assert result.exit_code == 0
@@ -1378,12 +1378,12 @@ def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
 
 @pytest.mark.ai_generated
 def test_cli_prepare_test_required_queue_directory() -> None:
-    """dandicompute prepare aind --test requires --queue-directory."""
+    """dandicompute prepare aind --test requires --queue."""
     runner = CliRunner()
     with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
         result = runner.invoke(_dandicompute_group, ["prepare", "aind", "--test"])
     assert result.exit_code != 0
-    assert "--queue-directory is required when using --test" in result.output
+    assert "--queue is required when using --test" in result.output
 
 
 @pytest.mark.ai_generated
@@ -1836,9 +1836,9 @@ def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
             [
                 "queue",
                 "clean",
-                "--queue-directory",
+                "--queue",
                 str(queue_dir),
-                "--dandiset-directory",
+                "--dandiset",
                 str(dandiset_dir),
             ],
             env={"DANDI_API_KEY": "test-key"},
@@ -1865,9 +1865,9 @@ def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
             [
                 "queue",
                 "clean",
-                "--queue-directory",
+                "--queue",
                 str(queue_dir),
-                "--dandiset-directory",
+                "--dandiset",
                 str(dandiset_dir),
             ],
             env={"DANDI_API_KEY": "test-key"},
@@ -1886,22 +1886,22 @@ def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
     ],
 )
 def test_cli_queue_subcommands_required_queue_directory(tmp_path: pathlib.Path, subcommand: str) -> None:
-    """Queue clean/process commands require --queue-directory."""
+    """Queue clean/process commands require --queue."""
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
-    args = ["queue", subcommand, "--dandiset-directory", str(dandiset_dir)]
+    args = ["queue", subcommand, "--dandiset", str(dandiset_dir)]
     runner = CliRunner()
     with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
         result = runner.invoke(_dandicompute_group, args)
     assert result.exit_code != 0
-    assert "Missing option '--queue-directory'" in result.output
+    assert "Missing option '--queue'" in result.output
 
 
 @pytest.mark.ai_generated
 def test_cli_queue_prepare_required_queue_directory() -> None:
-    """Queue prepare command requires --queue-directory."""
+    """Queue prepare command requires --queue."""
     runner = CliRunner()
     with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
         result = runner.invoke(_dandicompute_group, ["queue", "prepare"])
     assert result.exit_code != 0
-    assert "Missing option '--queue-directory'" in result.output
+    assert "Missing option '--queue'" in result.output
