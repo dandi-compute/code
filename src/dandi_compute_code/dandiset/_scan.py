@@ -53,12 +53,10 @@ def _lookup_asset_size_bytes(
         asset_path += f"ses-{session}/"
     asset_path += content_id
 
-    matching_assets = iter(dandiset.get_assets_with_path_prefix(path=asset_path))
-    asset = next(matching_assets, None)
-    if asset is None:
+    matching_assets = list(dandiset.get_assets_with_path_prefix(path=asset_path))
+    if len(matching_assets) != 1:
         return None
-    if next(matching_assets, None) is not None:
-        return None
+    asset = matching_assets[0]
 
     metadata = asset.get_raw_metadata()
     content_urls = metadata.get("contentUrl", [])
