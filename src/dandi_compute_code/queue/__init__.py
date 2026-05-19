@@ -4,7 +4,7 @@ from ._process_queue import (
     prepare_queue,
     prepare_test_queue,
     process_queue,
-    refresh_waiting_queue,
+    refresh_queue,
 )
 
 __all__ = [
@@ -13,5 +13,5 @@ __all__ = [
     "prepare_queue",
     "prepare_test_queue",
     "process_queue",
-    "refresh_waiting_queue",
+    "refresh_queue",
 ]

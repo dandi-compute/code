@@ -8,9 +8,8 @@ from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
 from .dandiset import (
     delete_dandiset_version,
     scan_version_directories,
-    write_state_and_waiting_jsonl,
 )
-from .queue import clean_unsubmitted_capsules, prepare_queue, prepare_test_queue, process_queue, refresh_waiting_queue
+from .queue import clean_unsubmitted_capsules, prepare_queue, prepare_test_queue, process_queue, refresh_queue
 
 
 # dandicompute
@@ -221,35 +220,19 @@ def _queue_group() -> None:
 @click.option(
     "--dandiset-directory",
     "dandiset_directory",
-    help="Path to a local dandiset clone. When provided, state.jsonl is updated before regenerating waiting.jsonl.",
-    required=False,
+    help="Path to a local dandiset clone used to rescan and regenerate state.jsonl before waiting.jsonl.",
+    required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
-)
-@click.option(
-    "--limit",
-    "limit",
-    help="Truncate waiting.jsonl to the first N entries. Useful for testing.",
-    required=False,
-    type=click.IntRange(min=1),
-    default=None,
 )
 def _queue_refresh_command(
     queue_directory: pathlib.Path,
-    dandiset_directory: pathlib.Path | None = None,
-    limit: int | None = None,
+    dandiset_directory: pathlib.Path,
 ) -> None:
-    """Regenerate waiting.jsonl from state.jsonl, optionally scanning a dandiset directory first."""
-    if dandiset_directory is not None:
-        if not (queue_directory / "queue_config.json").exists():
-            raise click.ClickException(f"'queue_config.json' not found in '{queue_directory}'.")
-        write_state_and_waiting_jsonl(
-            dandiset_directory=dandiset_directory,
-            queue_directory=queue_directory,
-            limit=limit,
-        )
-    else:
-        refresh_waiting_queue(queue_directory=queue_directory, limit=limit)
+    """Rescan the dandiset directory and regenerate waiting.jsonl."""
+    try:
+        refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
+    except FileNotFoundError as error:
+        raise click.ClickException(str(error)) from error
 
 
 # dandicompute queue clean [OPTIONS]

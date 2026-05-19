@@ -1,5 +1,5 @@
 """
-Unit tests for scan_dandiset_directory and writing state and waiting queue files.
+Unit tests for scan_dandiset_directory and writing state/waiting files via refresh_queue.
 (dandi_compute_code.dandiset).
 """
 
@@ -10,7 +10,8 @@ import pytest
 from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
-from dandi_compute_code.dandiset import scan_dandiset_directory, write_state_and_waiting_jsonl
+from dandi_compute_code.dandiset import scan_dandiset_directory
+from dandi_compute_code.queue import refresh_queue
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -301,13 +302,13 @@ def test_scan_supports_legacy_version_subdirectory_layout(tmp_path: pathlib.Path
 
 
 # ---------------------------------------------------------------------------
-# Tests for write_state_and_waiting_jsonl
+# Tests for refresh_queue with dandiset_directory
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.ai_generated
-def test_write_state_and_waiting_jsonl_creates_valid_files(tmp_path: pathlib.Path) -> None:
-    """write_state_and_waiting_jsonl writes state.jsonl and waiting.jsonl."""
+def test_refresh_queue_with_dandiset_directory_creates_valid_files(tmp_path: pathlib.Path) -> None:
+    """refresh_queue writes state.jsonl and waiting.jsonl when scanning dandiset_directory."""
     _make_attempt_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1)
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
@@ -323,7 +324,7 @@ def test_write_state_and_waiting_jsonl_creates_valid_files(tmp_path: pathlib.Pat
             }
         )
     )
-    write_state_and_waiting_jsonl(dandiset_directory=tmp_path, queue_directory=queue_dir)
+    refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
     state_file = queue_dir / "state.jsonl"
     waiting_file = queue_dir / "waiting.jsonl"
     assert state_file.exists()
@@ -335,12 +336,12 @@ def test_write_state_and_waiting_jsonl_creates_valid_files(tmp_path: pathlib.Pat
 
 
 @pytest.mark.ai_generated
-def test_write_state_and_waiting_jsonl_empty_when_no_attempts(tmp_path: pathlib.Path) -> None:
-    """write_state_and_waiting_jsonl writes empty state and waiting files with no attempts."""
+def test_refresh_queue_with_dandiset_directory_empty_when_no_attempts(tmp_path: pathlib.Path) -> None:
+    """refresh_queue writes empty state and waiting files with no attempts."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
-    write_state_and_waiting_jsonl(dandiset_directory=tmp_path, queue_directory=queue_dir)
+    refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
     state_file = queue_dir / "state.jsonl"
     waiting_file = queue_dir / "waiting.jsonl"
     assert state_file.exists()
@@ -350,7 +351,7 @@ def test_write_state_and_waiting_jsonl_empty_when_no_attempts(tmp_path: pathlib.
 
 
 @pytest.mark.ai_generated
-def test_write_state_and_waiting_jsonl_includes_only_pending_in_waiting(tmp_path: pathlib.Path) -> None:
+def test_refresh_queue_with_dandiset_directory_includes_only_pending_in_waiting(tmp_path: pathlib.Path) -> None:
     """waiting.jsonl contains only pending entries from the newly written state."""
     _make_attempt_dir(tmp_path, "000001", "mouse01", "test-pipeline", "v1.0", "abc1234", "def5678", 1, with_code=True)
     _make_attempt_dir(
@@ -381,7 +382,7 @@ def test_write_state_and_waiting_jsonl_includes_only_pending_in_waiting(tmp_path
         )
     )
 
-    write_state_and_waiting_jsonl(dandiset_directory=tmp_path, queue_directory=queue_dir)
+    refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     waiting_file = queue_dir / "waiting.jsonl"
     assert waiting_file.exists()
@@ -392,10 +393,10 @@ def test_write_state_and_waiting_jsonl_includes_only_pending_in_waiting(tmp_path
 
 
 @pytest.mark.ai_generated
-def test_write_state_and_waiting_jsonl_prunes_last_submitted_entries_with_output_or_logs(
+def test_refresh_queue_with_dandiset_directory_prunes_last_submitted_entries_with_output_or_logs(
     tmp_path: pathlib.Path,
 ) -> None:
-    """write_state_and_waiting_jsonl removes entries from last_submitted.jsonl when logs/output are present."""
+    """refresh_queue removes entries from last_submitted.jsonl when logs/output are present."""
     _make_attempt_dir(tmp_path, "000001", "mouse01", "test-pipeline", "v1.0", "abc1234", "def5678", 1, with_code=True)
     _make_attempt_dir(
         tmp_path,
@@ -480,7 +481,7 @@ def test_write_state_and_waiting_jsonl_prunes_last_submitted_entries_with_output
         + "\n"
     )
 
-    write_state_and_waiting_jsonl(dandiset_directory=tmp_path, queue_directory=queue_dir)
+    refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     remaining = [
         json.loads(line) for line in (queue_dir / "last_submitted.jsonl").read_text().splitlines() if line.strip()
@@ -527,8 +528,8 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
 
 
 @pytest.mark.ai_generated
-def test_cli_queue_refresh_without_dandiset_directory(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh without --dandiset-directory regenerates waiting.jsonl from existing state.jsonl."""
+def test_cli_queue_refresh_requires_dandiset_directory(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue refresh requires --dandiset-directory."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     entry = {
@@ -564,7 +565,8 @@ def test_cli_queue_refresh_without_dandiset_directory(tmp_path: pathlib.Path) ->
         _dandicompute_group,
         ["queue", "refresh", "--queue-directory", str(queue_dir)],
     )
-    assert result.exit_code == 0, result.output
+    assert result.exit_code != 0
+    assert "Missing option '--dandiset-directory'" in result.output
 
 
 @pytest.mark.ai_generated

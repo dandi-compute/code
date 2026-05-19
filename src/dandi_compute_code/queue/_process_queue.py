@@ -7,7 +7,8 @@ import shutil
 import subprocess
 import urllib.request
 
-from dandi_compute_code.aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
+from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
+from ..dandiset import scan_dandiset_directory
 
 _AIND_EPHYS_PARAMS_REGISTRY_PATH = (
     pathlib.Path(__file__).parent.parent / "aind_ephys_pipeline" / "registries" / "registered_params.json"
@@ -410,15 +411,15 @@ def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.P
     Submit the next pending entry from ``waiting.jsonl``.
 
     Reads ``waiting.jsonl`` from the queue directory — this file is written by
-    :func:`refresh_waiting_queue` and contains the priority-ordered list of pending
+    :func:`refresh_queue` and contains the priority-ordered list of pending
     entries produced by :func:`order_queue`.  If the file is absent
-    or empty, :func:`refresh_waiting_queue` is called once to attempt to repopulate it
+    or empty, :func:`refresh_queue` is called once to attempt to repopulate it
     from ``state.jsonl``.  If still empty after that, returns ``False``.
 
     The first entry from ``waiting.jsonl`` is submitted and then removed from
     ``waiting.jsonl``; the entry is simultaneously appended to
     ``last_submitted.jsonl``. The waiting queue is produced upstream by
-    :func:`refresh_waiting_queue`; this function applies no additional
+    :func:`refresh_queue`; this function applies no additional
     submission gating beyond requiring the submit script to exist.
 
     Parameters
@@ -445,9 +446,8 @@ def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.P
     waiting_entries = _read_waiting()
 
     if not waiting_entries:
-        # Attempt to repopulate from state.jsonl before giving up.
-        # Use a small limit to avoid building a runaway queue.
-        refresh_waiting_queue(queue_directory=queue_directory, limit=3)
+        # Attempt to repopulate from dandiset scan before giving up.
+        refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
         waiting_entries = _read_waiting()
 
     if not waiting_entries:
@@ -504,40 +504,42 @@ def order_queue(*, state_entries: list[dict], queue_config: dict, limit: int | N
     return ordered
 
 
-def refresh_waiting_queue(*, queue_directory: pathlib.Path, limit: int | None = None) -> None:
+def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
     """
-    Build and write ``waiting.jsonl`` from ``state.jsonl`` in the queue directory.
+    Scan *dandiset_directory*, regenerate ``state.jsonl``, and write ``waiting.jsonl``.
 
-    Reads ``state.jsonl`` (produced by ``dandicompute dandiset scan``) to find
-    entries that are prepared (``has_code=True``) but not yet run
-    (``has_logs=False``, ``has_output=False``).  The entries are ordered
-    via :func:`order_queue` and written to ``waiting.jsonl`` so
-    that subsequent calls to :func:`process_queue` can read them directly.
+    Entries that are prepared (``has_code=True``) but not yet run
+    (``has_logs=False``, ``has_output=False``) are ordered via
+    :func:`order_queue` and written to ``waiting.jsonl`` so that subsequent
+    calls to :func:`process_queue` can read them directly.
 
     Parameters
     ----------
     queue_directory : pathlib.Path
         Path to the queue root directory.
-    limit : int, optional
-        If provided, truncate ``waiting.jsonl`` to the first *limit* entries.
-        Useful for testing without submitting the full queue.
+    dandiset_directory : pathlib.Path
+        Path to a local dandiset clone used to rewrite ``state.jsonl``
+        before ``waiting.jsonl`` is regenerated.
 
     Raises
     ------
     FileNotFoundError
-        If ``state.jsonl`` is not found in *queue_directory*.
+        If ``queue_config.json`` is not found in *queue_directory*.
     """
-    state_file = queue_directory / "state.jsonl"
-    if not state_file.exists():
-        message = (
-            f"'state.jsonl' not found in '{queue_directory}'. "
-            "Generate it with: dandicompute queue refresh --dandiset-directory <dandiset_dir>"
-        )
+    queue_config_file = queue_directory / "queue_config.json"
+    if not queue_config_file.exists():
+        message = f"'queue_config.json' not found in '{queue_directory}'."
         raise FileNotFoundError(message)
 
+    state_file = queue_directory / "state.jsonl"
+    records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
+    with state_file.open(mode="w") as file_stream:
+        for record in records:
+            file_stream.write(json.dumps(record) + "\n")
+
     state_entries = [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
-    queue_config = json.loads((queue_directory / "queue_config.json").read_text())
-    ordered = order_queue(state_entries=state_entries, queue_config=queue_config, limit=limit)
+    queue_config = json.loads(queue_config_file.read_text())
+    ordered = order_queue(state_entries=state_entries, queue_config=queue_config)
     waiting_file = queue_directory / "waiting.jsonl"
     waiting_file.write_text("".join(json.dumps(e) + "\n" for e in ordered))
     _prune_last_submitted(queue_directory=queue_directory, state_entries=state_entries)
@@ -547,7 +549,7 @@ def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
     """
     Submit up to two jobs from the priority-ordered ``waiting.jsonl``.
 
-    If ``waiting.jsonl`` is absent or empty, :func:`refresh_waiting_queue` is called
+    If ``waiting.jsonl`` is absent or empty, :func:`refresh_queue` is called
     first to populate it from ``state.jsonl``.  Then, if no AIND jobs are
     currently running via SLURM, up to two valid entries are submitted.
 
@@ -563,12 +565,12 @@ def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
     Raises
     ------
     FileNotFoundError
-        If ``waiting.jsonl`` is absent or empty and ``state.jsonl`` is not
-        found in *queue_directory* (raised by :func:`refresh_waiting_queue`).
+        If ``queue_config.json`` is not found in *queue_directory* (raised by
+        :func:`refresh_queue`).
     """
     waiting_file = queue_directory / "waiting.jsonl"
     if not waiting_file.exists() or not waiting_file.read_text().strip():
-        refresh_waiting_queue(queue_directory=queue_directory)
+        refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
 
     any_running = _determine_running()
     if not any_running:

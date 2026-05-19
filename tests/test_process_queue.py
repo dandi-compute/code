@@ -30,7 +30,7 @@ from dandi_compute_code.queue._process_queue import (
     prepare_queue,
     prepare_test_queue,
     process_queue,
-    refresh_waiting_queue,
+    refresh_queue,
 )
 
 # ---------------------------------------------------------------------------
@@ -457,11 +457,11 @@ def test_submit_next_returns_false_when_no_waiting_file(tmp_path: pathlib.Path) 
     """_submit_next returns False when waiting.jsonl is absent and refresh finds nothing."""
     queue_dir = _make_queue_dir(tmp_path)
 
-    # refresh_waiting_queue is called to try to fill waiting.jsonl, but produces nothing
-    with mock.patch("dandi_compute_code.queue._process_queue.refresh_waiting_queue") as mock_refresh:
+    # refresh_queue is called to try to fill waiting.jsonl, but produces nothing
+    with mock.patch("dandi_compute_code.queue._process_queue.refresh_queue") as mock_refresh:
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
-    mock_refresh.assert_called_once_with(queue_directory=queue_dir, limit=3)
+    mock_refresh.assert_called_once_with(queue_directory=queue_dir, dandiset_directory=tmp_path)
     assert result is False
 
 
@@ -473,10 +473,10 @@ def test_submit_next_returns_false_when_no_pending_entries(tmp_path: pathlib.Pat
     # Empty waiting.jsonl → triggers refresh retry, which also produces nothing
     (queue_dir / "waiting.jsonl").write_text("")
 
-    with mock.patch("dandi_compute_code.queue._process_queue.refresh_waiting_queue") as mock_refresh:
+    with mock.patch("dandi_compute_code.queue._process_queue.refresh_queue") as mock_refresh:
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
-    mock_refresh.assert_called_once_with(queue_directory=queue_dir, limit=3)
+    mock_refresh.assert_called_once_with(queue_directory=queue_dir, dandiset_directory=tmp_path)
     assert result is False
 
 
@@ -510,20 +510,20 @@ def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: 
         attempt=1,
     )
 
-    def _fill_waiting(*, queue_directory: pathlib.Path, limit: int | None = None) -> None:
-        # Simulate refresh_waiting_queue populating waiting.jsonl
+    def _fill_waiting(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
+        # Simulate refresh_queue populating waiting.jsonl
         _write_jsonl(queue_directory / "waiting.jsonl", [entry])
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._process_queue.refresh_waiting_queue",
+            "dandi_compute_code.queue._process_queue.refresh_queue",
             side_effect=_fill_waiting,
         ) as mock_refresh,
         mock.patch("dandi_compute_code.queue._process_queue.submit_job"),
     ):
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
-    mock_refresh.assert_called_once_with(queue_directory=queue_dir, limit=3)
+    mock_refresh.assert_called_once_with(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
     assert result is True
 
 
@@ -738,14 +738,21 @@ def test_submit_next_logs_explicit_run_capsule_directory(
 
 
 @pytest.mark.ai_generated
-def test_process_queue_raises_when_state_file_missing(tmp_path: pathlib.Path) -> None:
-    """process_queue raises FileNotFoundError for state.jsonl when waiting.jsonl is absent."""
+def test_process_queue_handles_empty_scan_when_waiting_file_missing(tmp_path: pathlib.Path) -> None:
+    """process_queue handles an empty dandiset scan when waiting.jsonl is absent."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
 
-    with pytest.raises(FileNotFoundError, match="state.jsonl"):
+    with (
+        mock.patch("dandi_compute_code.queue._process_queue.scan_dandiset_directory", return_value=[]) as mock_scan,
+        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
+    ):
         process_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
+
+    mock_scan.assert_called_once_with(dandiset_directory=tmp_path)
+    assert (queue_dir / "state.jsonl").read_text() == ""
+    assert (queue_dir / "waiting.jsonl").read_text() == ""
 
 
 @pytest.mark.ai_generated
@@ -756,12 +763,12 @@ def test_process_queue_calls_order_queue_when_waiting_empty(tmp_path: pathlib.Pa
     dandiset_dir.mkdir()
 
     with (
-        mock.patch("dandi_compute_code.queue._process_queue.refresh_waiting_queue") as mock_refresh,
+        mock.patch("dandi_compute_code.queue._process_queue.refresh_queue") as mock_refresh,
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
-    mock_refresh.assert_called_once_with(queue_directory=queue_dir)
+    mock_refresh.assert_called_once_with(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
 
 @pytest.mark.ai_generated
@@ -774,7 +781,7 @@ def test_process_queue_skips_order_queue_when_waiting_non_empty(tmp_path: pathli
     dandiset_dir.mkdir()
 
     with (
-        mock.patch("dandi_compute_code.queue._process_queue.refresh_waiting_queue") as mock_refresh,
+        mock.patch("dandi_compute_code.queue._process_queue.refresh_queue") as mock_refresh,
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
@@ -855,24 +862,35 @@ def test_process_queue_stops_submitting_when_queue_exhausted(tmp_path: pathlib.P
 
 
 # ---------------------------------------------------------------------------
-# Tests for order_queue and refresh_waiting_queue
+# Tests for order_queue and refresh_queue
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.ai_generated
-def test_order_queue_raises_when_state_file_missing(tmp_path: pathlib.Path) -> None:
-    """refresh_waiting_queue raises FileNotFoundError when state.jsonl is absent."""
+def test_order_queue_raises_when_queue_config_missing(tmp_path: pathlib.Path) -> None:
+    """refresh_queue raises FileNotFoundError when queue_config.json is absent."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
 
-    with pytest.raises(FileNotFoundError, match="state.jsonl"):
-        refresh_waiting_queue(queue_directory=queue_dir)
+    with pytest.raises(FileNotFoundError, match="queue_config.json"):
+        refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
+
+
+@pytest.mark.ai_generated
+def test_refresh_queue_writes_empty_files_for_missing_dandiset_directory(tmp_path: pathlib.Path) -> None:
+    """refresh_queue writes empty state and waiting files when dandiset directory does not exist."""
+    queue_dir = _make_queue_dir(tmp_path)
+    missing_dandiset_dir = tmp_path / "missing_dandiset"
+
+    refresh_queue(queue_directory=queue_dir, dandiset_directory=missing_dandiset_dir)
+
+    assert (queue_dir / "state.jsonl").read_text() == ""
+    assert (queue_dir / "waiting.jsonl").read_text() == ""
 
 
 @pytest.mark.ai_generated
 def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.Path) -> None:
-    """refresh_waiting_queue writes waiting.jsonl containing only pending entries."""
+    """refresh_queue writes waiting.jsonl containing only pending entries."""
     queue_dir = _make_queue_dir(tmp_path)
 
     entries = [
@@ -880,9 +898,8 @@ def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.P
         # Already has output – should NOT appear in waiting.jsonl
         _make_state_entry(dandiset_id="000002", has_code=True, has_output=True, has_logs=False),
     ]
-    _write_jsonl(queue_dir / "state.jsonl", entries)
-
-    refresh_waiting_queue(queue_directory=queue_dir)
+    with mock.patch("dandi_compute_code.queue._process_queue.scan_dandiset_directory", return_value=entries):
+        refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     waiting_file = queue_dir / "waiting.jsonl"
     assert waiting_file.exists()
@@ -892,34 +909,35 @@ def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.P
 
 
 @pytest.mark.ai_generated
-def test_order_queue_limit_truncates_waiting_jsonl(tmp_path: pathlib.Path) -> None:
-    """refresh_waiting_queue respects the limit parameter and truncates waiting.jsonl."""
+def test_refresh_queue_writes_all_ordered_pending_entries(tmp_path: pathlib.Path) -> None:
+    """refresh_queue writes all ordered pending entries without truncation."""
     queue_dir = _make_queue_dir(tmp_path)
 
     entries = [
         _make_state_entry(dandiset_id=f"00000{i}", has_code=True, has_output=False, has_logs=False) for i in range(1, 6)
     ]
-    _write_jsonl(queue_dir / "state.jsonl", entries)
-
-    refresh_waiting_queue(queue_directory=queue_dir, limit=2)
+    with mock.patch("dandi_compute_code.queue._process_queue.scan_dandiset_directory", return_value=entries):
+        refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     waiting_entries = _read_jsonl(queue_dir / "waiting.jsonl")
-    assert len(waiting_entries) == 2
+    assert len(waiting_entries) == 5
 
 
 @pytest.mark.ai_generated
-def test_refresh_waiting_queue_prunes_last_submitted_entries_with_output_or_logs(tmp_path: pathlib.Path) -> None:
-    """refresh_waiting_queue removes finished/running entries from last_submitted.jsonl."""
+def test_refresh_queue_prunes_last_submitted_entries_with_output_or_logs(tmp_path: pathlib.Path) -> None:
+    """refresh_queue removes finished/running entries from last_submitted.jsonl."""
     queue_dir = _make_queue_dir(tmp_path)
 
     pending_entry = _make_state_entry(dandiset_id="000001", has_code=True, has_output=False, has_logs=False)
     with_output_entry = _make_state_entry(dandiset_id="000002", has_code=True, has_output=True, has_logs=False)
     with_logs_entry = _make_state_entry(dandiset_id="000003", has_code=True, has_output=False, has_logs=True)
-    _write_jsonl(queue_dir / "state.jsonl", [pending_entry, with_output_entry, with_logs_entry])
-
     _write_jsonl(queue_dir / "last_submitted.jsonl", [pending_entry, with_output_entry, with_logs_entry])
 
-    refresh_waiting_queue(queue_directory=queue_dir)
+    with mock.patch(
+        "dandi_compute_code.queue._process_queue.scan_dandiset_directory",
+        return_value=[pending_entry, with_output_entry, with_logs_entry],
+    ):
+        refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     last_submitted_entries = _read_jsonl(queue_dir / "last_submitted.jsonl")
     assert len(last_submitted_entries) == 1
