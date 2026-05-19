@@ -103,6 +103,42 @@ def _lookup_asset_size_bytes(
     return None
 
 
+def _lookup_job_completion_time(
+    *,
+    api_token: str,
+    dandiset_id: str,
+    log_asset_path: str,
+) -> str | None:
+    """Look up the ``dateModified`` field for a log asset in the DANDI API."""
+    client = dandi.dandiapi.DandiAPIClient(token=api_token)
+    dandiset = client.get_dandiset(dandiset_id=dandiset_id)
+
+    matching_assets = list(dandiset.get_assets_with_path_prefix(path=log_asset_path))
+    if len(matching_assets) != 1:
+        warnings.warn(
+            (
+                f"Unable to resolve job_completion_time for log asset at {log_asset_path}. "
+                f"Expected exactly 1 asset but found {len(matching_assets)}."
+            ),
+            stacklevel=2,
+        )
+        return None
+
+    asset = matching_assets[0]
+    metadata = asset.get_raw_metadata()
+    date_modified = metadata.get("dateModified")
+    if isinstance(date_modified, str):
+        return date_modified
+    warnings.warn(
+        (
+            f"Unable to resolve job_completion_time for log asset at {log_asset_path}. "
+            f"Invalid or missing dateModified value {date_modified!r}."
+        ),
+        stacklevel=2,
+    )
+    return None
+
+
 def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     """
     Parse a single attempt directory into a flat record dict.
@@ -228,11 +264,13 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         * ``params``      – params portion of the attempt directory name
         * ``config``      – config portion of the attempt directory name
         * ``attempt``     – integer attempt number
-        * ``has_code``    – ``True`` if a ``code/`` subdirectory is present
-        * ``has_output``  – ``True`` if a ``derivatives/`` subdirectory is present
-        * ``has_logs``    – ``True`` if a ``logs/`` subdirectory is present and non-empty
-        * ``created_at``  – ISO 8601 UTC timestamp derived from the attempt directory's ``st_ctime``
+        * ``has_code``           – ``True`` if a ``code/`` subdirectory is present
+        * ``has_output``         – ``True`` if a ``derivatives/`` subdirectory is present
+        * ``has_logs``           – ``True`` if a ``logs/`` subdirectory is present and non-empty
+        * ``created_at``         – ISO 8601 UTC timestamp derived from the attempt directory's ``st_ctime``
           stat (last metadata-change time on Unix/Linux; creation time on Windows/macOS)
+        * ``job_completion_time`` – ``dateModified`` ISO 8601 string from DANDI metadata for the first
+          asset in the ``logs/`` subdirectory; ``null`` when no logs are present or the lookup fails
 
     Raises
     ------
@@ -277,6 +315,25 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
                         content_id=record["content_id"],
                     )
                 record["asset_size_bytes"] = size_lookup_cache[size_lookup_key]
+
+                if record["has_logs"]:
+                    logs_dir = attempt_dir / "logs"
+                    first_log_file = next(
+                        (f for f in sorted(logs_dir.iterdir()) if f.name != "dataset_description.json"),
+                        None,
+                    )
+                    if first_log_file is not None:
+                        log_asset_path = first_log_file.relative_to(dandiset_directory).as_posix()
+                        record["job_completion_time"] = _lookup_job_completion_time(
+                            api_token=api_token,
+                            dandiset_id=record["dandiset_id"],
+                            log_asset_path=log_asset_path,
+                        )
+                    else:
+                        record["job_completion_time"] = None
+                else:
+                    record["job_completion_time"] = None
+
                 records.append(record)
 
     records.sort(
