@@ -1,6 +1,10 @@
 import datetime
+import os
 import pathlib
 import re
+
+import dandi.dandiapi
+import requests
 
 _ATTEMPT_DIR_RE = re.compile(
     r"(?:version-(?P<version_in_name>.+?)_)?params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)"
@@ -8,15 +12,13 @@ _ATTEMPT_DIR_RE = re.compile(
 _ATTEMPT_SUFFIX_RE = re.compile(r"_attempt-\d+$")
 
 
-def _parse_content_metadata_from_submission_script(attempt_dir: pathlib.Path) -> tuple[str, int | None]:
-    """Read ``content_id`` and optional ``asset_size_bytes`` from ``code/submit.sh``."""
+def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str:
+    """Read a content ID from ``code/submit.sh``."""
     script_file = attempt_dir / "code" / "submit.sh"
     if not script_file.is_file():
         raise ValueError(f"Unable to determine content_id for {attempt_dir}: missing {script_file}")
 
     script_text = script_file.read_text()
-    content_id: str | None = None
-    asset_size_bytes: int | None = None
 
     for line in script_text.splitlines():
         if line.startswith("NWB_FILE_PATH="):
@@ -27,26 +29,65 @@ def _parse_content_metadata_from_submission_script(attempt_dir: pathlib.Path) ->
                     "Unable to determine content_id for "
                     f"{attempt_dir}: empty content_id from NWB_FILE_PATH in {script_file}"
                 )
+            return content_id
+    raise ValueError(
+        f"Unable to determine content_id for {attempt_dir}: missing/invalid NWB_FILE_PATH in {script_file}"
+    )
 
-        if line.startswith("ASSET_SIZE_BYTES="):
-            parsed_size = line.split("=", maxsplit=1)[1].strip().strip('"').strip("'")
-            try:
-                asset_size_bytes = int(parsed_size)
-            except ValueError as exc:
-                raise ValueError(
-                    f"Unable to determine asset_size_bytes for {attempt_dir}: invalid ASSET_SIZE_BYTES in {script_file}"
-                ) from exc
-            if asset_size_bytes < 0:
-                raise ValueError(
-                    "Unable to determine asset_size_bytes for "
-                    f"{attempt_dir}: ASSET_SIZE_BYTES must be non-negative in {script_file}"
-                )
 
-    if content_id is None:
-        raise ValueError(
-            f"Unable to determine content_id for {attempt_dir}: missing/invalid NWB_FILE_PATH in {script_file}"
-        )
-    return content_id, asset_size_bytes
+def _lookup_asset_size_bytes(
+    *,
+    dandiset_id: str,
+    subject: str,
+    session: str | None,
+    content_id: str,
+) -> int | None:
+    """Lookup asset size from DANDI API and confirm by matching blob ID to ``content_id``."""
+    api_token = os.environ.get("DANDI_API_KEY", "").strip()
+    if not api_token:
+        return None
+    if api_token.startswith(("test-", "mock-")):
+        return None
+
+    try:
+        client = dandi.dandiapi.DandiAPIClient(token=api_token)
+        dandiset = client.get_dandiset(dandiset_id=dandiset_id)
+        path_prefix = f"sub-{subject}/"
+        if session is not None:
+            path_prefix += f"ses-{session}/"
+
+        for asset in dandiset.get_assets_with_path_prefix(path=path_prefix):
+            metadata = asset.get_raw_metadata()
+            content_urls = metadata.get("contentUrl", [])
+            if not isinstance(content_urls, list):
+                continue
+
+            blob_id = None
+            for content_url in content_urls:
+                if isinstance(content_url, str) and "/blobs/" in content_url:
+                    blob_id = pathlib.PurePosixPath(content_url).name
+                    break
+
+            if blob_id != content_id:
+                continue
+
+            content_size = metadata.get("contentSize")
+            if isinstance(content_size, int):
+                return content_size
+            if isinstance(content_size, str) and content_size.isdigit():
+                return int(content_size)
+            break
+    except (
+        requests.exceptions.RequestException,
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+    ):
+        return None
+
+    return None
 
 
 def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
@@ -120,12 +161,11 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     logs_dir = attempt_dir / "logs"
     has_logs = logs_dir.is_dir() and any(f for f in logs_dir.iterdir() if f.name != "dataset_description.json")
     created_at = datetime.datetime.fromtimestamp(attempt_dir.stat().st_ctime, tz=datetime.timezone.utc).isoformat()
-    content_id, asset_size_bytes = _parse_content_metadata_from_submission_script(attempt_dir)
+    content_id = _parse_content_id_from_submission_script(attempt_dir)
 
     record = {
         "dandiset_id": dandiset_id,
         "content_id": content_id,
-        "asset_size_bytes": asset_size_bytes,
         "subject": subject,
         "session": session,
         "pipeline": pipeline,
@@ -166,7 +206,8 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
 
         * ``dandiset_id`` – value of the ``dandiset-`` BIDS entity
         * ``content_id``  – input content identifier parsed from ``code/submit.sh``
-        * ``asset_size_bytes`` – source asset size in bytes parsed from ``ASSET_SIZE_BYTES`` in ``code/submit.sh``
+        * ``asset_size_bytes`` – source asset size in bytes from DANDI API lookup;
+          ``null`` when lookup is unavailable, no match is found, or size is missing
         * ``subject``     – value of the ``sub-`` BIDS entity
         * ``session``     – value of the ``ses-`` BIDS entity, or ``null``
         * ``pipeline``    – value of the ``pipeline-`` BIDS entity
@@ -186,6 +227,7 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
 
     attempt_re = _ATTEMPT_SUFFIX_RE
     records: list[dict] = []
+    size_lookup_cache: dict[tuple[str, str, str | None, str], int | None] = {}
 
     for dandiset_path in sorted(derivatives.iterdir()):
         if not dandiset_path.is_dir() or not dandiset_path.name.startswith("dandiset-"):
@@ -197,6 +239,20 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
                 continue
             record = _parse_attempt_dir(attempt_dir)
             if record is not None:
+                size_lookup_key = (
+                    record["dandiset_id"],
+                    record["subject"],
+                    record["session"],
+                    record["content_id"],
+                )
+                if size_lookup_key not in size_lookup_cache:
+                    size_lookup_cache[size_lookup_key] = _lookup_asset_size_bytes(
+                        dandiset_id=record["dandiset_id"],
+                        subject=record["subject"],
+                        session=record["session"],
+                        content_id=record["content_id"],
+                    )
+                record["asset_size_bytes"] = size_lookup_cache[size_lookup_key]
                 records.append(record)
 
     records.sort(

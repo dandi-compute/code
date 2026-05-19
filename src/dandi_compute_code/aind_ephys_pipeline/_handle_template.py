@@ -11,7 +11,6 @@ def generate_aind_ephys_submission_script(
     script_file_path: pathlib.Path,
     log_directory: str,
     nwb_file_path: str,
-    asset_size_bytes: int | None,
     results_directory: str,
     work_directory: str,
     apptainer_cache_directory: str,
@@ -37,8 +36,6 @@ def generate_aind_ephys_submission_script(
         The log directory.
     nwb_file_path : str
         The input NWB file path.
-    asset_size_bytes : int or None
-        Optional source asset size in bytes.
     results_directory : str
         The results directory.
     work_directory : str
@@ -67,7 +64,6 @@ def generate_aind_ephys_submission_script(
     script = template.render(
         log_directory=log_directory,
         nwb_file_path=nwb_file_path,
-        asset_size_bytes=asset_size_bytes,
         data_path=str(pathlib.Path(nwb_file_path).parent),
         results_directory=results_directory,
         work_directory=work_directory,

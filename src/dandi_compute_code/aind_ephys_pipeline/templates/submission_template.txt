@@ -7,9 +7,6 @@
 #SBATCH --time=12:00:00
 
 NWB_FILE_PATH="{{ nwb_file_path }}"
-{% if asset_size_bytes is not none %}
-ASSET_SIZE_BYTES="{{ asset_size_bytes }}"
-{% endif %}
 DATA_PATH="{{ data_path }}"
 
 RESULTS_PATH="{{ results_directory }}"
