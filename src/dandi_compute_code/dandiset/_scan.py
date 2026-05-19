@@ -23,7 +23,6 @@ def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str:
         content_id = pathlib.PurePosixPath(nwb_file_path).name
         if content_id:
             return content_id
-        break
     raise ValueError(
         f"Unable to determine content_id for {attempt_dir}: missing/invalid NWB_FILE_PATH in {script_file}"
     )

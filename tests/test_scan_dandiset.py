@@ -13,7 +13,7 @@ from dandi_compute_code._cli import _dandicompute_group
 from dandi_compute_code.dandiset import scan_dandiset_directory
 from dandi_compute_code.queue import refresh_queue
 
-_DEFAULT_CONTENT_ID = "00000000-0000-0000-0000-000000000000"
+DEFAULT_TEST_CONTENT_ID = "00000000-0000-0000-0000-000000000000"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -56,13 +56,13 @@ def _make_attempt_dir(
     attempt_dir.mkdir(parents=True)
     if with_code:
         (attempt_dir / "code").mkdir()
-        resolved_content_id = content_id if content_id is not None else _DEFAULT_CONTENT_ID
-        blob_prefix = resolved_content_id[:3]
-        blob_subprefix = resolved_content_id[3:6]
+        content_id_value = content_id if content_id is not None else DEFAULT_TEST_CONTENT_ID
+        blob_prefix = content_id_value[:3]
+        blob_subprefix = content_id_value[3:6]
         (attempt_dir / "code" / "submit.sh").write_text(
             (
                 "#!/bin/bash\n"
-                f'NWB_FILE_PATH="/orcd/data/dandi/001/s3dandiarchive/blobs/{blob_prefix}/{blob_subprefix}/{resolved_content_id}"\n'
+                f'NWB_FILE_PATH="/orcd/data/dandi/001/s3dandiarchive/blobs/{blob_prefix}/{blob_subprefix}/{content_id_value}"\n'
             )
         )
     if with_output:
@@ -106,7 +106,7 @@ def test_scan_single_failed_attempt(tmp_path: pathlib.Path) -> None:
     assert len(records) == 1
     r = records[0]
     assert r["dandiset_id"] == "000001"
-    assert r["content_id"] == _DEFAULT_CONTENT_ID
+    assert r["content_id"] == DEFAULT_TEST_CONTENT_ID
     assert r["subject"] == "mouse01"
     assert r["session"] is None
     assert r["pipeline"] == "aind+ephys"
@@ -307,7 +307,7 @@ def test_scan_supports_legacy_version_subdirectory_layout(tmp_path: pathlib.Path
     legacy_attempt_dir.mkdir(parents=True)
     (legacy_attempt_dir / "code").mkdir()
     (legacy_attempt_dir / "code" / "submit.sh").write_text(
-        f'#!/bin/bash\nNWB_FILE_PATH="/orcd/data/dandi/001/s3dandiarchive/blobs/000/000/{_DEFAULT_CONTENT_ID}"\n'
+        f'#!/bin/bash\nNWB_FILE_PATH="/orcd/data/dandi/001/s3dandiarchive/blobs/000/000/{DEFAULT_TEST_CONTENT_ID}"\n'
     )
 
     records = scan_dandiset_directory(dandiset_directory=tmp_path)
