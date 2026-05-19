@@ -14,10 +14,7 @@ def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str |
     if not script_file.is_file():
         return None
 
-    try:
-        script_text = script_file.read_text()
-    except OSError:
-        return None
+    script_text = script_file.read_text()
 
     for line in script_text.splitlines():
         if not line.startswith("NWB_FILE_PATH="):
