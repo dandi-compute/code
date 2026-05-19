@@ -5,6 +5,9 @@ Unit tests for scan_dandiset_directory and writing state/waiting files via refre
 
 import json
 import pathlib
+from collections.abc import Iterator
+from typing import Any
+from unittest import mock
 
 import pytest
 from click.testing import CliRunner
@@ -80,11 +83,39 @@ def _make_attempt_dir(
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def mock_dandi_api_asset_lookup() -> Iterator[None]:
+    """Prevent network calls during tests by defaulting DANDI lookup to no matches."""
+
+    class _EmptyDandiset:
+        def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
+            return iter(())
+
+    class _EmptyClient:
+        def get_dandiset(self, dandiset_id: str) -> _EmptyDandiset:
+            assert isinstance(dandiset_id, str) and dandiset_id
+            return _EmptyDandiset()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
+        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_EmptyClient()),
+    ):
+        yield
+
+
 @pytest.mark.ai_generated
 def test_scan_empty_when_no_derivatives(tmp_path: pathlib.Path) -> None:
     """Returns an empty list when there is no derivatives/ directory."""
     result = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert result == []
+
+
+@pytest.mark.ai_generated
+def test_scan_requires_dandi_api_key(tmp_path: pathlib.Path) -> None:
+    """scan_dandiset_directory requires DANDI_API_KEY to be set."""
+    with mock.patch.dict("os.environ", {}, clear=True):
+        with pytest.raises(AssertionError, match="DANDI_API_KEY"):
+            scan_dandiset_directory(dandiset_directory=tmp_path)
 
 
 @pytest.mark.ai_generated
@@ -107,6 +138,7 @@ def test_scan_single_failed_attempt(tmp_path: pathlib.Path) -> None:
     r = records[0]
     assert r["dandiset_id"] == "000001"
     assert r["content_id"] == DEFAULT_TEST_CONTENT_ID
+    assert r["asset_size_bytes"] is None
     assert r["subject"] == "mouse01"
     assert r["session"] is None
     assert r["pipeline"] == "aind+ephys"
@@ -335,6 +367,62 @@ def test_scan_parses_content_id_from_submission_script(tmp_path: pathlib.Path) -
     records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
     assert records[0]["content_id"] == content_id
+    assert records[0]["asset_size_bytes"] is None
+
+
+@pytest.mark.ai_generated
+def test_scan_parses_asset_size_from_dandi_asset_lookup(tmp_path: pathlib.Path) -> None:
+    """asset_size_bytes is read from DANDI metadata after matching blob ID to content_id."""
+    asset_size_bytes = 123456789
+    content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+
+    class _FakeAsset:
+        def __init__(self, metadata: dict) -> None:
+            self._metadata = metadata
+
+        def get_raw_metadata(self) -> dict:
+            return self._metadata
+
+    class _FakeDandiset:
+        def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
+            assert path == f"sub-mouse01/{content_id}"
+            return iter(
+                [
+                    _FakeAsset(
+                        {
+                            "contentUrl": [
+                                "https://api.dandiarchive.org/api/assets/download/",
+                                f"https://dandiarchive.s3.amazonaws.com/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}",
+                            ],
+                            "contentSize": str(asset_size_bytes),
+                        }
+                    )
+                ]
+            )
+
+    class _FakeClient:
+        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
+            assert dandiset_id == "000001"
+            return _FakeDandiset()
+
+    _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        content_id=content_id,
+    )
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
+        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+    ):
+        records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    assert records[0]["asset_size_bytes"] == asset_size_bytes
 
 
 @pytest.mark.ai_generated
@@ -371,6 +459,54 @@ def test_scan_raises_on_empty_content_id_in_nwb_file_path(tmp_path: pathlib.Path
     (attempt_dir / "code" / "submit.sh").write_text('#!/bin/bash\nNWB_FILE_PATH=""\n')
     with pytest.raises(ValueError, match="empty content_id"):
         scan_dandiset_directory(dandiset_directory=tmp_path)
+
+
+@pytest.mark.ai_generated
+def test_scan_asset_size_lookup_falls_back_to_none_on_blob_mismatch(
+    tmp_path: pathlib.Path,
+) -> None:
+    """asset_size_bytes falls back to None when matching blob ID is not found."""
+    content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+
+    class _FakeAsset:
+        def get_raw_metadata(self) -> dict[str, Any]:
+            return {
+                "contentUrl": [
+                    "https://api.dandiarchive.org/api/assets/download/",
+                    "https://dandiarchive.s3.amazonaws.com/blobs/000/000/not-the-right-blob",
+                ],
+                "contentSize": 123,
+            }
+
+    class _FakeDandiset:
+        def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
+            assert path == f"sub-mouse01/{content_id}"
+            return iter([_FakeAsset()])
+
+    class _FakeClient:
+        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
+            assert dandiset_id == "000001"
+            return _FakeDandiset()
+
+    _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        content_id=content_id,
+    )
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
+        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+    ):
+        with pytest.warns(UserWarning, match="does not match content_id"):
+            records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    assert records[0]["asset_size_bytes"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -417,6 +553,7 @@ def test_refresh_queue_with_dandiset_directory_creates_valid_files(tmp_path: pat
     record = json.loads(lines[0])
     assert record["dandiset_id"] == "000001"
     assert record["content_id"] == content_id
+    assert record["asset_size_bytes"] is None
 
 
 @pytest.mark.ai_generated
@@ -432,6 +569,17 @@ def test_refresh_queue_with_dandiset_directory_empty_when_no_attempts(tmp_path: 
     assert waiting_file.exists()
     assert state_file.read_text() == ""
     assert waiting_file.read_text() == ""
+
+
+@pytest.mark.ai_generated
+def test_refresh_queue_requires_dandi_api_key(tmp_path: pathlib.Path) -> None:
+    """refresh_queue requires DANDI_API_KEY to be set."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
+    with mock.patch.dict("os.environ", {}, clear=True):
+        with pytest.raises(AssertionError, match="DANDI_API_KEY"):
+            refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
 
 @pytest.mark.ai_generated
@@ -614,6 +762,7 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
     result = runner.invoke(
         _dandicompute_group,
         ["queue", "refresh", "--queue-directory", str(queue_dir), "--dandiset-directory", str(dandiset_dir)],
+        env={"DANDI_API_KEY": "test-key"},
     )
     assert result.exit_code == 0, result.output
     assert (queue_dir / "state.jsonl").exists()
@@ -666,6 +815,27 @@ def test_cli_queue_refresh_requires_dandiset_directory(tmp_path: pathlib.Path) -
 
 
 @pytest.mark.ai_generated
+@pytest.mark.parametrize("dandi_api_key", [None, ""])
+def test_cli_queue_refresh_requires_dandi_api_key(tmp_path: pathlib.Path, dandi_api_key: str | None) -> None:
+    """dandicompute queue refresh fails immediately when DANDI_API_KEY is missing."""
+    dandiset_dir = tmp_path / "dandiset_directory"
+    dandiset_dir.mkdir()
+    queue_dir = tmp_path / "queue_directory"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
+
+    runner = CliRunner()
+    with mock.patch.dict("os.environ", {}, clear=True):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["queue", "refresh", "--queue-directory", str(queue_dir), "--dandiset-directory", str(dandiset_dir)],
+            env={} if dandi_api_key is None else {"DANDI_API_KEY": dandi_api_key},
+        )
+    assert result.exit_code != 0
+    assert "DANDI_API_KEY" in result.output
+
+
+@pytest.mark.ai_generated
 def test_cli_queue_refresh_fails_without_queue_config(tmp_path: pathlib.Path) -> None:
     """dandicompute queue refresh --dandiset-directory fails when queue_config.json is missing."""
     dandiset_dir = tmp_path / "dandiset_directory"
@@ -676,6 +846,7 @@ def test_cli_queue_refresh_fails_without_queue_config(tmp_path: pathlib.Path) ->
     result = runner.invoke(
         _dandicompute_group,
         ["queue", "refresh", "--queue-directory", str(queue_dir), "--dandiset-directory", str(dandiset_dir)],
+        env={"DANDI_API_KEY": "test-key"},
     )
     assert result.exit_code != 0
     assert "queue_config.json" in result.output

@@ -1,6 +1,10 @@
 import datetime
+import os
 import pathlib
 import re
+import warnings
+
+import dandi.dandiapi
 
 _ATTEMPT_DIR_RE = re.compile(
     r"(?:version-(?P<version_in_name>.+?)_)?params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)"
@@ -17,19 +21,86 @@ def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str:
     script_text = script_file.read_text()
 
     for line in script_text.splitlines():
-        if not line.startswith("NWB_FILE_PATH="):
-            continue
-        nwb_file_path = line.split("=", maxsplit=1)[1].strip().strip('"').strip("'")
-        content_id = pathlib.PurePosixPath(nwb_file_path).name
-        if not content_id:
-            raise ValueError(
-                "Unable to determine content_id for "
-                f"{attempt_dir}: empty content_id from NWB_FILE_PATH in {script_file}"
-            )
-        return content_id
+        if line.startswith("NWB_FILE_PATH="):
+            nwb_file_path = line.split("=", maxsplit=1)[1].strip().strip('"').strip("'")
+            content_id = pathlib.PurePosixPath(nwb_file_path).name
+            if not content_id:
+                raise ValueError(
+                    "Unable to determine content_id for "
+                    f"{attempt_dir}: empty content_id from NWB_FILE_PATH in {script_file}"
+                )
+            return content_id
     raise ValueError(
         f"Unable to determine content_id for {attempt_dir}: missing/invalid NWB_FILE_PATH in {script_file}"
     )
+
+
+def _lookup_asset_size_bytes(
+    *,
+    api_token: str,
+    dandiset_id: str,
+    subject: str,
+    session: str | None,
+    content_id: str,
+) -> int | None:
+    """Lookup asset size from DANDI API and confirm by matching blob ID to ``content_id``."""
+    client = dandi.dandiapi.DandiAPIClient(token=api_token)
+    dandiset = client.get_dandiset(dandiset_id=dandiset_id)
+    asset_path = f"sub-{subject}/"
+    if session is not None:
+        asset_path += f"ses-{session}/"
+    asset_path += content_id
+
+    matching_assets = list(dandiset.get_assets_with_path_prefix(path=asset_path))
+    if len(matching_assets) != 1:
+        warnings.warn(
+            (
+                f"Unable to resolve asset_size_bytes for {content_id}. "
+                f"Expected exactly 1 asset at {asset_path} but found {len(matching_assets)}."
+            ),
+            stacklevel=2,
+        )
+        return None
+    asset = matching_assets[0]
+
+    metadata = asset.get_raw_metadata()
+    content_urls = metadata.get("contentUrl")
+    if not isinstance(content_urls, list) or len(content_urls) < 2:
+        warnings.warn(
+            f"Unable to resolve asset_size_bytes for {content_id}. Missing expected contentUrl[1] in DANDI metadata.",
+            stacklevel=2,
+        )
+        return None
+
+    blob_url = content_urls[1]
+    if not isinstance(blob_url, str):
+        warnings.warn(
+            f"Unable to resolve asset_size_bytes for {content_id}. contentUrl[1] is not a string ({blob_url!r}).",
+            stacklevel=2,
+        )
+        return None
+
+    blob_id = pathlib.PurePosixPath(blob_url).name
+    if blob_id != content_id:
+        warnings.warn(
+            (
+                f"Unable to resolve asset_size_bytes for {content_id}. "
+                f"Metadata blob ID {blob_id} does not match content_id."
+            ),
+            stacklevel=2,
+        )
+        return None
+
+    content_size = metadata.get("contentSize")
+    if isinstance(content_size, int):
+        return content_size
+    if isinstance(content_size, str) and content_size.isdigit():
+        return int(content_size)
+    warnings.warn(
+        f"Unable to resolve asset_size_bytes for {content_id}. Invalid or missing contentSize value {content_size!r}.",
+        stacklevel=2,
+    )
+    return None
 
 
 def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
@@ -148,6 +219,8 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
 
         * ``dandiset_id`` – value of the ``dandiset-`` BIDS entity
         * ``content_id``  – input content identifier parsed from ``code/submit.sh``
+        * ``asset_size_bytes`` – source asset size in bytes from DANDI API lookup;
+          ``null`` when no unique match is found, blob ID mismatches, or size is missing
         * ``subject``     – value of the ``sub-`` BIDS entity
         * ``session``     – value of the ``ses-`` BIDS entity, or ``null``
         * ``pipeline``    – value of the ``pipeline-`` BIDS entity
@@ -160,13 +233,24 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         * ``has_logs``    – ``True`` if a ``logs/`` subdirectory is present and non-empty
         * ``created_at``  – ISO 8601 UTC timestamp derived from the attempt directory's ``st_ctime``
           stat (last metadata-change time on Unix/Linux; creation time on Windows/macOS)
+
+    Raises
+    ------
+    AssertionError
+        If ``DANDI_API_KEY`` is not set before scanning.
     """
+    assert (
+        "DANDI_API_KEY" in os.environ and os.environ["DANDI_API_KEY"]
+    ), "`DANDI_API_KEY` environment variable must be set before scanning dandiset directory."
+    api_token = os.environ["DANDI_API_KEY"]
+
     derivatives = dandiset_directory / "derivatives"
     if not derivatives.is_dir():
         return []
 
     attempt_re = _ATTEMPT_SUFFIX_RE
     records: list[dict] = []
+    size_lookup_cache: dict[tuple[str, str, str | None, str], int | None] = {}
 
     for dandiset_path in sorted(derivatives.iterdir()):
         if not dandiset_path.is_dir() or not dandiset_path.name.startswith("dandiset-"):
@@ -178,6 +262,21 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
                 continue
             record = _parse_attempt_dir(attempt_dir)
             if record is not None:
+                size_lookup_key = (
+                    record["dandiset_id"],
+                    record["subject"],
+                    record["session"],
+                    record["content_id"],
+                )
+                if size_lookup_key not in size_lookup_cache:
+                    size_lookup_cache[size_lookup_key] = _lookup_asset_size_bytes(
+                        api_token=api_token,
+                        dandiset_id=record["dandiset_id"],
+                        subject=record["subject"],
+                        session=record["session"],
+                        content_id=record["content_id"],
+                    )
+                record["asset_size_bytes"] = size_lookup_cache[size_lookup_key]
                 records.append(record)
 
     records.sort(

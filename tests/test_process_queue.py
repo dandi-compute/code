@@ -11,6 +11,8 @@ import importlib.resources
 import json
 import os
 import pathlib
+from collections.abc import Iterator
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -52,6 +54,28 @@ _EXAMPLE_QUEUE_CONFIG = {
         }
     }
 }
+
+
+@pytest.fixture(autouse=True)
+def mock_scan_dandi_api_asset_lookup() -> Iterator[None]:
+    """Prevent network calls from scan-time asset lookup during queue tests."""
+
+    class _EmptyDandiset:
+        def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
+            assert isinstance(path, str)
+            assert path.startswith("sub-")
+            return iter(())
+
+    class _EmptyClient:
+        def get_dandiset(self, dandiset_id: str) -> _EmptyDandiset:
+            assert isinstance(dandiset_id, str)
+            return _EmptyDandiset()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
+        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_EmptyClient()),
+    ):
+        yield
 
 
 def _get_default_params_id() -> str:
@@ -1844,6 +1868,7 @@ def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
                 "--dandiset-directory",
                 str(dandiset_dir),
             ],
+            env={"DANDI_API_KEY": "test-key"},
         )
 
     assert result.exit_code == 0, result.output
@@ -1872,6 +1897,7 @@ def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
                 "--dandiset-directory",
                 str(dandiset_dir),
             ],
+            env={"DANDI_API_KEY": "test-key"},
         )
 
     assert result.exit_code == 0, result.output
