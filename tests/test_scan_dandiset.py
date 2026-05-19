@@ -307,7 +307,7 @@ def test_scan_supports_legacy_version_subdirectory_layout(tmp_path: pathlib.Path
     legacy_attempt_dir.mkdir(parents=True)
     (legacy_attempt_dir / "code").mkdir()
     (legacy_attempt_dir / "code" / "submit.sh").write_text(
-        ("#!/bin/bash\n" f'NWB_FILE_PATH="/orcd/data/dandi/001/s3dandiarchive/blobs/000/000/{_DEFAULT_CONTENT_ID}"\n')
+        f'#!/bin/bash\nNWB_FILE_PATH="/orcd/data/dandi/001/s3dandiarchive/blobs/000/000/{_DEFAULT_CONTENT_ID}"\n'
     )
 
     records = scan_dandiset_directory(dandiset_directory=tmp_path)
@@ -338,7 +338,7 @@ def test_scan_parses_content_id_from_submission_script(tmp_path: pathlib.Path) -
 
 
 @pytest.mark.ai_generated
-def test_scan_raises_when_submit_sh_does_not_include_nwb_file_path(tmp_path: pathlib.Path) -> None:
+def test_scan_raises_on_missing_nwb_file_path(tmp_path: pathlib.Path) -> None:
     """A missing NWB_FILE_PATH in submit.sh raises an error."""
     attempt_dir = _make_attempt_dir(
         tmp_path,
