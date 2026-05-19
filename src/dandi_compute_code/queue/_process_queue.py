@@ -8,6 +8,7 @@ import subprocess
 import urllib.request
 
 from dandi_compute_code.aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
+from dandi_compute_code.dandiset import scan_dandiset_directory
 
 _AIND_EPHYS_PARAMS_REGISTRY_PATH = (
     pathlib.Path(__file__).parent.parent / "aind_ephys_pipeline" / "registries" / "registered_params.json"
@@ -534,9 +535,6 @@ def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
 
     state_file = queue_directory / "state.jsonl"
     if dandiset_directory is not None:
-        # Local import avoids a circular dependency with dandi_compute_code.dandiset._scan.
-        from ..dandiset._scan import scan_dandiset_directory
-
         records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
         with state_file.open(mode="w") as file_stream:
             for record in records:
