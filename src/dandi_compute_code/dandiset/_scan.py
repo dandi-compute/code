@@ -8,6 +8,26 @@ _ATTEMPT_DIR_RE = re.compile(
 _ATTEMPT_SUFFIX_RE = re.compile(r"_attempt-\d+$")
 
 
+def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str | None:
+    """Read a content ID from ``code/submit.sh`` if available."""
+    script_file = attempt_dir / "code" / "submit.sh"
+    if not script_file.is_file():
+        return None
+
+    try:
+        script_text = script_file.read_text()
+    except OSError:
+        return None
+
+    for line in script_text.splitlines():
+        if not line.startswith("NWB_FILE_PATH="):
+            continue
+        nwb_file_path = line.split("=", maxsplit=1)[1].strip().strip('"').strip("'")
+        content_id = pathlib.PurePosixPath(nwb_file_path).name
+        return content_id or None
+    return None
+
+
 def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     """
     Parse a single attempt directory into a flat record dict.
@@ -82,6 +102,7 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
 
     return {
         "dandiset_id": dandiset_id,
+        "content_id": _parse_content_id_from_submission_script(attempt_dir),
         "subject": subject,
         "session": session,
         "pipeline": pipeline,
@@ -120,6 +141,8 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         attempt)``.  Each record contains:
 
         * ``dandiset_id`` – value of the ``dandiset-`` BIDS entity
+        * ``content_id``  – input content identifier parsed from ``code/submit.sh``,
+          or ``null`` when unavailable
         * ``subject``     – value of the ``sub-`` BIDS entity
         * ``session``     – value of the ``ses-`` BIDS entity, or ``null``
         * ``pipeline``    – value of the ``pipeline-`` BIDS entity
