@@ -213,7 +213,7 @@ def _queue_group() -> None:
 @_queue_group.command(name="refresh")
 @click.option(
     "--queue-directory",
-    "prepare_queue_directory",
+    "queue_directory",
     help="Path to the queue root directory.",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -311,7 +311,7 @@ def _queue_process_command(
 @_queue_group.command(name="prepare")
 @click.option(
     "--queue-directory",
-    "queue_directory",
+    "prepare_queue_directory",
     help="Path to the queue root directory.",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
