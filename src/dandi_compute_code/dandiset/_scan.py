@@ -85,8 +85,7 @@ def _lookup_asset_size_bytes(
     blob_id = pathlib.PurePosixPath(blob_url).name
     if blob_id != content_id:
         _LOGGER.warning(
-            "Unable to resolve asset_size_bytes for %s: metadata blob ID %s does not match content_id "
-            "(exact, case-sensitive string comparison).",
+            "Unable to resolve asset_size_bytes for %s: metadata blob ID %s does not match content_id.",
             content_id,
             blob_id,
         )
@@ -235,6 +234,11 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         * ``has_logs``    – ``True`` if a ``logs/`` subdirectory is present and non-empty
         * ``created_at``  – ISO 8601 UTC timestamp derived from the attempt directory's ``st_ctime``
           stat (last metadata-change time on Unix/Linux; creation time on Windows/macOS)
+
+    Raises
+    ------
+    AssertionError
+        If ``DANDI_API_KEY`` is not set before scanning.
     """
     assert (
         "DANDI_API_KEY" in os.environ and os.environ["DANDI_API_KEY"]
