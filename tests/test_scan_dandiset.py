@@ -561,7 +561,10 @@ def test_cli_queue_refresh_requires_dandiset_directory(tmp_path: pathlib.Path) -
         )
     )
     runner = CliRunner()
-    result = runner.invoke(_dandicompute_group, ["queue", "refresh", "--queue-directory", str(queue_dir)])
+    result = runner.invoke(
+        _dandicompute_group,
+        ["queue", "refresh", "--queue-directory", str(queue_dir)],
+    )
     assert result.exit_code != 0
     assert "Missing option '--dandiset-directory'" in result.output
 

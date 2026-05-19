@@ -743,8 +743,15 @@ def test_process_queue_handles_empty_scan_when_waiting_file_missing(tmp_path: pa
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
-    with mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True):
+
+    with (
+        mock.patch("dandi_compute_code.queue._process_queue.scan_dandiset_directory", return_value=[]) as mock_scan,
+        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
+    ):
         process_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
+
+    mock_scan.assert_called_once_with(dandiset_directory=tmp_path)
+    assert (queue_dir / "waiting.jsonl").read_text() == ""
 
 
 @pytest.mark.ai_generated
