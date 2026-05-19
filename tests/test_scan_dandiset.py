@@ -817,7 +817,8 @@ def test_cli_queue_refresh_requires_dandiset_directory(tmp_path: pathlib.Path) -
 
 
 @pytest.mark.ai_generated
-def test_cli_queue_refresh_requires_dandi_api_key(tmp_path: pathlib.Path) -> None:
+@pytest.mark.parametrize("dandi_api_key", [None, ""])
+def test_cli_queue_refresh_requires_dandi_api_key(tmp_path: pathlib.Path, dandi_api_key: str | None) -> None:
     """dandicompute queue refresh fails immediately when DANDI_API_KEY is missing."""
     dandiset_dir = tmp_path / "dandiset_directory"
     dandiset_dir.mkdir()
@@ -826,11 +827,12 @@ def test_cli_queue_refresh_requires_dandi_api_key(tmp_path: pathlib.Path) -> Non
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
 
     runner = CliRunner()
-    result = runner.invoke(
-        _dandicompute_group,
-        ["queue", "refresh", "--queue-directory", str(queue_dir), "--dandiset-directory", str(dandiset_dir)],
-        env={"DANDI_API_KEY": ""},
-    )
+    with mock.patch.dict("os.environ", {}, clear=True):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["queue", "refresh", "--queue-directory", str(queue_dir), "--dandiset-directory", str(dandiset_dir)],
+            env={} if dandi_api_key is None else {"DANDI_API_KEY": dandi_api_key},
+        )
     assert result.exit_code != 0
     assert "DANDI_API_KEY" in result.output
 

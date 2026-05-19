@@ -38,14 +38,13 @@ def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str:
 
 def _lookup_asset_size_bytes(
     *,
+    api_token: str,
     dandiset_id: str,
     subject: str,
     session: str | None,
     content_id: str,
 ) -> int | None:
     """Lookup asset size from DANDI API and confirm by matching blob ID to ``content_id``."""
-    api_token = os.environ["DANDI_API_KEY"]
-
     client = dandi.dandiapi.DandiAPIClient(token=api_token)
     dandiset = client.get_dandiset(dandiset_id=dandiset_id)
     asset_path = f"sub-{subject}/"
@@ -243,6 +242,7 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
     assert (
         "DANDI_API_KEY" in os.environ and os.environ["DANDI_API_KEY"]
     ), "`DANDI_API_KEY` environment variable must be set before scanning dandiset directory."
+    api_token = os.environ["DANDI_API_KEY"]
 
     derivatives = dandiset_directory / "derivatives"
     if not derivatives.is_dir():
@@ -270,6 +270,7 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
                 )
                 if size_lookup_key not in size_lookup_cache:
                     size_lookup_cache[size_lookup_key] = _lookup_asset_size_bytes(
+                        api_token=api_token,
                         dandiset_id=record["dandiset_id"],
                         subject=record["subject"],
                         session=record["session"],
