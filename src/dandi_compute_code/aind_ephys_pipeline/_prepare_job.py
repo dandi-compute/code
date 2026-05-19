@@ -88,12 +88,18 @@ def prepare_aind_ephys_job(
     config_file_path = pathlib.Path(__file__).parent / "configs" / config_registry[config_key]["path"]
     expected_config_md5 = config_registry[config_key]["md5"]
 
+    asset_size_bytes: int | None = None
     if content_id is None:
         client = dandi.dandiapi.DandiAPIClient()
         dandiset = client.get_dandiset(dandiset_id=dandiset_id)
         asset = dandiset.get_asset_by_path(path=dandiset_path)
         metadata = asset.get_raw_metadata()
         content_id = metadata["contentUrl"][1].split("/")[-1]
+        content_size = metadata.get("contentSize")
+        if isinstance(content_size, int):
+            asset_size_bytes = content_size
+        elif isinstance(content_size, str) and content_size.isdigit():
+            asset_size_bytes = int(content_size)
 
     params_registry_path = pathlib.Path(__file__).parent / "registries" / "registered_params.json"
     params_registry = json.loads(params_registry_path.read_text())
@@ -293,6 +299,7 @@ def prepare_aind_ephys_job(
         script_file_path=script_file_path,
         log_directory=str(log_directory),
         nwb_file_path=nwbfile_path,
+        asset_size_bytes=asset_size_bytes,
         results_directory=str(intermediate_dir),  # Start off the results in the intermediate folder and separate later
         work_directory=str(work_directory),
         apptainer_cache_directory=str(apptainer_cache_directory),

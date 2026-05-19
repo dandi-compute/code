@@ -36,6 +36,7 @@ def _make_attempt_dir(
     with_logs: bool = False,
     logs_empty: bool = False,
     content_id: str | None = None,
+    asset_size_bytes: int | None = None,
 ) -> pathlib.Path:
     """
     Create a mock attempt directory inside a fake dandiset clone rooted at *base*.
@@ -63,6 +64,7 @@ def _make_attempt_dir(
             (
                 "#!/bin/bash\n"
                 f'NWB_FILE_PATH="/orcd/data/dandi/001/s3dandiarchive/blobs/{blob_prefix}/{blob_subprefix}/{resolved_content_id}"\n'
+                + (f'ASSET_SIZE_BYTES="{asset_size_bytes}"\n' if asset_size_bytes is not None else "")
             )
         )
     if with_output:
@@ -107,6 +109,7 @@ def test_scan_single_failed_attempt(tmp_path: pathlib.Path) -> None:
     r = records[0]
     assert r["dandiset_id"] == "000001"
     assert r["content_id"] == DEFAULT_TEST_CONTENT_ID
+    assert r["asset_size_bytes"] is None
     assert r["subject"] == "mouse01"
     assert r["session"] is None
     assert r["pipeline"] == "aind+ephys"
@@ -335,6 +338,27 @@ def test_scan_parses_content_id_from_submission_script(tmp_path: pathlib.Path) -
     records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
     assert records[0]["content_id"] == content_id
+    assert records[0]["asset_size_bytes"] is None
+
+
+@pytest.mark.ai_generated
+def test_scan_parses_asset_size_from_submission_script(tmp_path: pathlib.Path) -> None:
+    """asset_size_bytes is read from ASSET_SIZE_BYTES in code/submit.sh when present."""
+    asset_size_bytes = 123456789
+    _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        asset_size_bytes=asset_size_bytes,
+    )
+    records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    assert records[0]["asset_size_bytes"] == asset_size_bytes
 
 
 @pytest.mark.ai_generated
@@ -373,6 +397,27 @@ def test_scan_raises_on_empty_content_id_in_nwb_file_path(tmp_path: pathlib.Path
         scan_dandiset_directory(dandiset_directory=tmp_path)
 
 
+@pytest.mark.ai_generated
+@pytest.mark.parametrize("invalid_asset_size", ["abc", "-1"])
+def test_scan_raises_on_invalid_asset_size_bytes(tmp_path: pathlib.Path, invalid_asset_size: str) -> None:
+    """An invalid ASSET_SIZE_BYTES in submit.sh raises an error."""
+    attempt_dir = _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+    )
+    (attempt_dir / "code" / "submit.sh").write_text(
+        f'#!/bin/bash\nNWB_FILE_PATH="/orcd/data/dandi/001/s3dandiarchive/blobs/000/000/{DEFAULT_TEST_CONTENT_ID}"\nASSET_SIZE_BYTES="{invalid_asset_size}"\n'
+    )
+    with pytest.raises(ValueError, match="Unable to determine asset_size_bytes"):
+        scan_dandiset_directory(dandiset_directory=tmp_path)
+
+
 # ---------------------------------------------------------------------------
 # Tests for refresh_queue with dandiset_directory
 # ---------------------------------------------------------------------------
@@ -382,6 +427,7 @@ def test_scan_raises_on_empty_content_id_in_nwb_file_path(tmp_path: pathlib.Path
 def test_refresh_queue_with_dandiset_directory_creates_valid_files(tmp_path: pathlib.Path) -> None:
     """refresh_queue writes state.jsonl and waiting.jsonl when scanning dandiset_directory."""
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+    asset_size_bytes = 987654321
     _make_attempt_dir(
         tmp_path,
         "000001",
@@ -392,6 +438,7 @@ def test_refresh_queue_with_dandiset_directory_creates_valid_files(tmp_path: pat
         "def5678",
         1,
         content_id=content_id,
+        asset_size_bytes=asset_size_bytes,
     )
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
@@ -417,6 +464,7 @@ def test_refresh_queue_with_dandiset_directory_creates_valid_files(tmp_path: pat
     record = json.loads(lines[0])
     assert record["dandiset_id"] == "000001"
     assert record["content_id"] == content_id
+    assert record["asset_size_bytes"] == asset_size_bytes
 
 
 @pytest.mark.ai_generated
