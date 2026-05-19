@@ -526,6 +526,10 @@ def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
     FileNotFoundError
         If ``queue_config.json`` is not found in *queue_directory*.
     """
+    assert (
+        "DANDI_API_KEY" in os.environ and os.environ["DANDI_API_KEY"]
+    ), "`DANDI_API_KEY` environment variable must be set before refreshing queue state."
+
     queue_config_file = queue_directory / "queue_config.json"
     if not queue_config_file.exists():
         message = f"'queue_config.json' not found in '{queue_directory}'."

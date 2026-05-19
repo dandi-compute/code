@@ -71,7 +71,10 @@ def mock_scan_dandi_api_asset_lookup() -> Iterator[None]:
             assert isinstance(dandiset_id, str)
             return _EmptyDandiset()
 
-    with mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_EmptyClient()):
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
+        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_EmptyClient()),
+    ):
         yield
 
 
@@ -1865,6 +1868,7 @@ def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
                 "--dandiset-directory",
                 str(dandiset_dir),
             ],
+            env={"DANDI_API_KEY": "test-key"},
         )
 
     assert result.exit_code == 0, result.output
@@ -1893,6 +1897,7 @@ def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
                 "--dandiset-directory",
                 str(dandiset_dir),
             ],
+            env={"DANDI_API_KEY": "test-key"},
         )
 
     assert result.exit_code == 0, result.output

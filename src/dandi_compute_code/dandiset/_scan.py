@@ -1,4 +1,5 @@
 import datetime
+import logging
 import os
 import pathlib
 import re
@@ -9,6 +10,7 @@ _ATTEMPT_DIR_RE = re.compile(
     r"(?:version-(?P<version_in_name>.+?)_)?params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)"
 )
 _ATTEMPT_SUFFIX_RE = re.compile(r"_attempt-\d+$")
+_LOGGER = logging.getLogger(__name__)
 
 
 def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str:
@@ -42,9 +44,7 @@ def _lookup_asset_size_bytes(
     content_id: str,
 ) -> int | None:
     """Lookup asset size from DANDI API and confirm by matching blob ID to ``content_id``."""
-    api_token = os.environ.get("DANDI_API_KEY", "").strip()
-    if not api_token:
-        return None
+    api_token = os.environ["DANDI_API_KEY"]
 
     client = dandi.dandiapi.DandiAPIClient(token=api_token)
     dandiset = client.get_dandiset(dandiset_id=dandiset_id)
@@ -55,21 +55,31 @@ def _lookup_asset_size_bytes(
 
     matching_assets = list(dandiset.get_assets_with_path_prefix(path=asset_path))
     if len(matching_assets) != 1:
+        _LOGGER.warning(
+            "Unable to resolve asset_size_bytes for %s: expected exactly 1 asset at %s but found %d.",
+            content_id,
+            asset_path,
+            len(matching_assets),
+        )
         return None
     asset = matching_assets[0]
 
     metadata = asset.get_raw_metadata()
-    content_urls = metadata.get("contentUrl", [])
-    if not isinstance(content_urls, list):
+    content_urls = metadata.get("contentUrl")
+    if not isinstance(content_urls, list) or len(content_urls) < 2:
+        _LOGGER.warning(
+            "Unable to resolve asset_size_bytes for %s: missing expected contentUrl[1] in DANDI metadata.",
+            content_id,
+        )
         return None
 
-    blob_id = None
-    for content_url in content_urls:
-        if isinstance(content_url, str) and "/blobs/" in content_url:
-            blob_id = pathlib.PurePosixPath(content_url).name
-            break
-
+    blob_id = pathlib.PurePosixPath(content_urls[1]).name
     if blob_id != content_id:
+        _LOGGER.warning(
+            "Unable to resolve asset_size_bytes for %s: metadata blob ID %s does not match content_id.",
+            content_id,
+            blob_id,
+        )
         return None
 
     content_size = metadata.get("contentSize")
@@ -77,6 +87,11 @@ def _lookup_asset_size_bytes(
         return content_size
     if isinstance(content_size, str) and content_size.isdigit():
         return int(content_size)
+    _LOGGER.warning(
+        "Unable to resolve asset_size_bytes for %s: invalid or missing contentSize value %r.",
+        content_id,
+        content_size,
+    )
     return None
 
 
@@ -197,7 +212,7 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         * ``dandiset_id`` – value of the ``dandiset-`` BIDS entity
         * ``content_id``  – input content identifier parsed from ``code/submit.sh``
         * ``asset_size_bytes`` – source asset size in bytes from DANDI API lookup;
-          ``null`` when lookup is unavailable, no match is found, or size is missing
+          ``null`` when no unique match is found, blob ID mismatches, or size is missing
         * ``subject``     – value of the ``sub-`` BIDS entity
         * ``session``     – value of the ``ses-`` BIDS entity, or ``null``
         * ``pipeline``    – value of the ``pipeline-`` BIDS entity
@@ -211,6 +226,10 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         * ``created_at``  – ISO 8601 UTC timestamp derived from the attempt directory's ``st_ctime``
           stat (last metadata-change time on Unix/Linux; creation time on Windows/macOS)
     """
+    assert (
+        "DANDI_API_KEY" in os.environ and os.environ["DANDI_API_KEY"]
+    ), "`DANDI_API_KEY` environment variable must be set before scanning queue state."
+
     derivatives = dandiset_directory / "derivatives"
     if not derivatives.is_dir():
         return []

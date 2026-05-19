@@ -229,6 +229,8 @@ def _queue_refresh_command(
     dandiset_directory: pathlib.Path,
 ) -> None:
     """Rescan the dandiset directory and regenerate waiting.jsonl."""
+    if "DANDI_API_KEY" not in os.environ or not os.environ["DANDI_API_KEY"]:
+        raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
     try:
         refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
     except FileNotFoundError as error:
@@ -256,6 +258,8 @@ def _queue_clean_command(
     dandiset_directory: pathlib.Path,
 ) -> None:
     """Delete unsubmitted capsules that are no longer present in the queue."""
+    if "DANDI_API_KEY" not in os.environ or not os.environ["DANDI_API_KEY"]:
+        raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
     removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
     if removed:
         for path in removed:
@@ -287,6 +291,8 @@ def _queue_process_command(
     dandiset_directory: pathlib.Path,
 ) -> None:
     """Submit queued jobs when no active dandicompute jobs are running."""
+    if "DANDI_API_KEY" not in os.environ or not os.environ["DANDI_API_KEY"]:
+        raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
     process_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
 
 
