@@ -627,7 +627,8 @@ def prepare_queue(
     content_ids : list of str, optional
         Explicit list of content IDs to prepare.  When provided, the qualifying
         content IDs list is not fetched from the network and these IDs are used
-        directly instead.  Useful for test runs with a known content ID.
+        directly instead.  Useful for targeted runs such as testing with one or
+        more known content IDs.
     limit : int, optional
         If provided, stop after preparing *limit* assets in total (across all
         pipeline/version/params combinations).  Useful for testing.
