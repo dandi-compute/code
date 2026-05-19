@@ -56,7 +56,7 @@ def _lookup_asset_size_bytes(
     matching_assets = list(dandiset.get_assets_with_path_prefix(path=asset_path))
     if len(matching_assets) != 1:
         _LOGGER.warning(
-            "Unable to resolve asset_size_bytes for %s: expected exactly 1 asset at %s but found %d.",
+            "Unable to resolve asset_size_bytes for %s. Expected exactly 1 asset at %s but found %d.",
             content_id,
             asset_path,
             len(matching_assets),
@@ -68,7 +68,7 @@ def _lookup_asset_size_bytes(
     content_urls = metadata.get("contentUrl")
     if not isinstance(content_urls, list) or len(content_urls) < 2:
         _LOGGER.warning(
-            "Unable to resolve asset_size_bytes for %s: missing expected contentUrl[1] in DANDI metadata.",
+            "Unable to resolve asset_size_bytes for %s. Missing expected contentUrl[1] in DANDI metadata.",
             content_id,
         )
         return None
@@ -76,7 +76,7 @@ def _lookup_asset_size_bytes(
     blob_url = content_urls[1]
     if not isinstance(blob_url, str):
         _LOGGER.warning(
-            "Unable to resolve asset_size_bytes for %s: contentUrl[1] is not a string (%r).",
+            "Unable to resolve asset_size_bytes for %s. contentUrl[1] is not a string (%r).",
             content_id,
             blob_url,
         )
@@ -85,7 +85,7 @@ def _lookup_asset_size_bytes(
     blob_id = pathlib.PurePosixPath(blob_url).name
     if blob_id != content_id:
         _LOGGER.warning(
-            "Unable to resolve asset_size_bytes for %s: metadata blob ID %s does not match content_id.",
+            "Unable to resolve asset_size_bytes for %s. Metadata blob ID %s does not match content_id.",
             content_id,
             blob_id,
         )
@@ -97,7 +97,7 @@ def _lookup_asset_size_bytes(
     if isinstance(content_size, str) and content_size.isdigit():
         return int(content_size)
     _LOGGER.warning(
-        "Unable to resolve asset_size_bytes for %s: invalid or missing contentSize value %r.",
+        "Unable to resolve asset_size_bytes for %s. Invalid or missing contentSize value %r.",
         content_id,
         content_size,
     )
