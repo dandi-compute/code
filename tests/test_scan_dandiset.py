@@ -455,7 +455,7 @@ def test_scan_asset_size_lookup_falls_back_to_none_on_blob_mismatch(tmp_path: pa
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
 
     class _FakeAsset:
-        def get_raw_metadata(self) -> dict:
+        def get_raw_metadata(self) -> dict[str, Any]:
             return {
                 "contentUrl": [
                     "https://api.dandiarchive.org/api/assets/download/",
