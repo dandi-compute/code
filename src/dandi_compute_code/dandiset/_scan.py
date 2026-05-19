@@ -201,4 +201,4 @@ def write_state_and_waiting_jsonl(
         for record in records:
             file_stream.write(json.dumps(record) + "\n")
 
-    refresh_waiting_queue(cwd=queue_directory, limit=limit)
+    refresh_waiting_queue(queue_directory=queue_directory, limit=limit)
