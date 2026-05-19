@@ -373,18 +373,9 @@ def test_scan_parses_asset_size_from_dandi_asset_lookup(tmp_path: pathlib.Path) 
 
     class _FakeDandiset:
         def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == "sub-mouse01/"
+            assert path == f"sub-mouse01/{content_id}"
             return iter(
                 [
-                    _FakeAsset(
-                        {
-                            "contentUrl": [
-                                "https://api.dandiarchive.org/api/assets/download/",
-                                "https://dandiarchive.s3.amazonaws.com/blobs/000/000/not-the-right-blob",
-                            ],
-                            "contentSize": 100,
-                        }
-                    ),
                     _FakeAsset(
                         {
                             "contentUrl": [
@@ -393,7 +384,7 @@ def test_scan_parses_asset_size_from_dandi_asset_lookup(tmp_path: pathlib.Path) 
                             ],
                             "contentSize": str(asset_size_bytes),
                         }
-                    ),
+                    )
                 ]
             )
 
@@ -459,15 +450,44 @@ def test_scan_raises_on_empty_content_id_in_nwb_file_path(tmp_path: pathlib.Path
 
 
 @pytest.mark.ai_generated
-def test_scan_asset_size_lookup_falls_back_to_none_on_api_error(tmp_path: pathlib.Path) -> None:
-    """asset_size_bytes falls back to None when DANDI metadata lookup fails."""
-    _make_attempt_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1)
+def test_scan_asset_size_lookup_falls_back_to_none_on_blob_mismatch(tmp_path: pathlib.Path) -> None:
+    """asset_size_bytes falls back to None when matching blob ID is not found."""
+    content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+
+    class _FakeAsset:
+        def get_raw_metadata(self) -> dict:
+            return {
+                "contentUrl": [
+                    "https://api.dandiarchive.org/api/assets/download/",
+                    "https://dandiarchive.s3.amazonaws.com/blobs/000/000/not-the-right-blob",
+                ],
+                "contentSize": 123,
+            }
+
+    class _FakeDandiset:
+        def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
+            assert path == f"sub-mouse01/{content_id}"
+            return iter([_FakeAsset()])
+
+    class _FakeClient:
+        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
+            assert dandiset_id == "000001"
+            return _FakeDandiset()
+
+    _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        content_id=content_id,
+    )
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch(
-            "dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient",
-            side_effect=RuntimeError("network unavailable"),
-        ),
+        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
     ):
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1

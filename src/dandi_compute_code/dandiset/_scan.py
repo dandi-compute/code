@@ -4,7 +4,6 @@ import pathlib
 import re
 
 import dandi.dandiapi
-import requests
 
 _ATTEMPT_DIR_RE = re.compile(
     r"(?:version-(?P<version_in_name>.+?)_)?params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)"
@@ -47,44 +46,39 @@ def _lookup_asset_size_bytes(
     if not api_token:
         return None
 
-    try:
-        client = dandi.dandiapi.DandiAPIClient(token=api_token)
-        dandiset = client.get_dandiset(dandiset_id=dandiset_id)
-        path_prefix = f"sub-{subject}/"
-        if session is not None:
-            path_prefix += f"ses-{session}/"
+    client = dandi.dandiapi.DandiAPIClient(token=api_token)
+    dandiset = client.get_dandiset(dandiset_id=dandiset_id)
+    asset_path = f"sub-{subject}/"
+    if session is not None:
+        asset_path += f"ses-{session}/"
+    asset_path += content_id
 
-        for asset in dandiset.get_assets_with_path_prefix(path=path_prefix):
-            metadata = asset.get_raw_metadata()
-            content_urls = metadata.get("contentUrl", [])
-            if not isinstance(content_urls, list):
-                continue
-
-            blob_id = None
-            for content_url in content_urls:
-                if isinstance(content_url, str) and "/blobs/" in content_url:
-                    blob_id = pathlib.PurePosixPath(content_url).name
-                    break
-
-            if blob_id != content_id:
-                continue
-
-            content_size = metadata.get("contentSize")
-            if isinstance(content_size, int):
-                return content_size
-            if isinstance(content_size, str) and content_size.isdigit():
-                return int(content_size)
-            break
-    except (
-        requests.exceptions.RequestException,
-        RuntimeError,
-        ValueError,
-        TypeError,
-        KeyError,
-        OSError,
-    ):
+    matching_assets = iter(dandiset.get_assets_with_path_prefix(path=asset_path))
+    asset = next(matching_assets, None)
+    if asset is None:
+        return None
+    if next(matching_assets, None) is not None:
         return None
 
+    metadata = asset.get_raw_metadata()
+    content_urls = metadata.get("contentUrl", [])
+    if not isinstance(content_urls, list):
+        return None
+
+    blob_id = None
+    for content_url in content_urls:
+        if isinstance(content_url, str) and "/blobs/" in content_url:
+            blob_id = pathlib.PurePosixPath(content_url).name
+            break
+
+    if blob_id != content_id:
+        return None
+
+    content_size = metadata.get("contentSize")
+    if isinstance(content_size, int):
+        return content_size
+    if isinstance(content_size, str) and content_size.isdigit():
+        return int(content_size)
     return None
 
 
