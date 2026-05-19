@@ -2,8 +2,6 @@ import datetime
 import pathlib
 import re
 
-from ..queue import refresh_waiting_queue
-
 _ATTEMPT_DIR_RE = re.compile(
     r"(?:version-(?P<version_in_name>.+?)_)?params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)"
 )
@@ -167,21 +165,3 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         )
     )
     return records
-
-
-def write_state_and_waiting_jsonl(dandiset_directory: pathlib.Path, queue_directory: pathlib.Path) -> None:
-    """
-    Scan *dandiset_directory* and refresh queue ``state.jsonl`` and ``waiting.jsonl``.
-
-    Parameters
-    ----------
-    dandiset_directory : pathlib.Path
-        Path to a local clone of the dandiset repository.
-    queue_directory : pathlib.Path
-        Path to the queue root directory containing ``queue_config.json``.
-    Notes
-    -----
-    This delegates to :func:`dandi_compute_code.queue.refresh_waiting_queue`
-    to keep queue refresh logic in one place.
-    """
-    refresh_waiting_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
