@@ -15,7 +15,7 @@ from dandi_compute_code._cli import _dandicompute_group
         (["prepare", "aind", "--help"], "Prepare an AIND ephys job, or prepare test queue entries with --test."),
         (["submit", "--help"], "Submit a previously prepared pipeline script via sbatch."),
         (["queue", "--help"], "Manage queue ordering, preparation, and execution."),
-        (["queue", "refresh", "--help"], "Regenerate waiting.jsonl from state.jsonl"),
+        (["queue", "refresh", "--help"], "Regenerate waiting.jsonl after rescanning the dandiset directory."),
         (["queue", "clean", "--help"], "Delete unsubmitted capsules that are no longer present in the queue."),
         (["delete", "--help"], "Delete remote and local derivatives for specific version patterns."),
     ],

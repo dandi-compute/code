@@ -446,8 +446,8 @@ def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.P
     waiting_entries = _read_waiting()
 
     if not waiting_entries:
-        # Attempt to repopulate from state.jsonl before giving up.
-        refresh_queue(queue_directory=queue_directory)
+        # Attempt to repopulate from dandiset scan before giving up.
+        refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
         waiting_entries = _read_waiting()
 
     if not waiting_entries:
@@ -504,12 +504,12 @@ def order_queue(*, state_entries: list[dict], queue_config: dict, limit: int | N
     return ordered
 
 
-def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path | None = None) -> None:
+def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
     """
     Build and write ``waiting.jsonl`` from ``state.jsonl`` in the queue directory.
 
-    If *dandiset_directory* is provided, ``state.jsonl`` is regenerated first
-    by scanning that dandiset directory.  Then entries that are prepared
+    ``state.jsonl`` is regenerated first by scanning *dandiset_directory*.
+    Then entries that are prepared
     (``has_code=True``) but not yet run (``has_logs=False``,
     ``has_output=False``) are ordered via :func:`order_queue` and written to
     ``waiting.jsonl`` so that subsequent calls to :func:`process_queue` can
@@ -519,14 +519,14 @@ def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
     ----------
     queue_directory : pathlib.Path
         Path to the queue root directory.
-    dandiset_directory : pathlib.Path, optional
-        Path to a local dandiset clone. When provided, ``state.jsonl`` is
-        rewritten before ``waiting.jsonl`` is regenerated.
+    dandiset_directory : pathlib.Path
+        Path to a local dandiset clone used to rewrite ``state.jsonl``
+        before ``waiting.jsonl`` is regenerated.
 
     Raises
     ------
     FileNotFoundError
-        If ``queue_config.json`` or ``state.jsonl`` is not found in *queue_directory*.
+        If ``queue_config.json`` is not found in *queue_directory*.
     """
     queue_config_file = queue_directory / "queue_config.json"
     if not queue_config_file.exists():
@@ -534,17 +534,10 @@ def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
         raise FileNotFoundError(message)
 
     state_file = queue_directory / "state.jsonl"
-    if dandiset_directory is not None:
-        records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
-        with state_file.open(mode="w") as file_stream:
-            for record in records:
-                file_stream.write(json.dumps(record) + "\n")
-    elif not state_file.exists():
-        message = (
-            f"'state.jsonl' not found in '{queue_directory}'. "
-            "Generate it with: dandicompute queue refresh --dandiset-directory <dandiset_dir>"
-        )
-        raise FileNotFoundError(message)
+    records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
+    with state_file.open(mode="w") as file_stream:
+        for record in records:
+            file_stream.write(json.dumps(record) + "\n")
 
     state_entries = [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
     queue_config = json.loads(queue_config_file.read_text())
@@ -574,12 +567,12 @@ def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
     Raises
     ------
     FileNotFoundError
-        If ``waiting.jsonl`` is absent or empty and ``state.jsonl`` is not
-        found in *queue_directory* (raised by :func:`refresh_queue`).
+        If ``queue_config.json`` is not found in *queue_directory* (raised by
+        :func:`refresh_queue`).
     """
     waiting_file = queue_directory / "waiting.jsonl"
     if not waiting_file.exists() or not waiting_file.read_text().strip():
-        refresh_queue(queue_directory=queue_directory)
+        refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
 
     any_running = _determine_running()
     if not any_running:

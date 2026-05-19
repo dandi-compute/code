@@ -528,8 +528,8 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
 
 
 @pytest.mark.ai_generated
-def test_cli_queue_refresh_without_dandiset_directory(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh without --dandiset-directory regenerates waiting.jsonl from existing state.jsonl."""
+def test_cli_queue_refresh_requires_dandiset_directory(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue refresh requires --dandiset-directory."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     entry = {
@@ -561,11 +561,9 @@ def test_cli_queue_refresh_without_dandiset_directory(tmp_path: pathlib.Path) ->
         )
     )
     runner = CliRunner()
-    result = runner.invoke(
-        _dandicompute_group,
-        ["queue", "refresh", "--queue-directory", str(queue_dir)],
-    )
-    assert result.exit_code == 0, result.output
+    result = runner.invoke(_dandicompute_group, ["queue", "refresh", "--queue-directory", str(queue_dir)])
+    assert result.exit_code != 0
+    assert "Missing option '--dandiset-directory'" in result.output
 
 
 @pytest.mark.ai_generated

@@ -220,16 +220,15 @@ def _queue_group() -> None:
 @click.option(
     "--dandiset-directory",
     "dandiset_directory",
-    help="Path to a local dandiset clone. When provided, state.jsonl is updated before regenerating waiting.jsonl.",
-    required=False,
+    help="Path to a local dandiset clone used to rescan and regenerate state.jsonl before waiting.jsonl.",
+    required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
 )
 def _queue_refresh_command(
     queue_directory: pathlib.Path,
-    dandiset_directory: pathlib.Path | None = None,
+    dandiset_directory: pathlib.Path,
 ) -> None:
-    """Regenerate waiting.jsonl from state.jsonl, optionally scanning a dandiset directory first."""
+    """Regenerate waiting.jsonl after rescanning the dandiset directory."""
     try:
         refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
     except FileNotFoundError as error:
