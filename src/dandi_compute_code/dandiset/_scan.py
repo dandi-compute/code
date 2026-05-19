@@ -242,7 +242,7 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
     """
     assert (
         "DANDI_API_KEY" in os.environ and os.environ["DANDI_API_KEY"]
-    ), "`DANDI_API_KEY` environment variable must be set before scanning queue state."
+    ), "`DANDI_API_KEY` environment variable must be set before scanning dandiset directory."
 
     derivatives = dandiset_directory / "derivatives"
     if not derivatives.is_dir():
