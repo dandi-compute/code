@@ -459,9 +459,9 @@ def test_submit_next_returns_false_when_no_waiting_file(tmp_path: pathlib.Path) 
 
     # refresh_waiting_queue is called to try to fill waiting.jsonl, but produces nothing
     with mock.patch("dandi_compute_code.queue._process_queue.refresh_waiting_queue") as mock_refresh:
-        result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
+        result = _submit_next(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
-    mock_refresh.assert_called_once_with(cwd=queue_dir)
+    mock_refresh.assert_called_once_with(queue_directory=queue_dir)
     assert result is False
 
 
@@ -474,9 +474,9 @@ def test_submit_next_returns_false_when_no_pending_entries(tmp_path: pathlib.Pat
     (queue_dir / "waiting.jsonl").write_text("")
 
     with mock.patch("dandi_compute_code.queue._process_queue.refresh_waiting_queue") as mock_refresh:
-        result = _submit_next(cwd=queue_dir, dandiset_directory=tmp_path)
+        result = _submit_next(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
-    mock_refresh.assert_called_once_with(cwd=queue_dir)
+    mock_refresh.assert_called_once_with(queue_directory=queue_dir)
     assert result is False
 
 
@@ -510,9 +510,9 @@ def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: 
         attempt=1,
     )
 
-    def _fill_waiting(*, cwd: pathlib.Path, dandiset_directory: pathlib.Path | None = None) -> None:
+    def _fill_waiting(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path | None = None) -> None:
         # Simulate refresh_waiting_queue populating waiting.jsonl
-        _write_jsonl(cwd / "waiting.jsonl", [entry])
+        _write_jsonl(queue_directory / "waiting.jsonl", [entry])
 
     with (
         mock.patch(
@@ -521,9 +521,9 @@ def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: 
         ) as mock_refresh,
         mock.patch("dandi_compute_code.queue._process_queue.submit_job"),
     ):
-        result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
-    mock_refresh.assert_called_once_with(cwd=queue_dir)
+    mock_refresh.assert_called_once_with(queue_directory=queue_dir)
     assert result is True
 
 
@@ -556,7 +556,7 @@ def test_submit_next_submits_first_entry_in_order(tmp_path: pathlib.Path) -> Non
     )
 
     with mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit:
-        result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
     mock_submit.assert_called_once()
@@ -574,7 +574,7 @@ def test_submit_next_returns_false_when_script_missing(tmp_path: pathlib.Path) -
     # Deliberately do NOT create the attempt directory / submit.sh
 
     with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
-        result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is False
 
@@ -610,7 +610,7 @@ def test_submit_next_uses_session_in_path_when_present(tmp_path: pathlib.Path) -
     )
 
     with mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit:
-        result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
     assert mock_submit.called
@@ -654,7 +654,7 @@ def test_submit_next_pops_submitted_entry_from_waiting_jsonl(tmp_path: pathlib.P
     )
 
     with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
-        _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     remaining = _read_jsonl(queue_dir / "waiting.jsonl")
     assert len(remaining) == 1
@@ -689,7 +689,7 @@ def test_submit_next_appends_submitted_entry_to_last_submitted_jsonl(tmp_path: p
     )
 
     with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
-        _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     submitted_entries = _read_jsonl(queue_dir / "last_submitted.jsonl")
     assert len(submitted_entries) == 1
@@ -726,7 +726,7 @@ def test_submit_next_logs_explicit_run_capsule_directory(
     )
 
     with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
-        _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     captured = capsys.readouterr()
     assert f"Submitting run capsule directory: {attempt_dir}" in captured.out
@@ -745,7 +745,7 @@ def test_process_queue_raises_when_state_file_missing(tmp_path: pathlib.Path) ->
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
 
     with pytest.raises(FileNotFoundError, match="state.jsonl"):
-        process_queue(cwd=queue_dir, dandiset_directory=tmp_path)
+        process_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
 
 @pytest.mark.ai_generated
@@ -759,9 +759,9 @@ def test_process_queue_calls_order_queue_when_waiting_empty(tmp_path: pathlib.Pa
         mock.patch("dandi_compute_code.queue._process_queue.refresh_waiting_queue") as mock_refresh,
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
     ):
-        process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
-    mock_refresh.assert_called_once_with(cwd=queue_dir)
+    mock_refresh.assert_called_once_with(queue_directory=queue_dir)
 
 
 @pytest.mark.ai_generated
@@ -777,7 +777,7 @@ def test_process_queue_skips_order_queue_when_waiting_non_empty(tmp_path: pathli
         mock.patch("dandi_compute_code.queue._process_queue.refresh_waiting_queue") as mock_refresh,
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
     ):
-        process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     mock_refresh.assert_not_called()
 
@@ -794,7 +794,7 @@ def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> N
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next", return_value=True) as mock_submit,
     ):
-        process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert mock_submit.call_count == 2
 
@@ -811,7 +811,7 @@ def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path)
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
-        process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     mock_submit.assert_not_called()
 
@@ -828,10 +828,13 @@ def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathli
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next", return_value=True) as mock_submit,
     ):
-        process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert mock_submit.call_count == 2
-    assert all(call == mock.call(cwd=queue_dir, dandiset_directory=dandiset_dir) for call in mock_submit.call_args_list)
+    assert all(
+        call == mock.call(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+        for call in mock_submit.call_args_list
+    )
 
 
 @pytest.mark.ai_generated
@@ -846,7 +849,7 @@ def test_process_queue_stops_submitting_when_queue_exhausted(tmp_path: pathlib.P
         mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next", side_effect=[True, False]) as mock_submit,
     ):
-        process_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert mock_submit.call_count == 2
 
@@ -864,7 +867,7 @@ def test_order_queue_raises_when_state_file_missing(tmp_path: pathlib.Path) -> N
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
 
     with pytest.raises(FileNotFoundError, match="state.jsonl"):
-        refresh_waiting_queue(cwd=queue_dir)
+        refresh_waiting_queue(queue_directory=queue_dir)
 
 
 @pytest.mark.ai_generated
@@ -879,7 +882,7 @@ def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.P
     ]
     _write_jsonl(queue_dir / "state.jsonl", entries)
 
-    refresh_waiting_queue(cwd=queue_dir)
+    refresh_waiting_queue(queue_directory=queue_dir)
 
     waiting_file = queue_dir / "waiting.jsonl"
     assert waiting_file.exists()
@@ -898,7 +901,7 @@ def test_refresh_waiting_queue_writes_all_ordered_pending_entries(tmp_path: path
     ]
     _write_jsonl(queue_dir / "state.jsonl", entries)
 
-    refresh_waiting_queue(cwd=queue_dir)
+    refresh_waiting_queue(queue_directory=queue_dir)
 
     waiting_entries = _read_jsonl(queue_dir / "waiting.jsonl")
     assert len(waiting_entries) == 5
@@ -916,7 +919,7 @@ def test_refresh_waiting_queue_prunes_last_submitted_entries_with_output_or_logs
 
     _write_jsonl(queue_dir / "last_submitted.jsonl", [pending_entry, with_output_entry, with_logs_entry])
 
-    refresh_waiting_queue(cwd=queue_dir)
+    refresh_waiting_queue(queue_directory=queue_dir)
 
     last_submitted_entries = _read_jsonl(queue_dir / "last_submitted.jsonl")
     assert len(last_submitted_entries) == 1
@@ -1112,7 +1115,7 @@ def test_submit_next_submits_first_entry_directly(tmp_path: pathlib.Path) -> Non
     )
 
     with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
-        result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
 
@@ -1150,7 +1153,7 @@ def test_submit_next_submits_first_entry_with_existing_failure_dirs(tmp_path: pa
     )
 
     with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
-        result = _submit_next(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
 
@@ -1174,7 +1177,7 @@ def test_prepare_queue_calls_prepare_for_each_qualifying_asset(tmp_path: pathlib
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        prepare_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert mock_prepare.call_count == 2
     prepared_ids = {call.kwargs["content_id"] for call in mock_prepare.call_args_list}
@@ -1197,7 +1200,7 @@ def test_prepare_queue_skips_when_failures_reach_max(tmp_path: pathlib.Path) -> 
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        prepare_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     mock_prepare.assert_not_called()
 
@@ -1219,7 +1222,7 @@ def test_prepare_queue_strips_commit_suffix_from_version(tmp_path: pathlib.Path)
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(cwd=queue_dir, dandiset_directory=dandiset_dir)
+        prepare_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert mock_prepare.call_count == 1
     assert mock_prepare.call_args.kwargs["pipeline_version"] == "v1.1.0"
@@ -1243,7 +1246,7 @@ def test_prepare_queue_passes_optional_args_through(tmp_path: pathlib.Path) -> N
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
         prepare_queue(
-            cwd=queue_dir,
+            queue_directory=queue_dir,
             dandiset_directory=dandiset_dir,
             pipeline_directory=fake_pipeline_dir,
             config_key="mit+engaging+revision-1",
@@ -1269,7 +1272,7 @@ def test_prepare_queue_limit_stops_after_n_assets(tmp_path: pathlib.Path) -> Non
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(cwd=queue_dir, dandiset_directory=dandiset_dir, limit=2)
+        prepare_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir, limit=2)
 
     assert mock_prepare.call_count == 2
 
@@ -1289,7 +1292,7 @@ def test_prepare_test_queue_calls_prepare_for_each_version_and_param(tmp_path: p
     (queue_dir / "queue_config.json").write_text(json.dumps(queue_config))
 
     with mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare:
-        prepare_test_queue(cwd=queue_dir)
+        prepare_test_queue(queue_directory=queue_dir)
 
     assert mock_prepare.call_count == 4
     observed = {
@@ -1310,7 +1313,7 @@ def test_prepare_test_queue_raises_when_aind_ephys_missing(tmp_path: pathlib.Pat
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {"test": {}}}))
 
     with pytest.raises(ValueError, match="aind\\+ephys"):
-        prepare_test_queue(cwd=queue_dir)
+        prepare_test_queue(queue_directory=queue_dir)
 
 
 @pytest.mark.ai_generated
@@ -1328,7 +1331,7 @@ def test_cli_prepare_test_calls_helper(tmp_path: pathlib.Path) -> None:
 
     assert result.exit_code == 0
     mock_prepare_test_queue.assert_called_once_with(
-        cwd=queue_dir,
+        queue_directory=queue_dir,
         pipeline_directory=None,
         config_key="default",
     )
@@ -1352,10 +1355,20 @@ def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
 
     assert result.exit_code == 0
     mock_prepare_test_queue.assert_called_once_with(
-        cwd=queue_dir,
+        queue_directory=queue_dir,
         pipeline_directory=None,
         config_key="mit+engaging+revision-1",
     )
+
+
+@pytest.mark.ai_generated
+def test_cli_prepare_test_required_queue_directory() -> None:
+    """dandicompute prepare aind --test requires --queue-directory."""
+    runner = CliRunner()
+    with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
+        result = runner.invoke(_dandicompute_group, ["prepare", "aind", "--test"])
+    assert result.exit_code != 0
+    assert "--queue-directory is required when using --test" in result.output
 
 
 @pytest.mark.ai_generated
@@ -1837,3 +1850,24 @@ def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert "No unsubmitted capsules found" in result.output
+
+
+@pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    "subcommand",
+    [
+        "clean",
+        "process",
+        "prepare",
+    ],
+)
+def test_cli_queue_subcommands_required_queue_directory(tmp_path: pathlib.Path, subcommand: str) -> None:
+    """Queue clean/process/prepare commands require --queue-directory."""
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+    args = ["queue", subcommand, "--dandiset-directory", str(dandiset_dir)]
+    runner = CliRunner()
+    with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
+        result = runner.invoke(_dandicompute_group, args)
+    assert result.exit_code != 0
+    assert "Missing option '--queue-directory'" in result.output

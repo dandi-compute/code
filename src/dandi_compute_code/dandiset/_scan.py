@@ -184,4 +184,4 @@ def write_state_and_waiting_jsonl(dandiset_directory: pathlib.Path, queue_direct
     This delegates to :func:`dandi_compute_code.queue.refresh_waiting_queue`
     to keep queue refresh logic in one place.
     """
-    refresh_waiting_queue(cwd=queue_directory, dandiset_directory=dandiset_directory)
+    refresh_waiting_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
