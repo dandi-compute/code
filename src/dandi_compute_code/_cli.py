@@ -228,7 +228,7 @@ def _queue_refresh_command(
     queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
 ) -> None:
-    """Regenerate waiting.jsonl after rescanning the dandiset directory."""
+    """Rescan the dandiset directory and regenerate waiting.jsonl."""
     try:
         refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
     except FileNotFoundError as error:

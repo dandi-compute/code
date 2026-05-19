@@ -508,11 +508,10 @@ def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
     """
     Scan *dandiset_directory*, regenerate ``state.jsonl``, and write ``waiting.jsonl``.
 
-    ``state.jsonl`` is regenerated first by scanning *dandiset_directory*. Then entries that are prepared
-    (``has_code=True``) but not yet run (``has_logs=False``,
-    ``has_output=False``) are ordered via :func:`order_queue` and written to
-    ``waiting.jsonl`` so that subsequent calls to :func:`process_queue` can
-    read them directly.
+    Entries that are prepared (``has_code=True``) but not yet run
+    (``has_logs=False``, ``has_output=False``) are ordered via
+    :func:`order_queue` and written to ``waiting.jsonl`` so that subsequent
+    calls to :func:`process_queue` can read them directly.
 
     Parameters
     ----------
