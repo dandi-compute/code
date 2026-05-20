@@ -24,7 +24,15 @@ except (OSError, json.JSONDecodeError):
 
 
 def _subject_session_to_dandi_path(entry: dict) -> str | None:
-    """Build a dandi_path from legacy subject/session keys when available."""
+    """
+    Build a BIDS-style dandi_path from legacy subject/session keys when available.
+
+    Returns
+    -------
+    str or None
+        ``sub-{subject}`` (optionally followed by ``/ses-{session}``) when
+        ``subject`` is present, otherwise ``None``.
+    """
     subject = entry.get("subject")
     if subject is None:
         return None
@@ -269,7 +277,9 @@ def _determine_running() -> bool:
 def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pathlib.Path, pathlib.Path]:
     """Return (flat_layout_path, legacy_nested_layout_path) for an attempt entry."""
     dandiset_id = entry["dandiset_id"]
-    dandi_path = entry.get("dandi_path") or _subject_session_to_dandi_path(entry)
+    dandi_path = entry.get("dandi_path")
+    if dandi_path is None:
+        dandi_path = _subject_session_to_dandi_path(entry)
     if not dandi_path:
         message = f"Entry missing dandi_path and subject/session fallback: {entry!r}"
         raise KeyError(message)
@@ -289,7 +299,9 @@ def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pat
 
 def _entry_identity(entry: dict) -> tuple:
     """Return a stable tuple key for matching queue/state/last-submitted entries."""
-    dandi_path = entry.get("dandi_path") or _subject_session_to_dandi_path(entry)
+    dandi_path = entry.get("dandi_path")
+    if dandi_path is None:
+        dandi_path = _subject_session_to_dandi_path(entry)
 
     return (
         entry.get("dandiset_id"),
