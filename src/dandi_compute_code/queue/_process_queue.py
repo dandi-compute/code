@@ -250,16 +250,17 @@ def _count_dandiset_failures(
     return failure_count
 
 
-def _determine_running() -> bool:
+def _count_running_aind_ephys_pipeline_jobs() -> int:
     """
-    Check whether any AIND jobs are currently running via the SLURM scheduler.
+    Count currently running AIND Ephys pipeline jobs via the SLURM scheduler.
 
-    Calls ``squeue --me --format=%j`` and looks for any job names containing 'AIND'.
+    Calls ``squeue --me --format=%j`` and counts jobs whose name is exactly
+    ``AIND-Ephys-Pipeline``.
 
     Returns
     -------
-    bool
-        True if at least one AIND job is currently running, False otherwise.
+    int
+        Number of running jobs with SLURM job-name ``AIND-Ephys-Pipeline``.
     """
     command = ["squeue", "--me", "--format=%j"]
     result = subprocess.run(command, capture_output=True, text=True)
@@ -268,10 +269,7 @@ def _determine_running() -> bool:
         raise RuntimeError(message)
     if result.stderr:
         print(result.stderr)
-    for line in result.stdout.splitlines():
-        if "AIND" in line:
-            return True
-    return False
+    return sum(1 for line in result.stdout.splitlines() if line.strip() == "AIND-Ephys-Pipeline")
 
 
 def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pathlib.Path, pathlib.Path]:
@@ -576,11 +574,13 @@ def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
 
 def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
     """
-    Submit up to two jobs from the priority-ordered ``waiting.jsonl`` when idle.
+    Submit jobs from the priority-ordered ``waiting.jsonl`` up to two total
+    running ``AIND-Ephys-Pipeline`` SLURM jobs.
 
     If ``waiting.jsonl`` is absent or empty, :func:`refresh_queue` is called
-    first to populate it from ``state.jsonl``. Then, if no AIND jobs are
-    currently running via SLURM, up to two valid entries are submitted.
+    first to populate it from ``state.jsonl``. Then ``squeue --me`` is checked
+    for currently running ``AIND-Ephys-Pipeline`` jobs, and up to the
+    difference from two jobs are submitted.
 
     Parameters
     ----------
@@ -601,12 +601,11 @@ def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
     if not waiting_file.exists() or not waiting_file.read_text().strip():
         refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
 
-    any_running = _determine_running()
-    if not any_running:
-        for _ in range(2):
-            submitted = _submit_next(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
-            if not submitted:
-                break
+    running_count = _count_running_aind_ephys_pipeline_jobs()
+    for _ in range(max(0, 2 - running_count)):
+        submitted = _submit_next(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
+        if not submitted:
+            break
 
 
 def _strip_commit_hash_suffix(version: str) -> str:

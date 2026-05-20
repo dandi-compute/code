@@ -24,7 +24,7 @@ from dandi_compute_code.queue._process_queue import (
     _attempt_dir_candidates,
     _build_processing_order,
     _count_dandiset_failures,
-    _determine_running,
+    _count_running_aind_ephys_pipeline_jobs,
     _resolve_params_key_to_id,
     _submit_next,
     _version_matches,
@@ -490,24 +490,27 @@ def test_build_processing_order_matches_new_style_version_with_code_hash() -> No
 
 
 # ---------------------------------------------------------------------------
-# Tests for _determine_running
+# Tests for _count_running_aind_ephys_pipeline_jobs
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.ai_generated
-def test_determine_running_true_when_aind_job_present() -> None:
-    """_determine_running returns True when an AIND job appears in squeue output."""
+def test_count_running_aind_ephys_pipeline_jobs_counts_exact_name_matches() -> None:
+    """Counts only exact AIND-Ephys-Pipeline job names from squeue output."""
     with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(stdout="JOBNAME\nAIND_ephys_job\nother_job\n", stderr="")
-        assert _determine_running() is True
+        mock_run.return_value = mock.MagicMock(
+            stdout="JOBNAME\nAIND-Ephys-Pipeline\nAIND-Ephys-Pipeline\nother_job\nAIND_ephys_job\n",
+            stderr="",
+        )
+        assert _count_running_aind_ephys_pipeline_jobs() == 2
 
 
 @pytest.mark.ai_generated
-def test_determine_running_false_when_no_aind_jobs() -> None:
-    """_determine_running returns False when no AIND jobs are in squeue output."""
+def test_count_running_aind_ephys_pipeline_jobs_returns_zero_when_no_exact_match() -> None:
+    """Returns zero when squeue output has no exact AIND-Ephys-Pipeline names."""
     with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value = mock.MagicMock(stdout="JOBNAME\nsome_other_job\n", stderr="")
-        assert _determine_running() is False
+        mock_run.return_value = mock.MagicMock(stdout="JOBNAME\nsome_other_job\nAIND\n", stderr="")
+        assert _count_running_aind_ephys_pipeline_jobs() == 0
 
 
 # ---------------------------------------------------------------------------
@@ -809,7 +812,7 @@ def test_process_queue_handles_empty_scan_when_waiting_file_missing(tmp_path: pa
 
     with (
         mock.patch("dandi_compute_code.queue._process_queue.scan_dandiset_directory", return_value=[]) as mock_scan,
-        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
+        mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
@@ -827,7 +830,7 @@ def test_process_queue_calls_order_queue_when_waiting_empty(tmp_path: pathlib.Pa
 
     with (
         mock.patch("dandi_compute_code.queue._process_queue.refresh_queue") as mock_refresh,
-        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
+        mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
@@ -845,7 +848,7 @@ def test_process_queue_skips_order_queue_when_waiting_non_empty(tmp_path: pathli
 
     with (
         mock.patch("dandi_compute_code.queue._process_queue.refresh_queue") as mock_refresh,
-        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
+        mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
@@ -861,7 +864,7 @@ def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> N
     dandiset_dir.mkdir()
 
     with (
-        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
+        mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=0),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next", return_value=True) as mock_submit,
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
@@ -871,19 +874,36 @@ def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> N
 
 @pytest.mark.ai_generated
 def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path) -> None:
-    """process_queue does NOT call _submit_next when AIND jobs are currently running."""
+    """process_queue does not submit when two AIND-Ephys-Pipeline jobs already run."""
     queue_dir = _make_queue_dir(tmp_path)
     _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
     with (
-        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=True),
+        mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     mock_submit.assert_not_called()
+
+
+@pytest.mark.ai_generated
+def test_process_queue_submits_one_when_one_job_running(tmp_path: pathlib.Path) -> None:
+    """process_queue submits once when exactly one AIND-Ephys-Pipeline job is running."""
+    queue_dir = _make_queue_dir(tmp_path)
+    _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    with (
+        mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=1),
+        mock.patch("dandi_compute_code.queue._process_queue._submit_next", return_value=True) as mock_submit,
+    ):
+        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+
+    assert mock_submit.call_count == 1
 
 
 @pytest.mark.ai_generated
@@ -895,7 +915,7 @@ def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathli
     dandiset_dir.mkdir()
 
     with (
-        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
+        mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=0),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next", return_value=True) as mock_submit,
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
@@ -916,7 +936,7 @@ def test_process_queue_stops_submitting_when_queue_exhausted(tmp_path: pathlib.P
     dandiset_dir.mkdir()
 
     with (
-        mock.patch("dandi_compute_code.queue._process_queue._determine_running", return_value=False),
+        mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=0),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next", side_effect=[True, False]) as mock_submit,
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
