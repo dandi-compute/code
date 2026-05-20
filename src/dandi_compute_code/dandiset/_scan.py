@@ -10,6 +10,15 @@ _ATTEMPT_DIR_RE = re.compile(
     r"(?:version-(?P<version_in_name>.+?)_)?params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)"
 )
 _ATTEMPT_SUFFIX_RE = re.compile(r"_attempt-\d+$")
+_SANDBOX_DANDISET_ID = "214527"
+_SANDBOX_API_URL = "https://api.sandbox.dandiarchive.org/api"
+
+
+def _create_dandi_api_client(*, api_token: str, dandiset_id: str) -> dandi.dandiapi.DandiAPIClient:
+    """Create a DANDI API client, routing known sandbox dandiset IDs to the sandbox API."""
+    if dandiset_id == _SANDBOX_DANDISET_ID:
+        return dandi.dandiapi.DandiAPIClient(token=api_token, api_url=_SANDBOX_API_URL)
+    return dandi.dandiapi.DandiAPIClient(token=api_token)
 
 
 def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str:
@@ -44,7 +53,7 @@ def _lookup_asset_size_bytes(
     content_id: str,
 ) -> int | None:
     """Lookup asset size from DANDI API and confirm by matching blob ID to ``content_id``."""
-    client = dandi.dandiapi.DandiAPIClient(token=api_token)
+    client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
     dandiset = client.get_dandiset(dandiset_id=dandiset_id)
     asset_path = f"sub-{subject}/"
     if session is not None:
@@ -110,7 +119,7 @@ def _lookup_job_completion_time(
     log_asset_path: str,
 ) -> str | None:
     """Look up the ``dateModified`` field for a log asset in the DANDI API."""
-    client = dandi.dandiapi.DandiAPIClient(token=api_token)
+    client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
     dandiset = client.get_dandiset(dandiset_id=dandiset_id)
 
     matching_assets = list(dandiset.get_assets_with_path_prefix(path=log_asset_path))

@@ -560,6 +560,73 @@ def test_scan_parses_asset_size_from_dandi_asset_lookup(tmp_path: pathlib.Path) 
 
 
 @pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    ("dandiset_id", "expected_api_url"),
+    [
+        ("000001", None),
+        ("214527", "https://api.sandbox.dandiarchive.org/api"),
+    ],
+)
+def test_scan_uses_expected_dandi_api_url_for_dandiset(
+    tmp_path: pathlib.Path,
+    dandiset_id: str,
+    expected_api_url: str | None,
+) -> None:
+    """scan_dandiset_directory uses sandbox API only for the testing-source dandiset."""
+    content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+    attempt_dir = _make_attempt_dir(
+        tmp_path,
+        dandiset_id,
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        content_id=content_id,
+        with_logs=True,
+    )
+    expected_log_path = (attempt_dir / "logs" / "nextflow.log").relative_to(tmp_path).as_posix()
+
+    class _FakeAsset:
+        def get_raw_metadata(self) -> dict[str, Any]:
+            return {
+                "contentUrl": [
+                    "https://api.dandiarchive.org/api/assets/download/",
+                    f"https://dandiarchive.s3.amazonaws.com/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}",
+                ],
+                "contentSize": 123,
+                "dateModified": "2024-06-15T12:30:00+00:00",
+            }
+
+    class _FakeDandiset:
+        def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
+            if path in {f"sub-mouse01/{content_id}", expected_log_path}:
+                return iter([_FakeAsset()])
+            return iter(())
+
+    class _FakeClient:
+        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
+            return _FakeDandiset()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
+        mock.patch(
+            "dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()
+        ) as mock_client_ctor,
+    ):
+        scan_dandiset_directory(dandiset_directory=tmp_path)
+
+    assert mock_client_ctor.call_count >= 2
+    for call in mock_client_ctor.call_args_list:
+        assert call.kwargs["token"] == "live-token"
+        if expected_api_url is None:
+            assert "api_url" not in call.kwargs
+        else:
+            assert call.kwargs["api_url"] == expected_api_url
+
+
+@pytest.mark.ai_generated
 def test_scan_raises_on_missing_nwb_file_path(tmp_path: pathlib.Path) -> None:
     """A missing NWB_FILE_PATH in submit.sh raises an error."""
     attempt_dir = _make_attempt_dir(
