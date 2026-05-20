@@ -138,10 +138,9 @@ def test_scan_single_failed_attempt(tmp_path: pathlib.Path) -> None:
     assert len(records) == 1
     r = records[0]
     assert r["dandiset_id"] == "000001"
+    assert r["dandi_path"] == "sub-mouse01"
     assert r["content_id"] == DEFAULT_TEST_CONTENT_ID
     assert r["asset_size_bytes"] is None
-    assert r["subject"] == "mouse01"
-    assert r["session"] is None
     assert r["pipeline"] == "aind+ephys"
     assert r["version"] == "v1.0"
     assert r["params"] == "abc1234"
@@ -250,8 +249,27 @@ def test_scan_with_session_level(tmp_path: pathlib.Path) -> None:
     )
     records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
-    assert records[0]["session"] == "20230101"
-    assert records[0]["subject"] == "mouse01"
+    assert records[0]["dandi_path"] == "sub-mouse01/ses-20230101"
+
+
+@pytest.mark.ai_generated
+def test_scan_parses_non_bids_entity_path_into_dandi_path(tmp_path: pathlib.Path) -> None:
+    """scan_dandiset_directory stores the full path segment even when no sub/ses entities exist."""
+    attempt_dir = (
+        tmp_path
+        / "derivatives"
+        / "dandiset-000001"
+        / "sample-slab01"
+        / "slice-sliceA"
+        / "pipeline-aind+ephys"
+        / "version-v1.0_params-abc1234_config-def5678_attempt-1"
+    )
+    (attempt_dir / "code").mkdir(parents=True)
+    (attempt_dir / "code" / "submit.sh").write_text(f'NWB_FILE_PATH="{DEFAULT_TEST_CONTENT_ID}"\n')
+
+    records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    assert records[0]["dandi_path"] == "sample-slab01/slice-sliceA"
 
 
 @pytest.mark.ai_generated
@@ -883,8 +901,7 @@ def test_refresh_queue_with_dandiset_directory_prunes_last_submitted_entries_wit
                 json.dumps(
                     {
                         "dandiset_id": "000001",
-                        "subject": "mouse01",
-                        "session": None,
+                        "dandi_path": "sub-mouse01",
                         "pipeline": "test-pipeline",
                         "version": "v1.0",
                         "params": "abc1234",
@@ -895,8 +912,7 @@ def test_refresh_queue_with_dandiset_directory_prunes_last_submitted_entries_wit
                 json.dumps(
                     {
                         "dandiset_id": "000002",
-                        "subject": "mouse02",
-                        "session": None,
+                        "dandi_path": "sub-mouse02",
                         "pipeline": "test-pipeline",
                         "version": "v1.0",
                         "params": "abc1234",
@@ -907,8 +923,7 @@ def test_refresh_queue_with_dandiset_directory_prunes_last_submitted_entries_wit
                 json.dumps(
                     {
                         "dandiset_id": "000003",
-                        "subject": "mouse03",
-                        "session": None,
+                        "dandi_path": "sub-mouse03",
                         "pipeline": "test-pipeline",
                         "version": "v1.0",
                         "params": "abc1234",
@@ -987,8 +1002,7 @@ def test_cli_queue_refresh_requires_dandiset_directory(tmp_path: pathlib.Path) -
     queue_dir.mkdir()
     entry = {
         "dandiset_id": "000001",
-        "subject": "mouse01",
-        "session": None,
+        "dandi_path": "sub-mouse01",
         "pipeline": "aind+ephys",
         "version": "v1.0",
         "params": "abc1234",

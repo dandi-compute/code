@@ -121,6 +121,7 @@ def _mock_urlopen_response(payload: object) -> mock.MagicMock:
 def _make_state_entry(
     *,
     dandiset_id: str = "000001",
+    dandi_path: str | None = None,
     subject: str = "mouse01",
     session: str | None = None,
     pipeline: str = "test",
@@ -134,10 +135,12 @@ def _make_state_entry(
     created_at: str = "2024-01-01T00:00:00+00:00",
 ) -> dict:
     """Build a minimal state.jsonl entry."""
+    normalized_dandi_path = dandi_path or "/".join(
+        filter(None, [f"sub-{subject}", f"ses-{session}" if session else None])
+    )
     return {
         "dandiset_id": dandiset_id,
-        "subject": subject,
-        "session": session,
+        "dandi_path": normalized_dandi_path,
         "pipeline": pipeline,
         "version": version,
         "params": params,
@@ -152,22 +155,21 @@ def _make_state_entry(
 
 @pytest.mark.ai_generated
 @pytest.mark.parametrize(
-    ("session", "relative_prefix"),
+    ("dandi_path", "relative_prefix"),
     [
-        (None, pathlib.Path("derivatives/dandiset-000001/sub-mouse01/pipeline-test")),
-        ("ses01", pathlib.Path("derivatives/dandiset-000001/sub-mouse01/ses-ses01/pipeline-test")),
+        ("sub-mouse01", pathlib.Path("derivatives/dandiset-000001/sub-mouse01/pipeline-test")),
+        ("sub-mouse01/ses-01", pathlib.Path("derivatives/dandiset-000001/sub-mouse01/ses-01/pipeline-test")),
     ],
 )
 def test_attempt_dir_candidates_constructs_both_layouts(
-    session: str | None,
+    dandi_path: str,
     relative_prefix: pathlib.Path,
     tmp_path: pathlib.Path,
 ) -> None:
     """_attempt_dir_candidates returns both flat and legacy attempt directory paths."""
     entry = _make_state_entry(
         dandiset_id="000001",
-        subject="mouse01",
-        session=session,
+        dandi_path=dandi_path,
         pipeline="test",
         version="v1.0",
         params="abc1234",
@@ -179,6 +181,50 @@ def test_attempt_dir_candidates_constructs_both_layouts(
 
     assert flat_path == tmp_path / relative_prefix / "version-v1.0_params-abc1234_config-def5678_attempt-2"
     assert legacy_path == tmp_path / relative_prefix / "version-v1.0/params-abc1234_config-def5678_attempt-2"
+
+
+@pytest.mark.ai_generated
+def test_attempt_dir_candidates_supports_legacy_subject_session_entry(tmp_path: pathlib.Path) -> None:
+    """_attempt_dir_candidates falls back to subject/session when dandi_path is missing."""
+    entry = {
+        "dandiset_id": "000001",
+        "subject": "mouse01",
+        "session": "01",
+        "pipeline": "test",
+        "version": "v1.0",
+        "params": "abc1234",
+        "config": "def5678",
+        "attempt": 2,
+    }
+
+    with pytest.warns(
+        UserWarning,
+        match=(
+            "Legacy queue entry missing dandi_path; falling back to subject/session-derived path. "
+            "Please update queue entries to include dandi_path."
+        ),
+    ):
+        flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
+
+    assert flat_path == (
+        tmp_path
+        / "derivatives"
+        / "dandiset-000001"
+        / "sub-mouse01"
+        / "ses-01"
+        / "pipeline-test"
+        / "version-v1.0_params-abc1234_config-def5678_attempt-2"
+    )
+    assert legacy_path == (
+        tmp_path
+        / "derivatives"
+        / "dandiset-000001"
+        / "sub-mouse01"
+        / "ses-01"
+        / "pipeline-test"
+        / "version-v1.0"
+        / "params-abc1234_config-def5678_attempt-2"
+    )
 
 
 def _make_attempt_dir_with_script(
@@ -1686,8 +1732,7 @@ def test_clean_unsubmitted_capsules_skips_last_submitted_entries(tmp_path: pathl
 
     submitted_entry = {
         "dandiset_id": "000001",
-        "subject": "mouse01",
-        "session": None,
+        "dandi_path": "sub-mouse01",
         "pipeline": "aind+ephys",
         "version": "v1.0",
         "params": "abc1234",
@@ -1857,8 +1902,7 @@ def test_clean_unsubmitted_capsules_removes_only_queued_not_submitted(tmp_path: 
 
     submitted_entry = {
         "dandiset_id": "000002",
-        "subject": "mouse02",
-        "session": None,
+        "dandi_path": "sub-mouse02",
         "pipeline": "aind+ephys",
         "version": "v1.0",
         "params": "abc1234",
