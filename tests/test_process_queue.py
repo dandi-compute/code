@@ -197,7 +197,11 @@ def test_attempt_dir_candidates_supports_legacy_subject_session_entry(tmp_path: 
         "attempt": 2,
     }
 
-    flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
+    with pytest.warns(
+        UserWarning,
+        match="Legacy queue entry missing dandi_path; falling back to subject/session-derived path.",
+    ):
+        flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
 
     assert flat_path == (
         tmp_path

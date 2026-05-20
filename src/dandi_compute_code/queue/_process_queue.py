@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import urllib.request
+import warnings
 from collections import defaultdict
 
 from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
@@ -277,6 +278,11 @@ def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pat
     dandiset_id = entry["dandiset_id"]
     dandi_path = entry.get("dandi_path")
     if dandi_path is None:
+        # TODO: Remove this fallback once legacy queue entries without dandi_path are no longer supported.
+        warnings.warn(
+            "Legacy queue entry missing dandi_path; falling back to subject/session-derived path.",
+            stacklevel=2,
+        )
         dandi_path = _subject_session_to_dandi_path(entry)
     if not dandi_path:
         message = f"Entry missing dandi_path and subject/session fallback: {entry!r}"
