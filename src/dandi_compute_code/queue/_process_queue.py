@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import urllib.request
+from collections import defaultdict
 
 from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
 from ..dandiset import scan_dandiset_directory
@@ -611,9 +612,9 @@ def prepare_queue(
     The per-pipeline failure cap (``max_fail_per_dandiset`` in ``queue_config.json``)
     is enforced by reading the existing ``state.jsonl`` file inside
     *queue_directory*.  Entries with ``has_code=True``, ``has_logs=True``, and
-    ``has_output=False`` are counted as failures for the relevant pipeline and
-    version.  Run :func:`refresh_queue` beforehand to ensure ``state.jsonl`` is
-    up to date.
+    ``has_output=False`` are counted as failures for the relevant pipeline,
+    version, and source Dandiset.  Run :func:`refresh_queue` beforehand to
+    ensure ``state.jsonl`` is up to date.
 
     Parameters
     ----------
@@ -651,6 +652,21 @@ def prepare_queue(
         else []
     )
 
+    # Build from all known state entries. A content ID is expected to map to a
+    # stable source dandiset in normal operation; ambiguous mappings are handled
+    # conservatively below by skipping max-failure enforcement for that asset.
+    content_id_to_dandiset_ids: dict[str, set[str]] = {}
+    for entry in state_entries:
+        content_id = entry.get("content_id")
+        dandiset_id = entry.get("dandiset_id")
+        if content_id and dandiset_id:
+            content_id_to_dandiset_ids.setdefault(content_id, set()).add(dandiset_id)
+    failure_entries = [
+        entry
+        for entry in state_entries
+        if entry.get("has_code") and entry.get("has_logs") and not entry.get("has_output")
+    ]
+
     prepared_count = 0
     for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
         if limit is not None and prepared_count >= limit:
@@ -663,31 +679,43 @@ def prepare_queue(
                     break
                 pipeline_cfg = queue_config["pipelines"][pipeline_name]
 
-                # Respect the per-dandiset failure cap using failures recorded in state.jsonl.
                 max_fail = pipeline_cfg.get("max_fail_per_dandiset")
+                failure_count_by_dandiset: defaultdict[str, int] = defaultdict(int)
                 if max_fail is not None:
-                    failure_count = sum(
-                        1
-                        for e in state_entries
-                        if e.get("pipeline") == pipeline_name
-                        and _version_matches(e.get("version", ""), version)
-                        and e.get("has_code")
-                        and e.get("has_logs")
-                        and not e.get("has_output")
-                    )
-                    if failure_count >= max_fail:
-                        print(
-                            f"Skipping preparation for {pipeline_name}/{version}/{params}: "
-                            f"failure count ({failure_count}) has reached max_fail_per_dandiset ({max_fail})."
-                        )
-                        continue
-
+                    for entry in failure_entries:
+                        if entry.get("pipeline") != pipeline_name or not _version_matches(
+                            entry.get("version", ""), version
+                        ):
+                            continue
+                        dandiset_id = entry.get("dandiset_id")
+                        if not dandiset_id:
+                            continue
+                        failure_count_by_dandiset[dandiset_id] += 1
                 # Strip the trailing commit-hash suffix before passing to prepare_aind_ephys_job.
                 submission_version = _strip_commit_hash_suffix(version)
 
                 for content_id in sorted(content_ids):
                     if limit is not None and prepared_count >= limit:
                         break
+                    if max_fail is not None:
+                        dandiset_ids = content_id_to_dandiset_ids.get(content_id, set())
+                        if len(dandiset_ids) == 1:
+                            dandiset_id = next(iter(dandiset_ids))
+                            failure_count = failure_count_by_dandiset.get(dandiset_id, 0)
+                            if failure_count >= max_fail:
+                                print(
+                                    f"Skipping preparation for {pipeline_name}/{version}/{params}/{content_id}: "
+                                    f"failure count ({failure_count}) for dandiset-{dandiset_id} has reached "
+                                    f"max_fail_per_dandiset ({max_fail})."
+                                )
+                                continue
+                        else:
+                            mapped_dandisets = ", ".join(sorted(dandiset_ids)) if dandiset_ids else "<none>"
+                            print(
+                                f"Preparing {content_id} without max_fail_per_dandiset enforcement for "
+                                f"{pipeline_name}/{version}/{params}: expected exactly 1 mapped dandiset but "
+                                f"found {len(dandiset_ids)} ({mapped_dandisets})."
+                            )
 
                     print(f"Preparing content ID: {content_id}")
                     prepare_aind_ephys_job(
