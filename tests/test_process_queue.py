@@ -2005,3 +2005,111 @@ def test_cli_queue_prepare_required_queue_directory() -> None:
         result = runner.invoke(_dandicompute_group, ["queue", "prepare"])
     assert result.exit_code != 0
     assert "Missing option '--queue'" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_prepare_test_flag_passes_test_content_id(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue prepare --test passes TEST_QUEUE_CONTENT_ID to prepare_queue."""
+    queue_dir = _make_queue_dir(tmp_path)
+    runner = CliRunner()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
+        mock.patch("dandi_compute_code._cli.prepare_queue") as mock_prepare_queue,
+    ):
+        result = runner.invoke(_dandicompute_group, ["queue", "prepare", "--queue", str(queue_dir), "--test"])
+
+    assert result.exit_code == 0, result.output
+    mock_prepare_queue.assert_called_once_with(
+        queue_directory=queue_dir,
+        pipeline_directory=None,
+        config_key="default",
+        content_ids=[TEST_QUEUE_CONTENT_ID],
+        params_override=None,
+        limit=None,
+    )
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_prepare_test_flag_with_limit(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue prepare --test --limit forwards limit to prepare_queue."""
+    queue_dir = _make_queue_dir(tmp_path)
+    runner = CliRunner()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
+        mock.patch("dandi_compute_code._cli.prepare_queue") as mock_prepare_queue,
+    ):
+        result = runner.invoke(
+            _dandicompute_group, ["queue", "prepare", "--queue", str(queue_dir), "--test", "--limit", "3"]
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_prepare_queue.assert_called_once_with(
+        queue_directory=queue_dir,
+        pipeline_directory=None,
+        config_key="default",
+        content_ids=[TEST_QUEUE_CONTENT_ID],
+        params_override=None,
+        limit=3,
+    )
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_prepare_param_flag(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue prepare --param forwards params_override to prepare_queue."""
+    queue_dir = _make_queue_dir(tmp_path)
+    runner = CliRunner()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
+        mock.patch("dandi_compute_code._cli.prepare_queue") as mock_prepare_queue,
+    ):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["queue", "prepare", "--queue", str(queue_dir), "--param", "custom_params"],
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_prepare_queue.assert_called_once_with(
+        queue_directory=queue_dir,
+        pipeline_directory=None,
+        config_key="default",
+        content_ids=None,
+        params_override="custom_params",
+        limit=None,
+    )
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_params_override_replaces_params_priority(tmp_path: pathlib.Path) -> None:
+    """prepare_queue uses params_override instead of params_priority when provided."""
+    queue_dir = _make_queue_dir(tmp_path)
+
+    qualifying_ids = ["asset-bbb"]
+
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+    ):
+        mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
+        prepare_queue(queue_directory=queue_dir, params_override="custom_params")
+
+    assert mock_prepare.call_count == 1
+    assert mock_prepare.call_args.kwargs["parameters_key"] == "custom_params"
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_test_content_id_skips_network_fetch(tmp_path: pathlib.Path) -> None:
+    """prepare_queue with content_ids=[TEST_QUEUE_CONTENT_ID] skips the network fetch."""
+    queue_dir = _make_queue_dir(tmp_path)
+
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+    ):
+        prepare_queue(queue_directory=queue_dir, content_ids=[TEST_QUEUE_CONTENT_ID])
+
+    mock_urlopen.assert_not_called()
+    assert mock_prepare.call_count == 1
+    assert mock_prepare.call_args.kwargs["content_id"] == TEST_QUEUE_CONTENT_ID

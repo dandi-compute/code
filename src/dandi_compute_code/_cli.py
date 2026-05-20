@@ -332,11 +332,29 @@ def _queue_process_command(
     type=click.IntRange(min=1),
     default=None,
 )
+@click.option(
+    "--test",
+    "test",
+    help="Prepare test queue entries using the known test content ID instead of fetching from the network.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
+@click.option(
+    "--param",
+    "params_override",
+    help="Override the params_priority for all pipelines with this single parameters key.",
+    required=False,
+    type=str,
+    default=None,
+)
 def _queue_prepare_command(
     queue_directory: pathlib.Path,
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
     limit: int | None = None,
+    test: bool = False,
+    params_override: str | None = None,
 ) -> None:
     """Prepare queued jobs across configured pipelines without submitting them."""
     if "DANDI_API_KEY" not in os.environ:
@@ -345,6 +363,8 @@ def _queue_prepare_command(
         queue_directory=queue_directory,
         pipeline_directory=pipeline_directory,
         config_key=config_key,
+        content_ids=[TEST_QUEUE_CONTENT_ID] if test else None,
+        params_override=params_override,
         limit=limit,
     )
 
