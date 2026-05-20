@@ -1279,7 +1279,8 @@ def test_prepare_queue_skips_when_failures_reach_max(tmp_path: pathlib.Path) -> 
         prepare_queue(queue_directory=queue_dir)
 
     assert mock_prepare.call_count == 1
-    assert mock_prepare.call_args.kwargs["content_id"] == "asset-bbb"
+    prepared_ids = [call.kwargs["content_id"] for call in mock_prepare.call_args_list]
+    assert prepared_ids == ["asset-bbb"]
 
 
 @pytest.mark.ai_generated

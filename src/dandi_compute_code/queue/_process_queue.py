@@ -651,11 +651,12 @@ def prepare_queue(
         else []
     )
 
-    content_id_to_dandiset_id = {
-        entry["content_id"]: entry["dandiset_id"]
-        for entry in state_entries
-        if entry.get("content_id") and entry.get("dandiset_id")
-    }
+    content_id_to_dandiset_ids: dict[str, set[str]] = {}
+    for entry in state_entries:
+        content_id = entry.get("content_id")
+        dandiset_id = entry.get("dandiset_id")
+        if content_id and dandiset_id:
+            content_id_to_dandiset_ids.setdefault(content_id, set()).add(dandiset_id)
     failure_entries = [
         entry
         for entry in state_entries
@@ -693,8 +694,9 @@ def prepare_queue(
                     if limit is not None and prepared_count >= limit:
                         break
                     if max_fail is not None:
-                        dandiset_id = content_id_to_dandiset_id.get(content_id)
-                        if dandiset_id is not None:
+                        dandiset_ids = content_id_to_dandiset_ids.get(content_id, set())
+                        if len(dandiset_ids) == 1:
+                            dandiset_id = next(iter(dandiset_ids))
                             failure_count = failure_count_by_dandiset.get(dandiset_id, 0)
                             if failure_count >= max_fail:
                                 print(
