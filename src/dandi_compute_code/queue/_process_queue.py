@@ -23,6 +23,19 @@ except (OSError, json.JSONDecodeError):
     _AIND_EPHYS_PARAMS_REGISTRY = {}
 
 
+def _subject_session_to_dandi_path(entry: dict) -> str | None:
+    """Build a dandi_path from legacy subject/session keys when available."""
+    subject = entry.get("subject")
+    if subject is None:
+        return None
+
+    dandi_path_parts = [f"sub-{subject}"]
+    session = entry.get("session")
+    if session:
+        dandi_path_parts.append(f"ses-{session}")
+    return "/".join(dandi_path_parts)
+
+
 def _resolve_params_key_to_id(pipeline: str, params_key: str) -> str:
     """
     Resolve a human-readable parameters key to its 7-character hash ID.
@@ -233,7 +246,7 @@ def _determine_running() -> bool:
     """
     Check whether any AIND jobs are currently running via the SLURM scheduler.
 
-    Calls ``squeue --format=%j`` and looks for any job names containing 'AIND'.
+    Calls ``squeue --me --format=%j`` and looks for any job names containing 'AIND'.
 
     Returns
     -------
@@ -256,14 +269,10 @@ def _determine_running() -> bool:
 def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pathlib.Path, pathlib.Path]:
     """Return (flat_layout_path, legacy_nested_layout_path) for an attempt entry."""
     dandiset_id = entry["dandiset_id"]
-    dandi_path = entry.get("dandi_path")
+    dandi_path = entry.get("dandi_path") or _subject_session_to_dandi_path(entry)
     if not dandi_path:
-        subject = entry["subject"]
-        session = entry.get("session")
-        dandi_path_parts = [f"sub-{subject}"]
-        if session:
-            dandi_path_parts.append(f"ses-{session}")
-        dandi_path = "/".join(dandi_path_parts)
+        message = f"Entry missing dandi_path and subject/session fallback: {entry!r}"
+        raise KeyError(message)
     pipeline = entry["pipeline"]
     version = entry["version"]
     params = entry["params"]
@@ -280,12 +289,7 @@ def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pat
 
 def _entry_identity(entry: dict) -> tuple:
     """Return a stable tuple key for matching queue/state/last-submitted entries."""
-    dandi_path = entry.get("dandi_path")
-    if dandi_path is None and entry.get("subject"):
-        dandi_path_parts = [f"sub-{entry.get('subject')}"]
-        if entry.get("session"):
-            dandi_path_parts.append(f"ses-{entry.get('session')}")
-        dandi_path = "/".join(dandi_path_parts)
+    dandi_path = entry.get("dandi_path") or _subject_session_to_dandi_path(entry)
 
     return (
         entry.get("dandiset_id"),
@@ -560,10 +564,10 @@ def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
 
 def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
     """
-    Submit up to two jobs from the priority-ordered ``waiting.jsonl``.
+    Submit up to two jobs from the priority-ordered ``waiting.jsonl`` when idle.
 
     If ``waiting.jsonl`` is absent or empty, :func:`refresh_queue` is called
-    first to populate it from ``state.jsonl``.  Then, if no AIND jobs are
+    first to populate it from ``state.jsonl``. Then, if no AIND jobs are
     currently running via SLURM, up to two valid entries are submitted.
 
     Parameters
