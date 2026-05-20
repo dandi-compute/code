@@ -1226,16 +1226,50 @@ def test_prepare_queue_calls_prepare_for_each_qualifying_asset(tmp_path: pathlib
 
 @pytest.mark.ai_generated
 def test_prepare_queue_skips_when_failures_reach_max(tmp_path: pathlib.Path) -> None:
-    """prepare_queue skips all assets when the failure count reaches max_fail_per_dandiset."""
+    """prepare_queue skips assets for dandisets whose failure count reaches max_fail_per_dandiset."""
     queue_dir = _make_queue_dir(tmp_path)
     # Write 2 failure entries to state.jsonl (== max_fail_per_dandiset from _EXAMPLE_QUEUE_CONFIG).
     failure_entries = [
-        _make_state_entry(pipeline="test", version="v1.0", attempt=1, has_code=True, has_logs=True, has_output=False),
-        _make_state_entry(pipeline="test", version="v1.0", attempt=2, has_code=True, has_logs=True, has_output=False),
+        {
+            **_make_state_entry(
+                dandiset_id="000001",
+                pipeline="test",
+                version="v1.0",
+                attempt=1,
+                has_code=True,
+                has_logs=True,
+                has_output=False,
+            ),
+            "content_id": "asset-aaa",
+        },
+        {
+            **_make_state_entry(
+                dandiset_id="000001",
+                pipeline="test",
+                version="v1.0",
+                attempt=2,
+                has_code=True,
+                has_logs=True,
+                has_output=False,
+            ),
+            "content_id": "asset-aaa",
+        },
+        {
+            **_make_state_entry(
+                dandiset_id="000002",
+                pipeline="test",
+                version="v1.0",
+                attempt=1,
+                has_code=True,
+                has_logs=False,
+                has_output=False,
+            ),
+            "content_id": "asset-bbb",
+        },
     ]
     _write_jsonl(queue_dir / "state.jsonl", failure_entries)
 
-    qualifying_ids = ["asset-bbb", "asset-ccc"]
+    qualifying_ids = ["asset-aaa", "asset-bbb"]
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
@@ -1244,7 +1278,8 @@ def test_prepare_queue_skips_when_failures_reach_max(tmp_path: pathlib.Path) -> 
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
         prepare_queue(queue_directory=queue_dir)
 
-    mock_prepare.assert_not_called()
+    assert mock_prepare.call_count == 1
+    assert mock_prepare.call_args.kwargs["content_id"] == "asset-bbb"
 
 
 @pytest.mark.ai_generated

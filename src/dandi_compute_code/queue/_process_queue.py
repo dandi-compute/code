@@ -611,9 +611,9 @@ def prepare_queue(
     The per-pipeline failure cap (``max_fail_per_dandiset`` in ``queue_config.json``)
     is enforced by reading the existing ``state.jsonl`` file inside
     *queue_directory*.  Entries with ``has_code=True``, ``has_logs=True``, and
-    ``has_output=False`` are counted as failures for the relevant pipeline and
-    version.  Run :func:`refresh_queue` beforehand to ensure ``state.jsonl`` is
-    up to date.
+    ``has_output=False`` are counted as failures for the relevant pipeline,
+    version, and source Dandiset.  Run :func:`refresh_queue` beforehand to
+    ensure ``state.jsonl`` is up to date.
 
     Parameters
     ----------
@@ -651,6 +651,12 @@ def prepare_queue(
         else []
     )
 
+    content_id_to_dandiset_id = {
+        entry["content_id"]: entry["dandiset_id"]
+        for entry in state_entries
+        if entry.get("content_id") and entry.get("dandiset_id")
+    }
+
     prepared_count = 0
     for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
         if limit is not None and prepared_count >= limit:
@@ -663,31 +669,33 @@ def prepare_queue(
                     break
                 pipeline_cfg = queue_config["pipelines"][pipeline_name]
 
-                # Respect the per-dandiset failure cap using failures recorded in state.jsonl.
                 max_fail = pipeline_cfg.get("max_fail_per_dandiset")
-                if max_fail is not None:
-                    failure_count = sum(
-                        1
-                        for e in state_entries
-                        if e.get("pipeline") == pipeline_name
-                        and _version_matches(e.get("version", ""), version)
-                        and e.get("has_code")
-                        and e.get("has_logs")
-                        and not e.get("has_output")
-                    )
-                    if failure_count >= max_fail:
-                        print(
-                            f"Skipping preparation for {pipeline_name}/{version}/{params}: "
-                            f"failure count ({failure_count}) has reached max_fail_per_dandiset ({max_fail})."
-                        )
-                        continue
-
                 # Strip the trailing commit-hash suffix before passing to prepare_aind_ephys_job.
                 submission_version = _strip_commit_hash_suffix(version)
 
                 for content_id in sorted(content_ids):
                     if limit is not None and prepared_count >= limit:
                         break
+                    if max_fail is not None:
+                        dandiset_id = content_id_to_dandiset_id.get(content_id)
+                        if dandiset_id is not None:
+                            failure_count = sum(
+                                1
+                                for e in state_entries
+                                if e.get("pipeline") == pipeline_name
+                                and _version_matches(e.get("version", ""), version)
+                                and e.get("dandiset_id") == dandiset_id
+                                and e.get("has_code")
+                                and e.get("has_logs")
+                                and not e.get("has_output")
+                            )
+                            if failure_count >= max_fail:
+                                print(
+                                    f"Skipping preparation for {pipeline_name}/{version}/{params}/{content_id}: "
+                                    f"failure count ({failure_count}) for dandiset-{dandiset_id} has reached "
+                                    f"max_fail_per_dandiset ({max_fail})."
+                                )
+                                continue
 
                     print(f"Preparing content ID: {content_id}")
                     prepare_aind_ephys_job(
