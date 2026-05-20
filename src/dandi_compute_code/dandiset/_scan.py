@@ -48,21 +48,18 @@ def _lookup_asset_size_bytes(
     *,
     api_token: str,
     dandiset_id: str,
-    subject: str,
-    session: str | None,
+    dandi_path: str,
     content_id: str,
 ) -> int | None:
     """Lookup asset size from DANDI API and confirm by matching blob ID to ``content_id``."""
     client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
     dandiset = client.get_dandiset(dandiset_id=dandiset_id)
-    asset_path_prefix = f"sub-{subject}"
-    session_pattern = f"ses-{session}" if session is not None else None
+    asset_path_prefix = dandi_path
 
     filtered_assets: list[tuple[str, dict]] = []
     for asset in dandiset.get_assets_with_path_prefix(path=asset_path_prefix):
-        if session_pattern is None or session_pattern in asset.path:
-            metadata = asset.get_raw_metadata()
-            filtered_assets.append((asset.path, metadata))
+        metadata = asset.get_raw_metadata()
+        filtered_assets.append((asset.path, metadata))
 
     matching_metadata: list[dict] = []
     for _asset_path, metadata in filtered_assets:
@@ -77,13 +74,12 @@ def _lookup_asset_size_bytes(
 
     if len(matching_metadata) != 1:
         candidate_paths = [p for p, _ in filtered_assets]
-        session_filter_description = f" containing {session_pattern}" if session_pattern is not None else ""
         warnings.warn(
             (
                 f"Unable to resolve asset_size_bytes for {content_id}. "
-                f"Expected exactly 1 asset under {asset_path_prefix}{session_filter_description} "
+                f"Expected exactly 1 asset under {asset_path_prefix} "
                 f"with blob ID {content_id} but found {len(matching_metadata)}. "
-                f"Matching session assets: {candidate_paths}."
+                f"Matching path assets: {candidate_paths}."
             ),
             stacklevel=2,
         )
@@ -143,12 +139,12 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
 
     The expected path structure (relative to ``derivatives/dandiset-{dandiset_id}/``) is::
 
-        sub-{subject}/[ses-{session}/]pipeline-{pipeline}/
+        <dandi-path>/pipeline-{pipeline}/
             version-{version}_params-{params}_config-{config}_attempt-{attempt}/
 
     Legacy layout with an additional version directory is also accepted::
 
-        sub-{subject}/[ses-{session}/]pipeline-{pipeline}/version-{version}/
+        <dandi-path>/pipeline-{pipeline}/version-{version}/
             params-{params}_config-{config}_attempt-{attempt}/
 
     Parameters
@@ -185,23 +181,17 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
         return None
     pipeline = pipeline_dir.name[len("pipeline-") :]
 
-    # The directory above pipeline-* is either ses-* or sub-*
-    above_pipeline = pipeline_dir.parent
-    if above_pipeline.name.startswith("ses-"):
-        session: str | None = above_pipeline.name[len("ses-") :]
-        subject_dir = above_pipeline.parent
-    else:
-        session = None
-        subject_dir = above_pipeline
-
-    if not subject_dir.name.startswith("sub-"):
-        return None
-    subject = subject_dir.name[len("sub-") :]
-
-    dandiset_dir = subject_dir.parent
-    if not dandiset_dir.name.startswith("dandiset-"):
+    dandiset_dir = next(
+        (parent for parent in pipeline_dir.parents if parent.name.startswith("dandiset-")),
+        None,
+    )
+    if dandiset_dir is None:
         return None
     dandiset_id = dandiset_dir.name[len("dandiset-") :]
+    dandi_path_parts = pipeline_dir.relative_to(dandiset_dir).parts[:-1]
+    if not dandi_path_parts:
+        return None
+    dandi_path = pathlib.PurePosixPath(*dandi_path_parts).as_posix()
 
     has_code = (attempt_dir / "code").is_dir()
     has_output = (attempt_dir / "derivatives").is_dir()
@@ -213,8 +203,7 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     record = {
         "dandiset_id": dandiset_id,
         "content_id": content_id,
-        "subject": subject,
-        "session": session,
+        "dandi_path": dandi_path,
         "pipeline": pipeline,
         "version": version,
         "params": attempt_match.group("params"),
@@ -248,15 +237,14 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
     -------
     list[dict]
         A list of records, one per attempt directory, sorted by
-        ``(dandiset_id, subject, session, pipeline, version, params, config,
+        ``(dandiset_id, dandi_path, pipeline, version, params, config,
         attempt)``.  Each record contains:
 
         * ``dandiset_id`` – value of the ``dandiset-`` BIDS entity
+        * ``dandi_path`` – full source path segment (under ``dandiset-{id}/``) preceding ``pipeline-*``
         * ``content_id``  – input content identifier parsed from ``code/submit.sh``
         * ``asset_size_bytes`` – source asset size in bytes from DANDI API lookup;
           ``null`` when no unique match is found, blob ID mismatches, or size is missing
-        * ``subject``     – value of the ``sub-`` BIDS entity
-        * ``session``     – value of the ``ses-`` BIDS entity, or ``null``
         * ``pipeline``    – value of the ``pipeline-`` BIDS entity
         * ``version``     – value of the ``version-`` BIDS entity
         * ``params``      – params portion of the attempt directory name
@@ -286,7 +274,7 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
 
     attempt_re = _ATTEMPT_SUFFIX_RE
     records: list[dict] = []
-    size_lookup_cache: dict[tuple[str, str, str | None, str], int | None] = {}
+    size_lookup_cache: dict[tuple[str, str, str], int | None] = {}
 
     for dandiset_path in sorted(derivatives.iterdir()):
         if not dandiset_path.is_dir() or not dandiset_path.name.startswith("dandiset-"):
@@ -300,16 +288,14 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
             if record is not None:
                 size_lookup_key = (
                     record["dandiset_id"],
-                    record["subject"],
-                    record["session"],
+                    record["dandi_path"],
                     record["content_id"],
                 )
                 if size_lookup_key not in size_lookup_cache:
                     size_lookup_cache[size_lookup_key] = _lookup_asset_size_bytes(
                         api_token=api_token,
                         dandiset_id=record["dandiset_id"],
-                        subject=record["subject"],
-                        session=record["session"],
+                        dandi_path=record["dandi_path"],
                         content_id=record["content_id"],
                     )
                 record["asset_size_bytes"] = size_lookup_cache[size_lookup_key]
@@ -338,8 +324,7 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
     records.sort(
         key=lambda r: (
             r["dandiset_id"],
-            r["subject"],
-            r["session"] or "",
+            r["dandi_path"],
             r["pipeline"],
             r["version"],
             r["params"],

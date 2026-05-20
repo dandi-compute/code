@@ -91,7 +91,7 @@ def _build_processing_order(
     Filters *state_entries* to those that are prepared but not yet run
     (``has_code=True``, ``has_logs=False``, ``has_output=False``).  For each
     pipeline and version declared in ``queue_config``, dandiset instances
-    (identified by ``dandiset_id``, ``subject``, ``session``, and ``config``)
+    (identified by ``dandiset_id``, ``dandi_path``, and ``config``)
     are sorted by their earliest ``created_at`` timestamp.  Within each
     instance the entries are ordered by ``params_priority``, ensuring that all
     parameterizations of a dandiset for a given version are queued before
@@ -133,13 +133,12 @@ def _build_processing_order(
                 if e.get("pipeline") == pipeline_name and _version_matches(e.get("version", ""), version)
             ]
 
-            # Group by dandiset instance: (dandiset_id, subject, session, config)
+            # Group by dandiset instance: (dandiset_id, dandi_path, config)
             instance_groups: dict[tuple, list[dict]] = {}
             for entry in version_entries:
                 key = (
                     entry.get("dandiset_id", ""),
-                    entry.get("subject", ""),
-                    entry.get("session") or "",
+                    entry.get("dandi_path", ""),
                     entry.get("config", ""),
                 )
                 instance_groups.setdefault(key, []).append(entry)
@@ -257,17 +256,21 @@ def _determine_running() -> bool:
 def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pathlib.Path, pathlib.Path]:
     """Return (flat_layout_path, legacy_nested_layout_path) for an attempt entry."""
     dandiset_id = entry["dandiset_id"]
-    subject = entry["subject"]
-    session = entry.get("session")
+    dandi_path = entry.get("dandi_path")
+    if not dandi_path:
+        subject = entry["subject"]
+        session = entry.get("session")
+        dandi_path_parts = [f"sub-{subject}"]
+        if session:
+            dandi_path_parts.append(f"ses-{session}")
+        dandi_path = "/".join(dandi_path_parts)
     pipeline = entry["pipeline"]
     version = entry["version"]
     params = entry["params"]
     config = entry["config"]
     attempt = entry["attempt"]
 
-    pipeline_dir = base_dir / "derivatives" / f"dandiset-{dandiset_id}" / f"sub-{subject}"
-    if session:
-        pipeline_dir = pipeline_dir / f"ses-{session}"
+    pipeline_dir = base_dir / "derivatives" / f"dandiset-{dandiset_id}" / pathlib.PurePosixPath(dandi_path)
     pipeline_dir = pipeline_dir / f"pipeline-{pipeline}"
 
     flat_attempt_dir = pipeline_dir / f"version-{version}_params-{params}_config-{config}_attempt-{attempt}"
@@ -277,10 +280,16 @@ def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pat
 
 def _entry_identity(entry: dict) -> tuple:
     """Return a stable tuple key for matching queue/state/last-submitted entries."""
+    dandi_path = entry.get("dandi_path")
+    if dandi_path is None and entry.get("subject"):
+        dandi_path_parts = [f"sub-{entry.get('subject')}"]
+        if entry.get("session"):
+            dandi_path_parts.append(f"ses-{entry.get('session')}")
+        dandi_path = "/".join(dandi_path_parts)
+
     return (
         entry.get("dandiset_id"),
-        entry.get("subject"),
-        entry.get("session"),
+        dandi_path,
         entry.get("pipeline"),
         entry.get("version"),
         entry.get("params"),
