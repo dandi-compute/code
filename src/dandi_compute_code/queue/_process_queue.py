@@ -280,7 +280,10 @@ def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pat
     if dandi_path is None:
         # TODO: Remove this fallback once legacy queue entries without dandi_path are no longer supported.
         warnings.warn(
-            "Legacy queue entry missing dandi_path; falling back to subject/session-derived path.",
+            (
+                "Legacy queue entry missing dandi_path; falling back to subject/session-derived path. "
+                "Please update queue entries to include dandi_path."
+            ),
             stacklevel=2,
         )
         dandi_path = _subject_session_to_dandi_path(entry)
