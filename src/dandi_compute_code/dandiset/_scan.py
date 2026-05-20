@@ -55,13 +55,17 @@ def _lookup_asset_size_bytes(
     """Lookup asset size from DANDI API and confirm by matching blob ID to ``content_id``."""
     client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
     dandiset = client.get_dandiset(dandiset_id=dandiset_id)
-    asset_path_prefix = f"sub-{subject}/"
-    if session is not None:
-        asset_path_prefix += f"ses-{session}/"
+    asset_path_prefix = f"sub-{subject}"
+    session_pattern = f"ses-{session}" if session is not None else None
+
+    session_candidates: list[tuple[str, dict]] = []
+    for asset in dandiset.get_assets_with_path_prefix(path=asset_path_prefix):
+        if session_pattern is None or session_pattern in asset.path:
+            metadata = asset.get_raw_metadata()
+            session_candidates.append((asset.path, metadata))
 
     matching_metadata: list[dict] = []
-    for asset in dandiset.get_assets_with_path_prefix(path=asset_path_prefix):
-        metadata = asset.get_raw_metadata()
+    for _asset_path, metadata in session_candidates:
         content_urls = metadata.get("contentUrl")
         if not isinstance(content_urls, list) or len(content_urls) < 2:
             continue
@@ -72,11 +76,14 @@ def _lookup_asset_size_bytes(
             matching_metadata.append(metadata)
 
     if len(matching_metadata) != 1:
+        candidate_paths = [p for p, _ in session_candidates]
+        filter_clause = f" containing {session_pattern}" if session_pattern is not None else ""
         warnings.warn(
             (
                 f"Unable to resolve asset_size_bytes for {content_id}. "
-                f"Expected exactly 1 asset under {asset_path_prefix} with blob ID {content_id} "
-                f"but found {len(matching_metadata)}."
+                f"Expected exactly 1 asset under {asset_path_prefix}{filter_clause} "
+                f"with blob ID {content_id} but found {len(matching_metadata)}. "
+                f"Matching session assets: {candidate_paths}."
             ),
             stacklevel=2,
         )
