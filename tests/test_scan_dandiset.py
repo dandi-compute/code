@@ -519,7 +519,7 @@ def test_scan_parses_asset_size_from_dandi_asset_lookup(tmp_path: pathlib.Path) 
 
     class _FakeDandiset:
         def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == f"sub-mouse01/{content_id}"
+            assert path == "sub-mouse01/"
             return iter(
                 [
                     _FakeAsset(
@@ -601,7 +601,7 @@ def test_scan_uses_expected_dandi_api_url_for_dandiset(
 
     class _FakeDandiset:
         def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
-            if path in {f"sub-mouse01/{content_id}", expected_log_path}:
+            if path in {"sub-mouse01/", expected_log_path}:
                 return iter([_FakeAsset()])
             return iter(())
 
@@ -619,11 +619,12 @@ def test_scan_uses_expected_dandi_api_url_for_dandiset(
 
     assert mock_client_ctor.call_count >= 2
     for call in mock_client_ctor.call_args_list:
-        assert call.kwargs["token"] == "live-token"
         if expected_api_url is None:
+            assert call.kwargs.get("token") == "live-token"
             assert "api_url" not in call.kwargs
         else:
             assert call.kwargs["api_url"] == expected_api_url
+            assert "token" not in call.kwargs
 
 
 @pytest.mark.ai_generated
@@ -666,7 +667,7 @@ def test_scan_raises_on_empty_content_id_in_nwb_file_path(tmp_path: pathlib.Path
 def test_scan_asset_size_lookup_falls_back_to_none_on_blob_mismatch(
     tmp_path: pathlib.Path,
 ) -> None:
-    """asset_size_bytes falls back to None when matching blob ID is not found."""
+    """asset_size_bytes falls back to None when no asset under the subject prefix has a matching blob ID."""
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
 
     class _FakeAsset:
@@ -681,7 +682,7 @@ def test_scan_asset_size_lookup_falls_back_to_none_on_blob_mismatch(
 
     class _FakeDandiset:
         def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == f"sub-mouse01/{content_id}"
+            assert path == "sub-mouse01/"
             return iter([_FakeAsset()])
 
     class _FakeClient:
@@ -704,7 +705,7 @@ def test_scan_asset_size_lookup_falls_back_to_none_on_blob_mismatch(
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
     ):
-        with pytest.warns(UserWarning, match="does not match content_id"):
+        with pytest.warns(UserWarning, match="but found 0"):
             records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
     assert records[0]["asset_size_bytes"] is None

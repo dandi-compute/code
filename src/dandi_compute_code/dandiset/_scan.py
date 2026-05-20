@@ -55,52 +55,34 @@ def _lookup_asset_size_bytes(
     """Lookup asset size from DANDI API and confirm by matching blob ID to ``content_id``."""
     client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
     dandiset = client.get_dandiset(dandiset_id=dandiset_id)
-    asset_path = f"sub-{subject}/"
+    asset_path_prefix = f"sub-{subject}/"
     if session is not None:
-        asset_path += f"ses-{session}/"
-    asset_path += content_id
+        asset_path_prefix += f"ses-{session}/"
 
-    matching_assets = list(dandiset.get_assets_with_path_prefix(path=asset_path))
-    if len(matching_assets) != 1:
+    matching_metadata: list[dict] = []
+    for asset in dandiset.get_assets_with_path_prefix(path=asset_path_prefix):
+        metadata = asset.get_raw_metadata()
+        content_urls = metadata.get("contentUrl")
+        if not isinstance(content_urls, list) or len(content_urls) < 2:
+            continue
+        blob_url = content_urls[1]
+        if not isinstance(blob_url, str):
+            continue
+        if pathlib.PurePosixPath(blob_url).name == content_id:
+            matching_metadata.append(metadata)
+
+    if len(matching_metadata) != 1:
         warnings.warn(
             (
                 f"Unable to resolve asset_size_bytes for {content_id}. "
-                f"Expected exactly 1 asset at {asset_path} but found {len(matching_assets)}."
-            ),
-            stacklevel=2,
-        )
-        return None
-    asset = matching_assets[0]
-
-    metadata = asset.get_raw_metadata()
-    content_urls = metadata.get("contentUrl")
-    if not isinstance(content_urls, list) or len(content_urls) < 2:
-        warnings.warn(
-            f"Unable to resolve asset_size_bytes for {content_id}. Missing expected contentUrl[1] in DANDI metadata.",
-            stacklevel=2,
-        )
-        return None
-
-    blob_url = content_urls[1]
-    if not isinstance(blob_url, str):
-        warnings.warn(
-            f"Unable to resolve asset_size_bytes for {content_id}. contentUrl[1] is not a string ({blob_url!r}).",
-            stacklevel=2,
-        )
-        return None
-
-    blob_id = pathlib.PurePosixPath(blob_url).name
-    if blob_id != content_id:
-        warnings.warn(
-            (
-                f"Unable to resolve asset_size_bytes for {content_id}. "
-                f"Metadata blob ID {blob_id} does not match content_id."
+                f"Expected exactly 1 asset under {asset_path_prefix} with blob ID {content_id} "
+                f"but found {len(matching_metadata)}."
             ),
             stacklevel=2,
         )
         return None
 
-    content_size = metadata.get("contentSize")
+    content_size = matching_metadata[0].get("contentSize")
     if isinstance(content_size, int):
         return content_size
     if isinstance(content_size, str) and content_size.isdigit():
