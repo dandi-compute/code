@@ -656,6 +656,11 @@ def prepare_queue(
         for entry in state_entries
         if entry.get("content_id") and entry.get("dandiset_id")
     }
+    failure_entries = [
+        entry
+        for entry in state_entries
+        if entry.get("has_code") and entry.get("has_logs") and not entry.get("has_output")
+    ]
 
     prepared_count = 0
     for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
@@ -670,6 +675,17 @@ def prepare_queue(
                 pipeline_cfg = queue_config["pipelines"][pipeline_name]
 
                 max_fail = pipeline_cfg.get("max_fail_per_dandiset")
+                failure_count_by_dandiset = {}
+                if max_fail is not None:
+                    for entry in failure_entries:
+                        if entry.get("pipeline") != pipeline_name or not _version_matches(
+                            entry.get("version", ""), version
+                        ):
+                            continue
+                        dandiset_id = entry.get("dandiset_id")
+                        if not dandiset_id:
+                            continue
+                        failure_count_by_dandiset[dandiset_id] = failure_count_by_dandiset.get(dandiset_id, 0) + 1
                 # Strip the trailing commit-hash suffix before passing to prepare_aind_ephys_job.
                 submission_version = _strip_commit_hash_suffix(version)
 
@@ -679,16 +695,7 @@ def prepare_queue(
                     if max_fail is not None:
                         dandiset_id = content_id_to_dandiset_id.get(content_id)
                         if dandiset_id is not None:
-                            failure_count = sum(
-                                1
-                                for e in state_entries
-                                if e.get("pipeline") == pipeline_name
-                                and _version_matches(e.get("version", ""), version)
-                                and e.get("dandiset_id") == dandiset_id
-                                and e.get("has_code")
-                                and e.get("has_logs")
-                                and not e.get("has_output")
-                            )
+                            failure_count = failure_count_by_dandiset.get(dandiset_id, 0)
                             if failure_count >= max_fail:
                                 print(
                                     f"Skipping preparation for {pipeline_name}/{version}/{params}/{content_id}: "
