@@ -620,7 +620,7 @@ def test_scan_uses_expected_dandi_api_url_for_dandiset(
     assert mock_client_ctor.call_count >= 2
     for call in mock_client_ctor.call_args_list:
         if expected_api_url is None:
-            assert call.kwargs.get("token") == "live-token"
+            assert call.kwargs["token"] == "live-token"
             assert "api_url" not in call.kwargs
         else:
             assert call.kwargs["api_url"] == expected_api_url
