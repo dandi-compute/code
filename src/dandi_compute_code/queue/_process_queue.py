@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import urllib.request
+from collections import defaultdict
 
 from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
 from ..dandiset import scan_dandiset_directory
@@ -676,7 +677,7 @@ def prepare_queue(
                 pipeline_cfg = queue_config["pipelines"][pipeline_name]
 
                 max_fail = pipeline_cfg.get("max_fail_per_dandiset")
-                failure_count_by_dandiset = {}
+                failure_count_by_dandiset: defaultdict[str, int] = defaultdict(int)
                 if max_fail is not None:
                     for entry in failure_entries:
                         if entry.get("pipeline") != pipeline_name or not _version_matches(
@@ -686,7 +687,7 @@ def prepare_queue(
                         dandiset_id = entry.get("dandiset_id")
                         if not dandiset_id:
                             continue
-                        failure_count_by_dandiset[dandiset_id] = failure_count_by_dandiset.get(dandiset_id, 0) + 1
+                        failure_count_by_dandiset[dandiset_id] += 1
                 # Strip the trailing commit-hash suffix before passing to prepare_aind_ephys_job.
                 submission_version = _strip_commit_hash_suffix(version)
 
@@ -705,6 +706,12 @@ def prepare_queue(
                                     f"max_fail_per_dandiset ({max_fail})."
                                 )
                                 continue
+                        else:
+                            print(
+                                f"Preparing {content_id} without max_fail_per_dandiset enforcement for "
+                                f"{pipeline_name}/{version}/{params}: expected exactly 1 mapped dandiset, "
+                                f"found {len(dandiset_ids)}."
+                            )
 
                     print(f"Preparing content ID: {content_id}")
                     prepare_aind_ephys_job(
