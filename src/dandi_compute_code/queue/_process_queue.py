@@ -652,6 +652,9 @@ def prepare_queue(
         else []
     )
 
+    # Build from all known state entries. A content ID is expected to map to a
+    # stable source dandiset in normal operation; ambiguous mappings are handled
+    # conservatively below by skipping max-failure enforcement for that asset.
     content_id_to_dandiset_ids: dict[str, set[str]] = {}
     for entry in state_entries:
         content_id = entry.get("content_id")
@@ -707,10 +710,11 @@ def prepare_queue(
                                 )
                                 continue
                         else:
+                            mapped_dandisets = ", ".join(sorted(dandiset_ids)) if dandiset_ids else "<none>"
                             print(
                                 f"Preparing {content_id} without max_fail_per_dandiset enforcement for "
-                                f"{pipeline_name}/{version}/{params}: expected exactly 1 mapped dandiset, "
-                                f"found {len(dandiset_ids)}."
+                                f"{pipeline_name}/{version}/{params}: expected exactly 1 mapped dandiset but "
+                                f"found {len(dandiset_ids)} ({mapped_dandisets})."
                             )
 
                     print(f"Preparing content ID: {content_id}")
