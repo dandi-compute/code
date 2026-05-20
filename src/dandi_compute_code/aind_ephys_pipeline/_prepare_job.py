@@ -1,5 +1,6 @@
 import contextlib
 import datetime
+import gzip
 import hashlib
 import io
 import json
@@ -8,13 +9,13 @@ import pathlib
 import re
 import subprocess
 import tempfile
+import urllib.request
 
 import dandi
 import dandi.dandiapi
 import dandi.download
 import dandi.upload
 import pydantic
-import yaml
 
 from ._handle_template import generate_aind_ephys_submission_script
 
@@ -131,15 +132,12 @@ def prepare_aind_ephys_job(
     config_id = actual_config_md5[0:7]
 
     dandi_compute_dir = pathlib.Path("/orcd/data/dandi/001/dandi-compute")
-    dandi_cache_directory = dandi_compute_dir / "dandi-cache"
-    content_id_to_unique_dandiset_path_file = (
-        dandi_cache_directory
-        / "content-id-to-unique-dandiset-path"
-        / "derivatives"
-        / "content_id_to_unique_dandiset_path.yaml"
+    content_id_to_unique_dandiset_path_url = (
+        "https://raw.githubusercontent.com/dandi-cache/content-id-to-unique-dandiset-path/refs/heads/min/"
+        "derivatives/content_id_to_unique_dandiset_path.min.json.gz"
     )
-    with content_id_to_unique_dandiset_path_file.open(mode="r") as file_stream:
-        content_id_to_unique_dandiset_path = yaml.safe_load(file_stream)
+    with urllib.request.urlopen(url=content_id_to_unique_dandiset_path_url) as response:
+        content_id_to_unique_dandiset_path = json.loads(gzip.decompress(response.read()))
 
     if content_id not in content_id_to_unique_dandiset_path:
         message = (
