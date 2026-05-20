@@ -54,10 +54,8 @@ def _lookup_asset_size_bytes(
     """Lookup asset size from DANDI API and confirm by matching blob ID to ``content_id``."""
     client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
     dandiset = client.get_dandiset(dandiset_id=dandiset_id)
-    asset_path_prefix = dandi_path
-
     filtered_assets: list[tuple[str, dict]] = []
-    for asset in dandiset.get_assets_with_path_prefix(path=asset_path_prefix):
+    for asset in dandiset.get_assets_with_path_prefix(path=dandi_path):
         metadata = asset.get_raw_metadata()
         filtered_assets.append((asset.path, metadata))
 
@@ -77,7 +75,7 @@ def _lookup_asset_size_bytes(
         warnings.warn(
             (
                 f"Unable to resolve asset_size_bytes for {content_id}. "
-                f"Expected exactly 1 asset under {asset_path_prefix} "
+                f"Expected exactly 1 asset under {dandi_path} "
                 f"with blob ID {content_id} but found {len(matching_metadata)}. "
                 f"Matching path assets: {candidate_paths}."
             ),
