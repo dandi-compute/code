@@ -5,6 +5,7 @@ Unit tests for scan_dandiset_directory and writing state/waiting files via refre
 
 import json
 import pathlib
+import re
 from collections.abc import Iterator
 from typing import Any
 from unittest import mock
@@ -302,6 +303,139 @@ def test_scan_includes_created_at_timestamp(tmp_path: pathlib.Path) -> None:
     # Must be parseable as an ISO 8601 datetime with timezone info
     dt = datetime.datetime.fromisoformat(created_at)
     assert dt.tzinfo is not None
+
+
+@pytest.mark.ai_generated
+def test_scan_job_completion_time_is_none_when_no_logs(tmp_path: pathlib.Path) -> None:
+    """job_completion_time is None when the attempt has no logs directory."""
+    _make_attempt_dir(tmp_path, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_logs=False)
+    records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    assert records[0]["job_completion_time"] is None
+
+
+@pytest.mark.ai_generated
+def test_scan_job_completion_time_populated_from_dandi_date_modified(tmp_path: pathlib.Path) -> None:
+    """job_completion_time is taken from the dateModified field of the first DANDI log asset."""
+    expected_completion_time = "2024-06-15T12:30:00+00:00"
+    content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+    attempt_dir = _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        content_id=content_id,
+        with_logs=True,
+    )
+    expected_log_path = (attempt_dir / "logs" / "nextflow.log").relative_to(tmp_path).as_posix()
+
+    class _FakeLogAsset:
+        def get_raw_metadata(self) -> dict[str, Any]:
+            return {"dateModified": expected_completion_time}
+
+    class _FakeDandiset:
+        def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
+            if path == expected_log_path:
+                return iter([_FakeLogAsset()])
+            return iter(())
+
+    class _FakeClient:
+        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
+            return _FakeDandiset()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
+        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+    ):
+        records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    assert records[0]["job_completion_time"] == expected_completion_time
+
+
+@pytest.mark.ai_generated
+def test_scan_job_completion_time_is_none_with_warning_when_log_asset_not_found(tmp_path: pathlib.Path) -> None:
+    """job_completion_time is None with a warning when no DANDI asset matches the log path."""
+    content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+    attempt_dir = _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        content_id=content_id,
+        with_logs=True,
+    )
+    expected_log_path = (attempt_dir / "logs" / "nextflow.log").relative_to(tmp_path).as_posix()
+
+    class _FakeDandiset:
+        def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
+            return iter(())
+
+    class _FakeClient:
+        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
+            return _FakeDandiset()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
+        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+        pytest.warns(
+            UserWarning, match=f"Unable to resolve job_completion_time for log asset at {re.escape(expected_log_path)}"
+        ),
+    ):
+        records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    assert records[0]["job_completion_time"] is None
+
+
+@pytest.mark.ai_generated
+def test_scan_job_completion_time_is_none_with_warning_when_date_modified_missing(tmp_path: pathlib.Path) -> None:
+    """job_completion_time is None with a warning when the log asset has no dateModified field."""
+    content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+    attempt_dir = _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        content_id=content_id,
+        with_logs=True,
+    )
+    expected_log_path = (attempt_dir / "logs" / "nextflow.log").relative_to(tmp_path).as_posix()
+
+    class _FakeLogAsset:
+        def get_raw_metadata(self) -> dict[str, Any]:
+            return {}  # No dateModified field
+
+    class _FakeDandiset:
+        def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
+            if path == expected_log_path:
+                return iter([_FakeLogAsset()])
+            return iter(())
+
+    class _FakeClient:
+        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
+            return _FakeDandiset()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
+        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+        pytest.warns(
+            UserWarning, match=f"Unable to resolve job_completion_time for log asset at {re.escape(expected_log_path)}"
+        ),
+    ):
+        records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    assert records[0]["job_completion_time"] is None
 
 
 @pytest.mark.ai_generated

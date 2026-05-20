@@ -63,7 +63,7 @@ def mock_scan_dandi_api_asset_lookup() -> Iterator[None]:
     class _EmptyDandiset:
         def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
             assert isinstance(path, str)
-            assert path.startswith("sub-")
+            assert path.startswith("sub-") or path.startswith("derivatives/")
             return iter(())
 
     class _EmptyClient:
