@@ -14,6 +14,14 @@ _SANDBOX_DANDISET_ID = "214527"
 _SANDBOX_API_URL = "https://api.sandbox.dandiarchive.org/api"
 
 
+def _asset_parent_path(asset_path: str) -> str | None:
+    """Return a POSIX parent directory path for an asset, or ``None`` if no parent exists."""
+    parent_path = pathlib.PurePosixPath(asset_path).parent
+    if parent_path == pathlib.PurePosixPath("."):
+        return None
+    return parent_path.as_posix()
+
+
 def _create_dandi_api_client(*, api_token: str, dandiset_id: str) -> dandi.dandiapi.DandiAPIClient:
     """Create a DANDI API client, routing known sandbox dandiset IDs to the sandbox API."""
     if dandiset_id == _SANDBOX_DANDISET_ID:
@@ -51,7 +59,23 @@ def _lookup_asset_size_bytes(
     dandi_path: str,
     content_id: str,
 ) -> tuple[int | None, str | None]:
-    """Lookup asset size and resolved source directory path from DANDI API."""
+    """Lookup asset size and resolved source directory path from DANDI API.
+
+    Parameters
+    ----------
+    api_token : str
+        DANDI API token used for authenticated requests.
+    dandiset_id : str
+        DANDI dandiset identifier.
+    dandi_path : str
+        Source path value from local scan, used to choose API prefix and filename filtering.
+    content_id : str
+        Blob/content identifier extracted from ``NWB_FILE_PATH`` in ``code/submit.sh``.
+
+    Returns a tuple ``(asset_size_bytes, resolved_parent_path)``.
+    The first value is ``int | None`` and the second value is ``str | None``.
+    Either tuple value can be ``None`` when lookup conditions are not met.
+    """
     client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
     dandiset = client.get_dandiset(dandiset_id=dandiset_id)
 
@@ -101,8 +125,7 @@ def _lookup_asset_size_bytes(
         return None, None
 
     matching_asset_path, matching_metadata = matching_assets[0]
-    resolved_parent_path = pathlib.PurePosixPath(matching_asset_path).parent
-    resolved_dandi_path = resolved_parent_path.as_posix() if resolved_parent_path.parts else None
+    resolved_dandi_path = _asset_parent_path(matching_asset_path)
 
     content_size = matching_metadata.get("contentSize")
     if isinstance(content_size, int):

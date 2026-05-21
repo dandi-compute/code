@@ -923,11 +923,13 @@ def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Pat
     """refresh_queue writes the API-resolved source path in state.jsonl when lookup succeeds."""
     content_id = "0fbbca6a-0000-0000-0000-000000000001"
     asset_size_bytes = 1234
+    resolved_asset_path = "sub-mouse01/sub-mouse01_ses-ses001_obj-raw.nwb"
 
     class _FakeAsset:
-        path = "sub-mouse01/sub-mouse01_ses-ses001_obj-raw.nwb"
+        def __init__(self, path: str) -> None:
+            self.path = path
 
-        def get_raw_metadata(self) -> dict[str, Any]:
+        def get_raw_metadata(self) -> dict[str, object]:
             return {
                 "contentUrl": [
                     "https://api.dandiarchive.org/api/assets/download/",
@@ -939,7 +941,7 @@ def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Pat
     class _FakeDandiset:
         def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
             assert path == "sub-mouse01"
-            return iter([_FakeAsset()])
+            return iter([_FakeAsset(resolved_asset_path)])
 
     class _FakeClient:
         def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
@@ -983,6 +985,75 @@ def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Pat
     assert len(state_records) == 1
     assert state_records[0]["asset_size_bytes"] == asset_size_bytes
     assert state_records[0]["dandi_path"] == "sub-mouse01"
+
+
+@pytest.mark.ai_generated
+def test_refresh_queue_keeps_scanned_dandi_path_when_resolved_asset_parent_is_root(tmp_path: pathlib.Path) -> None:
+    """refresh_queue keeps scanned dandi_path when matched asset path has no parent directory."""
+    content_id = "0fbbca6a-0000-0000-0000-000000000002"
+    asset_size_bytes = 4321
+    root_asset_path = "sub-mouse01_ses-ses001_obj-raw.nwb"
+
+    class _FakeAsset:
+        def __init__(self, path: str) -> None:
+            self.path = path
+
+        def get_raw_metadata(self) -> dict[str, object]:
+            return {
+                "contentUrl": [
+                    "https://api.dandiarchive.org/api/assets/download/",
+                    f"https://dandiarchive.s3.amazonaws.com/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}",
+                ],
+                "contentSize": asset_size_bytes,
+            }
+
+    class _FakeDandiset:
+        def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
+            assert path == "sub-mouse01"
+            return iter([_FakeAsset(root_asset_path)])
+
+    class _FakeClient:
+        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
+            assert dandiset_id == "000001"
+            return _FakeDandiset()
+
+    _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        session="ses001",
+        content_id=content_id,
+    )
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(
+        json.dumps(
+            {
+                "pipelines": {
+                    "aind+ephys": {
+                        "version_priority": ["v1.0"],
+                        "params_priority": ["abc1234"],
+                    }
+                }
+            }
+        )
+    )
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
+        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+    ):
+        refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
+
+    state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
+    assert len(state_records) == 1
+    assert state_records[0]["asset_size_bytes"] == asset_size_bytes
+    assert state_records[0]["dandi_path"] == "sub-mouse01/ses-ses001"
 
 
 @pytest.mark.ai_generated
