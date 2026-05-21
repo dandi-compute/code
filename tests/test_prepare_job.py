@@ -92,9 +92,9 @@ def test_prepare_aind_ephys_job_extracts_sub_entity_from_path(
     with (
         mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
         mock.patch("subprocess.check_output", side_effect=_git_check_output),
-        mock.patch("dandi.dandiapi.DandiAPIClient") as mock_client,
-        mock.patch("dandi.download.download"),
-        mock.patch("dandi.upload.upload"),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.download.download"),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.upload.upload"),
         mock.patch("tempfile.mkdtemp", return_value=str(temp_dir)),
         mock.patch.dict(os.environ, {"DANDI_API_KEY": "fake-key"}),
     ):
