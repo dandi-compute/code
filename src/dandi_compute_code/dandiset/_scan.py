@@ -54,8 +54,22 @@ def _lookup_asset_size_bytes(
     """Lookup asset size from DANDI API and confirm by matching blob ID to ``content_id``."""
     client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
     dandiset = client.get_dandiset(dandiset_id=dandiset_id)
+
+    pure_dandi_path = pathlib.PurePosixPath(dandi_path)
+    last_segment = pure_dandi_path.name
+    if last_segment.startswith("ses-"):
+        api_path_prefix = pure_dandi_path.parent.as_posix()
+        subject_session_prefix = f"{pure_dandi_path.parent.name}_{last_segment}"
+    else:
+        api_path_prefix = dandi_path
+        subject_session_prefix = None
+
     filtered_assets: list[tuple[str, dict]] = []
-    for asset in dandiset.get_assets_with_path_prefix(path=dandi_path):
+    for asset in dandiset.get_assets_with_path_prefix(path=api_path_prefix):
+        if subject_session_prefix is not None:
+            asset_filename = pathlib.PurePosixPath(asset.path).name
+            if not (asset_filename.startswith(subject_session_prefix) and asset_filename.endswith(".nwb")):
+                continue
         metadata = asset.get_raw_metadata()
         filtered_assets.append((asset.path, metadata))
 
