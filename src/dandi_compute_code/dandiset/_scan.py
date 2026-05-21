@@ -50,8 +50,8 @@ def _lookup_asset_size_bytes(
     dandiset_id: str,
     dandi_path: str,
     content_id: str,
-) -> int | None:
-    """Lookup asset size from DANDI API and confirm by matching blob ID to ``content_id``."""
+) -> tuple[int | None, str | None]:
+    """Lookup asset size and resolved source directory path from DANDI API."""
     client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
     dandiset = client.get_dandiset(dandiset_id=dandiset_id)
 
@@ -76,8 +76,8 @@ def _lookup_asset_size_bytes(
         metadata = asset.get_raw_metadata()
         filtered_assets.append((asset.path, metadata))
 
-    matching_metadata: list[dict] = []
-    for _asset_path, metadata in filtered_assets:
+    matching_assets: list[tuple[str, dict]] = []
+    for asset_path, metadata in filtered_assets:
         content_urls = metadata.get("contentUrl")
         if not isinstance(content_urls, list) or len(content_urls) < 2:
             continue
@@ -85,31 +85,35 @@ def _lookup_asset_size_bytes(
         if not isinstance(blob_url, str):
             continue
         if pathlib.PurePosixPath(blob_url).name == content_id:
-            matching_metadata.append(metadata)
+            matching_assets.append((asset_path, metadata))
 
-    if len(matching_metadata) != 1:
+    if len(matching_assets) != 1:
         candidate_paths = [p for p, _ in filtered_assets]
         warnings.warn(
             (
                 f"Unable to resolve asset_size_bytes for {content_id}. "
                 f"Expected exactly 1 asset under {dandi_path} "
-                f"with blob ID {content_id} but found {len(matching_metadata)}. "
+                f"with blob ID {content_id} but found {len(matching_assets)}. "
                 f"Matching path assets: {candidate_paths}."
             ),
             stacklevel=2,
         )
-        return None
+        return None, None
 
-    content_size = matching_metadata[0].get("contentSize")
+    matching_asset_path, matching_metadata = matching_assets[0]
+    resolved_parent_path = pathlib.PurePosixPath(matching_asset_path).parent
+    resolved_dandi_path = resolved_parent_path.as_posix() if resolved_parent_path.parts else None
+
+    content_size = matching_metadata.get("contentSize")
     if isinstance(content_size, int):
-        return content_size
+        return content_size, resolved_dandi_path
     if isinstance(content_size, str) and content_size.isdigit():
-        return int(content_size)
+        return int(content_size), resolved_dandi_path
     warnings.warn(
         f"Unable to resolve asset_size_bytes for {content_id}. Invalid or missing contentSize value {content_size!r}.",
         stacklevel=2,
     )
-    return None
+    return None, resolved_dandi_path
 
 
 def _lookup_job_completion_time(
@@ -256,7 +260,8 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         attempt)``.  Each record contains:
 
         * ``dandiset_id`` – value of the ``dandiset-`` BIDS entity
-        * ``dandi_path`` – full source path segment (under ``dandiset-{id}/``) preceding ``pipeline-*``
+        * ``dandi_path`` – resolved source asset parent path (from DANDI API lookup when uniquely matched),
+          falling back to the scanned path segment under ``dandiset-{id}/`` preceding ``pipeline-*``
         * ``content_id``  – input content identifier parsed from ``code/submit.sh``
         * ``asset_size_bytes`` – source asset size in bytes from DANDI API lookup;
           ``null`` when no unique match is found, blob ID mismatches, or size is missing
@@ -289,7 +294,7 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
 
     attempt_re = _ATTEMPT_SUFFIX_RE
     records: list[dict] = []
-    size_lookup_cache: dict[tuple[str, str, str], int | None] = {}
+    size_lookup_cache: dict[tuple[str, str, str], tuple[int | None, str | None]] = {}
 
     for dandiset_path in sorted(derivatives.iterdir()):
         if not dandiset_path.is_dir() or not dandiset_path.name.startswith("dandiset-"):
@@ -313,7 +318,9 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
                         dandi_path=record["dandi_path"],
                         content_id=record["content_id"],
                     )
-                record["asset_size_bytes"] = size_lookup_cache[size_lookup_key]
+                record["asset_size_bytes"], resolved_dandi_path = size_lookup_cache[size_lookup_key]
+                if resolved_dandi_path is not None:
+                    record["dandi_path"] = resolved_dandi_path
 
                 if record["has_logs"]:
                     logs_dir = attempt_dir / "logs"
