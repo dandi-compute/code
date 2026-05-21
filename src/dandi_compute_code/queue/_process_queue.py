@@ -712,9 +712,7 @@ def prepare_queue(
         for version in pipeline_data.get("version_priority", []):
             if limit is not None and prepared_count >= limit:
                 break
-            params_list = (
-                [params_override] if params_override is not None else pipeline_data.get("params_priority", [])
-            )
+            params_list = [params_override] if params_override is not None else pipeline_data.get("params_priority", [])
             for params in params_list:
                 if limit is not None and prepared_count >= limit:
                     break
