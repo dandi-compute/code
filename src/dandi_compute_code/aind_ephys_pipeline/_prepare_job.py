@@ -148,14 +148,24 @@ def prepare_aind_ephys_job(
         raise ValueError(message)
 
     dandiset_id, dandiset_path = next(iter(content_id_to_unique_dandiset_path[content_id].items()))
-    # Parse BIDS entities from the filename stem only (not directory parts),
+    # Parse BIDS entities from all path components (directory parts and filename stem),
     # and skip tokens that are modality suffixes (no "-" separator, e.g. "ecephys").
+    # Directory parts are needed for AIND-style paths where "sub-" appears only in the folder name.
     entities = {}
-    for token in pathlib.Path(dandiset_path).stem.split("_"):
-        if "-" not in token:
-            continue
-        key, value = token.split("-", 1)
-        entities[key] = value
+    path_obj = pathlib.Path(dandiset_path)
+    for part in [*path_obj.parts[:-1], path_obj.stem]:
+        for token in part.split("_"):
+            if "-" not in token:
+                continue
+            key, value = token.split("-", 1)
+            entities[key] = value
+
+    if "sub" not in entities:
+        message = (
+            f"Could not extract 'sub' BIDS entity from dandiset path: {dandiset_path!r}. "
+            "The path must contain a directory component or filename token of the form 'sub-<label>'."
+        )
+        raise ValueError(message)
 
     # Special case - add date entity for testing asset
     if content_id == "048d1ee9-83b7-491f-8f02-1ca615b1d455":
