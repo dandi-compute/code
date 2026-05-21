@@ -580,6 +580,141 @@ def test_scan_parses_asset_size_from_dandi_asset_lookup(tmp_path: pathlib.Path) 
 
 
 @pytest.mark.ai_generated
+def test_scan_resolves_asset_size_with_session_subdirectory(tmp_path: pathlib.Path) -> None:
+    """asset_size_bytes is resolved when dandi_path contains a ses- segment.
+
+    When the attempt directory includes a session subdirectory (ses-<session>),
+    the API lookup must use only the subject prefix and filter by the combined
+    subject_session filename pattern ending in .nwb.
+    """
+    asset_size_bytes = 987654321
+    content_id = "004fb230-da29-45cf-8d88-33e698f82dea"
+
+    class _FakeAsset:
+        path = "sub-CGM3/sub-CGM3_ses-CGM3_ecephys.nwb"
+
+        def __init__(self, metadata: dict) -> None:
+            self._metadata = metadata
+
+        def get_raw_metadata(self) -> dict:
+            return self._metadata
+
+    class _FakeDandiset:
+        def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
+            assert path == "sub-CGM3"
+            return iter(
+                [
+                    _FakeAsset(
+                        {
+                            "contentUrl": [
+                                "https://api.dandiarchive.org/api/assets/download/",
+                                f"https://dandiarchive.s3.amazonaws.com/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}",
+                            ],
+                            "contentSize": asset_size_bytes,
+                        }
+                    )
+                ]
+            )
+
+    class _FakeClient:
+        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
+            assert dandiset_id == "000001"
+            return _FakeDandiset()
+
+    _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "CGM3",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        session="CGM3",
+        content_id=content_id,
+    )
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
+        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+    ):
+        records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    assert records[0]["asset_size_bytes"] == asset_size_bytes
+
+
+@pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    ("session", "asset_filename"),
+    [
+        # No session: dandi_path = "sub-SUB1", file is sub-SUB1/sub-SUB1_ecephys.nwb
+        (None, "sub-SUB1/sub-SUB1_ecephys.nwb"),
+        # Session with extra entity in filename: dandi_path = "sub-SUB1/ses-SES1",
+        # file is sub-SUB1/sub-SUB1_ses-SES1_obj-OBJ1.nwb (ses- not the last filename entity)
+        ("SES1", "sub-SUB1/sub-SUB1_ses-SES1_obj-OBJ1.nwb"),
+    ],
+)
+def test_scan_resolves_asset_size_for_no_session_and_extra_entities(
+    tmp_path: pathlib.Path,
+    session: str | None,
+    asset_filename: str,
+) -> None:
+    """asset_size_bytes is resolved for subject-only and extra-entity filename cases."""
+    asset_size_bytes = 111222333
+    content_id = "12345678-0000-0000-0000-000000000abc"
+
+    class _FakeAsset:
+        path = asset_filename
+
+        def __init__(self, metadata: dict) -> None:
+            self._metadata = metadata
+
+        def get_raw_metadata(self) -> dict:
+            return self._metadata
+
+    class _FakeDandiset:
+        def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
+            assert path == "sub-SUB1"
+            return iter(
+                [
+                    _FakeAsset(
+                        {
+                            "contentUrl": [
+                                "https://api.dandiarchive.org/api/assets/download/",
+                                f"https://dandiarchive.s3.amazonaws.com/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}",
+                            ],
+                            "contentSize": asset_size_bytes,
+                        }
+                    )
+                ]
+            )
+
+    class _FakeClient:
+        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
+            assert dandiset_id == "000001"
+            return _FakeDandiset()
+
+    _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "SUB1",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        session=session,
+        content_id=content_id,
+    )
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
+        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+    ):
+        records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    assert len(records) == 1
+    assert records[0]["asset_size_bytes"] == asset_size_bytes
+
+
+@pytest.mark.ai_generated
 @pytest.mark.parametrize(
     ("dandiset_id", "expected_api_url"),
     [

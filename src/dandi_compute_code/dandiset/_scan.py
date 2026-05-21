@@ -54,8 +54,25 @@ def _lookup_asset_size_bytes(
     """Lookup asset size from DANDI API and confirm by matching blob ID to ``content_id``."""
     client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
     dandiset = client.get_dandiset(dandiset_id=dandiset_id)
+
+    path_parts = pathlib.PurePosixPath(dandi_path).parts
+    if len(path_parts) > 1:
+        # DANDI stores assets directly under the subject directory even when the
+        # pipeline run lives inside a deeper hierarchy (e.g. sub-*/ses-*/pipeline-*).
+        # Use only the subject segment as the API prefix and filter candidate assets
+        # by a filename prefix built from all path segments joined with underscores.
+        api_path_prefix = path_parts[0]
+        filename_prefix = "_".join(path_parts)
+    else:
+        api_path_prefix = dandi_path
+        filename_prefix = None
+
     filtered_assets: list[tuple[str, dict]] = []
-    for asset in dandiset.get_assets_with_path_prefix(path=dandi_path):
+    for asset in dandiset.get_assets_with_path_prefix(path=api_path_prefix):
+        if filename_prefix is not None:
+            asset_filename = pathlib.PurePosixPath(asset.path).name
+            if not (asset_filename.startswith(filename_prefix) and asset_filename.endswith(".nwb")):
+                continue
         metadata = asset.get_raw_metadata()
         filtered_assets.append((asset.path, metadata))
 
