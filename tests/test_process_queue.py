@@ -12,6 +12,7 @@ import json
 import os
 import pathlib
 from collections.abc import Iterator
+from datetime import datetime
 from typing import Any
 from unittest import mock
 
@@ -1166,9 +1167,39 @@ window.data = {
     assert stats["state_entry_count"] == 2
     assert stats["successful_asset_bytes_total"] == 120
     assert stats["timeline_files_processed"] == 1
+    assert datetime.fromisoformat(stats["generated_at"])
     assert stats["job_step_wall_time_seconds"]["step_one"] == pytest.approx(65.0)
     assert stats["job_step_wall_time_seconds"]["step_two"] == pytest.approx(150.0)
     assert json.loads(queue_stats_file.read_text()) == stats
+
+
+@pytest.mark.ai_generated
+def test_aggregate_queue_statistics_skips_invalid_timeline_html(tmp_path: pathlib.Path) -> None:
+    """aggregate_queue_statistics ignores timeline files with malformed embedded JSON."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+    entry = _make_state_entry(has_output=True, has_logs=True)
+    entry["asset_size_bytes"] = 120
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
+
+    attempt_dir = _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+    logs_dir = attempt_dir / "logs"
+    logs_dir.mkdir()
+    (logs_dir / "timeline.html").write_text("<script>window.data = {invalid json};</script>")
+
+    stats = aggregate_queue_statistics(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+
+    assert stats["timeline_files_processed"] == 0
+    assert stats["job_step_wall_time_seconds"] == {}
 
 
 # ---------------------------------------------------------------------------
