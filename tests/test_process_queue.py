@@ -87,6 +87,7 @@ def mock_scan_dandi_api_asset_lookup() -> Iterator[None]:
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_EmptyClient()),
+        mock.patch("dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path", return_value={}),
     ):
         yield
 
