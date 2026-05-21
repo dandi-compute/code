@@ -79,8 +79,24 @@ def _make_attempt_dir(
     return attempt_dir
 
 
-def _mapping_for_content_id(*, content_id: str, dandiset_id: str, asset_path: str) -> dict[str, dict[str, str]]:
-    """Build a minimal content ID → unique dandiset path mapping payload."""
+def _build_mapping_for_content_id(*, content_id: str, dandiset_id: str, asset_path: str) -> dict[str, dict[str, str]]:
+    """
+    Build a minimal content ID → unique dandiset path mapping payload.
+
+    Parameters
+    ----------
+    content_id : str
+        Content ID key in the mapping.
+    dandiset_id : str
+        Dandiset ID associated with the content ID.
+    asset_path : str
+        Unique mapped asset path for the content ID.
+
+    Returns
+    -------
+    dict[str, dict[str, str]]
+        Nested mapping of content ID to ``{dandiset_id: asset_path}``.
+    """
     return {content_id: {dandiset_id: asset_path}}
 
 
@@ -376,7 +392,7 @@ def test_scan_job_completion_time_populated_from_dandi_date_modified(tmp_path: p
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
         mock.patch(
             "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
-            return_value=_mapping_for_content_id(
+            return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
                 asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
@@ -589,7 +605,7 @@ def test_scan_parses_asset_size_from_dandi_asset_lookup(tmp_path: pathlib.Path) 
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
         mock.patch(
             "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
-            return_value=_mapping_for_content_id(
+            return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
                 asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
@@ -660,7 +676,7 @@ def test_scan_resolves_asset_size_with_session_subdirectory(tmp_path: pathlib.Pa
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
         mock.patch(
             "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
-            return_value=_mapping_for_content_id(
+            return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
                 asset_path="sub-CGM3/sub-CGM3_ses-CGM3_ecephys.nwb",
@@ -741,7 +757,7 @@ def test_scan_resolves_asset_size_for_no_session_and_extra_entities(
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
         mock.patch(
             "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
-            return_value=_mapping_for_content_id(
+            return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
                 asset_path=asset_filename,
@@ -812,7 +828,7 @@ def test_scan_uses_expected_dandi_api_url_for_dandiset(
         ) as mock_client_ctor,
         mock.patch(
             "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
-            return_value=_mapping_for_content_id(
+            return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id=dandiset_id,
                 asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
@@ -900,7 +916,7 @@ def test_scan_asset_size_lookup_falls_back_to_none_when_mapped_asset_path_has_no
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
         mock.patch(
             "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
-            return_value=_mapping_for_content_id(
+            return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
                 asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
@@ -1022,7 +1038,7 @@ def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Pat
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
         mock.patch(
             "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
-            return_value=_mapping_for_content_id(
+            return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
                 asset_path=resolved_asset_path,
@@ -1099,7 +1115,7 @@ def test_refresh_queue_keeps_scanned_dandi_path_when_resolved_asset_parent_is_ro
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
         mock.patch(
             "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
-            return_value=_mapping_for_content_id(
+            return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
                 asset_path=root_asset_path,

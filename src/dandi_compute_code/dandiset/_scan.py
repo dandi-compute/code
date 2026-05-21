@@ -1,4 +1,5 @@
 import datetime
+import functools
 import gzip
 import json
 import os
@@ -36,10 +37,18 @@ def _create_dandi_api_client(*, api_token: str, dandiset_id: str) -> dandi.dandi
     return dandi.dandiapi.DandiAPIClient(token=api_token)
 
 
+@functools.lru_cache(maxsize=1)
 def _load_content_id_to_unique_dandiset_path() -> dict[str, dict[str, str]]:
     """Load the content ID to unique Dandiset path mapping."""
-    with urllib.request.urlopen(url=_CONTENT_ID_TO_UNIQUE_DANDISET_PATH_URL) as response:
-        return json.loads(gzip.decompress(response.read()))
+    try:
+        with urllib.request.urlopen(url=_CONTENT_ID_TO_UNIQUE_DANDISET_PATH_URL) as response:
+            return json.loads(gzip.decompress(response.read()))
+    except Exception as exception:
+        message = (
+            "Unable to load content-id-to-unique-dandiset-path mapping from "
+            f"{_CONTENT_ID_TO_UNIQUE_DANDISET_PATH_URL}"
+        )
+        raise RuntimeError(message) from exception
 
 
 def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str:
@@ -81,7 +90,7 @@ def _lookup_asset_size_bytes(
     dandiset_id : str
         DANDI dandiset identifier.
     dandi_path : str
-        Source path value from local scan, used in fallback warnings when mapping resolution fails.
+        Source path value from local scan, used only in mapped/scanned dandiset mismatch warnings.
     content_id : str
         Blob/content identifier extracted from ``NWB_FILE_PATH`` in ``code/submit.sh``.
 
