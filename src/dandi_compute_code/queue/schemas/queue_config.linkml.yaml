@@ -1,0 +1,88 @@
+id: https://github.com/dandi-compute/queue_config
+name: dandi_compute_queue_config
+title: DANDI Compute Queue Config
+description: >-
+  A LinkML schema describing a configuration structure for DANDI Compute pipelines,
+  including version priorities, parameter priorities, attempt limits,
+  and asset overrides.
+prefixes:
+  linkml: https://w3id.org/linkml/
+default_prefix: linkml
+default_range: string
+imports:
+  - linkml:types
+classes:
+  PipelinesConfig:
+    description: >-
+      Top-level container holding a collection of named pipelines.
+    attributes:
+      pipelines:
+        description: A mapping from pipeline name to pipeline configuration.
+        range: Pipeline
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+  Pipeline:
+    description: >-
+      Configuration for a single pipeline, keyed by its name
+      (e.g. "aind+ephys").
+    attributes:
+      name:
+        description: The unique name/key of the pipeline.
+        identifier: true
+        range: string
+        required: true
+      version_priority:
+        description: >-
+          An ordered list of pipeline versions, in priority order
+          (highest priority first).
+        range: string
+        multivalued: true
+        required: false
+      params_priority:
+        description: >-
+          An ordered list of parameter set names, in priority order
+          (highest priority first).
+        range: string
+        multivalued: true
+        required: false
+      max_attempts_per_asset:
+        description: >-
+          The maximum number of times the pipeline should be retried
+          on a single asset.
+        range: integer
+        minimum_value: 0
+        required: false
+      asset_overrides:
+        description: >-
+          A mapping of asset identifiers (e.g. UUIDs) to an override value.
+          A null value indicates the asset should be skipped.
+        range: string
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+        required: false
+      max_fail_per_dandiset:
+        description: >-
+          The maximum number of failures permitted per dandiset
+          before the pipeline is considered failed.
+        range: integer
+        minimum_value: 0
+        required: false
+  AssetOverride:
+    description: >-
+      An override configuration for a single asset, identified by its
+      asset id (typically a UUID). The value may be null to indicate
+      removal/skip of the asset.
+    attributes:
+      asset_id:
+        description: The unique asset identifier (e.g. a UUID).
+        identifier: true
+        range: string
+        required: true
+      override:
+        description: >-
+          The override configuration. May be null to indicate the
+          asset should be skipped.
+        range: string
+        required: false

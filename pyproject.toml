@@ -20,6 +20,7 @@ dependencies = [
     "jinja2",
     "click",  # rich-click did not work well on Engaging
     "dandi",
+    "linkml-runtime>=1.10.0,<1.11",
 ]
 dynamic = ["version"]
 
