@@ -341,7 +341,7 @@ def _queue_process_command(
     default=False,
 )
 @click.option(
-    "--param",
+    "--params",
     "params_override",
     help="Override the params_priority for all pipelines with this single parameters key.",
     required=False,

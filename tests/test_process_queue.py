@@ -2057,7 +2057,7 @@ def test_cli_queue_prepare_test_flag_with_limit(tmp_path: pathlib.Path) -> None:
 
 @pytest.mark.ai_generated
 def test_cli_queue_prepare_param_flag(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue prepare --param forwards params_override to prepare_queue."""
+    """dandicompute queue prepare --params forwards params_override to prepare_queue."""
     queue_dir = _make_queue_dir(tmp_path)
     runner = CliRunner()
 
@@ -2067,7 +2067,7 @@ def test_cli_queue_prepare_param_flag(tmp_path: pathlib.Path) -> None:
     ):
         result = runner.invoke(
             _dandicompute_group,
-            ["queue", "prepare", "--queue", str(queue_dir), "--param", "custom_params"],
+            ["queue", "prepare", "--queue", str(queue_dir), "--params", "custom_params"],
         )
 
     assert result.exit_code == 0, result.output
