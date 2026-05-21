@@ -9,7 +9,14 @@ from .dandiset import (
     delete_dandiset_version,
     scan_version_directories,
 )
-from .queue import TEST_QUEUE_CONTENT_ID, clean_unsubmitted_capsules, prepare_queue, process_queue, refresh_queue
+from .queue import (
+    TEST_QUEUE_CONTENT_ID,
+    aggregate_queue_statistics,
+    clean_unsubmitted_capsules,
+    prepare_queue,
+    process_queue,
+    refresh_queue,
+)
 
 
 def _require_dandi_api_key() -> None:
@@ -272,6 +279,45 @@ def _queue_clean_command(
         _styled_echo(text=f"\nCleaned {len(removed)} unsubmitted {noun}.", color="green")
     else:
         _styled_echo(text="\nNo unsubmitted capsules found.", color="yellow")
+
+
+# dandicompute queue stats [OPTIONS]
+@_queue_group.command(name="stats")
+@click.option(
+    "--queue",
+    "queue_directory",
+    help="Path to the queue root directory.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+@click.option(
+    "--dandiset",
+    "dandiset_directory",
+    help="Path to a local dandiset clone used to locate Nextflow timeline reports.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+@click.option(
+    "--output-file",
+    "output_file_name",
+    help="Name of the aggregate statistics JSON file written under --queue.",
+    required=False,
+    type=str,
+    default="queue_stats.json",
+    show_default=True,
+)
+def _queue_stats_command(
+    queue_directory: pathlib.Path,
+    dandiset_directory: pathlib.Path,
+    output_file_name: str = "queue_stats.json",
+) -> None:
+    """Write aggregate queue statistics from state.jsonl and timeline reports."""
+    aggregate_queue_statistics(
+        queue_directory=queue_directory,
+        dandiset_directory=dandiset_directory,
+        output_file_name=output_file_name,
+    )
+    _styled_echo(text=f"\nWrote queue aggregate statistics: {queue_directory / output_file_name}", color="green")
 
 
 # dandicompute queue process [OPTIONS]

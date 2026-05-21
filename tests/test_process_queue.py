@@ -29,6 +29,7 @@ from dandi_compute_code.queue._process_queue import (
     _resolve_params_key_to_id,
     _submit_next,
     _version_matches,
+    aggregate_queue_statistics,
     clean_unsubmitted_capsules,
     order_queue,
     prepare_queue,
@@ -1125,6 +1126,51 @@ def test_order_queue_respects_limit_parameter() -> None:
     assert len(ordered) == 2
 
 
+@pytest.mark.ai_generated
+def test_aggregate_queue_statistics_writes_queue_stats_json(tmp_path: pathlib.Path) -> None:
+    """aggregate_queue_statistics writes queue_stats.json with byte and timeline aggregates."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+
+    entry_with_output = _make_state_entry(has_output=True, has_logs=True)
+    entry_with_output["asset_size_bytes"] = 120
+    entry_without_output = _make_state_entry(dandiset_id="000002", subject="mouse02", has_output=False, has_logs=True)
+    entry_without_output["asset_size_bytes"] = 999
+    _write_jsonl(queue_dir / "state.jsonl", [entry_with_output, entry_without_output])
+
+    attempt_dir = _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+    logs_dir = attempt_dir / "logs"
+    logs_dir.mkdir()
+    (logs_dir / "timeline.html").write_text("""<script>
+window.data = {
+  "processes": [
+    {"label": "step_one (step-one)", "times": [{"label": "1m 5s / 1 GB"}]},
+    {"label": "step_two (step-two)", "times": [{"label": "30s / 500 MB"}, {"label": "2m / 1 GB"}]}
+  ]
+};
+</script>""")
+
+    stats = aggregate_queue_statistics(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+
+    queue_stats_file = queue_dir / "queue_stats.json"
+    assert queue_stats_file.exists()
+    assert stats["state_entry_count"] == 2
+    assert stats["successful_asset_bytes_total"] == 120
+    assert stats["timeline_files_processed"] == 1
+    assert stats["job_step_wall_time_seconds"]["step_one"] == pytest.approx(65.0)
+    assert stats["job_step_wall_time_seconds"]["step_two"] == pytest.approx(150.0)
+    assert json.loads(queue_stats_file.read_text()) == stats
+
+
 # ---------------------------------------------------------------------------
 # Tests for _count_dandiset_failures
 # ---------------------------------------------------------------------------
@@ -2041,10 +2087,44 @@ def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.ai_generated
+def test_cli_queue_stats_calls_helper_and_reports_output(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue stats delegates to aggregate_queue_statistics."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+
+    runner = CliRunner()
+    with mock.patch(
+        "dandi_compute_code._cli.aggregate_queue_statistics", return_value={"successful_asset_bytes_total": 0}
+    ) as mock_stats:
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "queue",
+                "stats",
+                "--queue",
+                str(queue_dir),
+                "--dandiset",
+                str(dandiset_dir),
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_stats.assert_called_once_with(
+        queue_directory=queue_dir,
+        dandiset_directory=dandiset_dir,
+        output_file_name="queue_stats.json",
+    )
+    assert "Wrote queue aggregate statistics" in result.output
+
+
+@pytest.mark.ai_generated
 @pytest.mark.parametrize(
     "subcommand",
     [
         "clean",
+        "stats",
         "process",
     ],
 )
