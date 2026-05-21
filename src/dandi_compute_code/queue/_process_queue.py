@@ -8,6 +8,7 @@ import subprocess
 import urllib.request
 import warnings
 from collections import defaultdict
+from datetime import datetime, timezone
 
 import linkml_runtime.processing.referencevalidator
 import linkml_runtime.utils.schemaview
@@ -20,6 +21,7 @@ _AIND_EPHYS_PARAMS_REGISTRY_PATH = (
 )
 _QUEUE_CONFIG_SCHEMA_PATH = pathlib.Path(__file__).parent / "schemas" / "queue_config.linkml.yaml"
 _FLAT_ATTEMPT_DIR_RE = re.compile(r"^version-(?P<version>.+?)_params-[^_]+_config-.+_attempt-\d+$")
+_DURATION_PART_RE = re.compile(r"(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>ms|s|m|h|d)\b")
 TEST_QUEUE_CONTENT_ID = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
 
 try:
@@ -365,6 +367,146 @@ def _prune_last_submitted(*, queue_directory: pathlib.Path, state_entries: list[
     ]
     filtered = [entry for entry in last_submitted_entries if _entry_identity(entry) not in entries_to_prune]
     last_submitted_file.write_text("".join(json.dumps(entry) + "\n" for entry in filtered))
+
+
+def _duration_string_to_seconds(duration_string: str) -> float:
+    """Parse a Nextflow duration string (for example ``1m 5s``) into seconds."""
+    total_seconds = 0.0
+    for match in _DURATION_PART_RE.finditer(duration_string):
+        value = float(match.group("value"))
+        unit = match.group("unit")
+        if unit == "ms":
+            total_seconds += value / 1000.0
+        elif unit == "s":
+            total_seconds += value
+        elif unit == "m":
+            total_seconds += value * 60.0
+        elif unit == "h":
+            total_seconds += value * 3600.0
+        elif unit == "d":
+            total_seconds += value * 86400.0
+    return total_seconds
+
+
+def _extract_nextflow_timeline_data(*, timeline_html: str) -> dict | None:
+    """Extract ``window.data`` JSON payload from a Nextflow timeline HTML report."""
+    marker = "window.data ="
+    marker_index = timeline_html.find(marker)
+    if marker_index == -1:
+        return None
+
+    object_start = timeline_html.find("{", marker_index)
+    if object_start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+    object_end = -1
+    for index in range(object_start, len(timeline_html)):
+        character = timeline_html[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif character == "\\":
+                escape = True
+            elif character == '"':
+                in_string = False
+            continue
+        if character == '"':
+            in_string = True
+        elif character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0:
+                object_end = index
+                break
+
+    if object_end == -1:
+        return None
+
+    try:
+        payload = json.loads(timeline_html[object_start : object_end + 1])
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def aggregate_queue_statistics(
+    *,
+    queue_directory: pathlib.Path,
+    dandiset_directory: pathlib.Path,
+    output_file_name: str = "queue_stats.json",
+) -> dict:
+    """Write aggregate queue statistics JSON and return the written payload."""
+    state_file = queue_directory / "state.jsonl"
+    state_entries = (
+        [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
+        if state_file.exists()
+        else []
+    )
+
+    successful_asset_bytes_total = sum(
+        entry["asset_size_bytes"]
+        for entry in state_entries
+        if entry.get("has_output")
+        and isinstance(entry.get("asset_size_bytes"), int)
+        and not isinstance(entry.get("asset_size_bytes"), bool)
+    )
+
+    job_step_wall_time_seconds: defaultdict[str, float] = defaultdict(float)
+    timeline_files_processed = 0
+    for entry in state_entries:
+        flat_attempt_dir, nested_attempt_dir = _attempt_dir_candidates(base_dir=dandiset_directory, entry=entry)
+        attempt_dir = flat_attempt_dir if flat_attempt_dir.is_dir() else nested_attempt_dir
+        timeline_file = attempt_dir / "logs" / "timeline.html"
+        if not timeline_file.is_file():
+            continue
+
+        timeline_data = _extract_nextflow_timeline_data(timeline_html=timeline_file.read_text())
+        if timeline_data is None:
+            continue
+
+        processes = timeline_data.get("processes")
+        if not isinstance(processes, list):
+            continue
+        timeline_files_processed += 1
+
+        for process in processes:
+            if not isinstance(process, dict):
+                continue
+            process_label = process.get("label")
+            if not isinstance(process_label, str):
+                continue
+            step_name = process_label.split(" (", 1)[0]
+            times = process.get("times")
+            if not isinstance(times, list):
+                continue
+            for step in times:
+                if not isinstance(step, dict):
+                    continue
+                duration_label = step.get("label")
+                if not isinstance(duration_label, str):
+                    continue
+                duration_string = duration_label.split("/", 1)[0].strip()
+                duration_seconds = _duration_string_to_seconds(duration_string)
+                if duration_seconds > 0:
+                    job_step_wall_time_seconds[step_name] += duration_seconds
+
+    statistics = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "state_entry_count": len(state_entries),
+        "successful_asset_bytes_total": successful_asset_bytes_total,
+        "timeline_files_processed": timeline_files_processed,
+        "job_step_wall_time_seconds": {
+            key: value for key, value in sorted(job_step_wall_time_seconds.items(), key=lambda item: item[0])
+        },
+    }
+
+    output_file = queue_directory / output_file_name
+    output_file.write_text(json.dumps(statistics, indent=2, sort_keys=True) + "\n")
+    return statistics
 
 
 def _remove_empty_parents(*, start: pathlib.Path, stop: pathlib.Path) -> None:

@@ -17,6 +17,7 @@ from dandi_compute_code._cli import _dandicompute_group
         (["queue", "--help"], "Manage queue ordering, preparation, and execution."),
         (["queue", "refresh", "--help"], "Rescan the dandiset directory and regenerate waiting.jsonl."),
         (["queue", "clean", "--help"], "Delete unsubmitted capsules that are no longer present in the queue."),
+        (["queue", "stats", "--help"], "Write aggregate queue statistics from state.jsonl and timeline reports."),
         (["delete", "--help"], "Delete remote and local derivatives for specific version patterns."),
     ],
 )

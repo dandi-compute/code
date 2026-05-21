@@ -1,5 +1,6 @@
 from ._process_queue import (
     TEST_QUEUE_CONTENT_ID,
+    aggregate_queue_statistics,
     clean_unsubmitted_capsules,
     order_queue,
     prepare_queue,
@@ -9,6 +10,7 @@ from ._process_queue import (
 
 __all__ = [
     "TEST_QUEUE_CONTENT_ID",
+    "aggregate_queue_statistics",
     "clean_unsubmitted_capsules",
     "order_queue",
     "prepare_queue",
