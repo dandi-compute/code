@@ -2025,7 +2025,7 @@ def test_cli_queue_prepare_test_flag_passes_test_content_id(tmp_path: pathlib.Pa
         pipeline_directory=None,
         config_key="default",
         content_ids=[TEST_QUEUE_CONTENT_ID],
-        params_override=None,
+        parameters_key=None,
         limit=None,
     )
 
@@ -2050,14 +2050,14 @@ def test_cli_queue_prepare_test_flag_with_limit(tmp_path: pathlib.Path) -> None:
         pipeline_directory=None,
         config_key="default",
         content_ids=[TEST_QUEUE_CONTENT_ID],
-        params_override=None,
+        parameters_key=None,
         limit=3,
     )
 
 
 @pytest.mark.ai_generated
 def test_cli_queue_prepare_param_flag(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue prepare --params forwards params_override to prepare_queue."""
+    """dandicompute queue prepare --params forwards parameters_key to prepare_queue."""
     queue_dir = _make_queue_dir(tmp_path)
     runner = CliRunner()
 
@@ -2076,14 +2076,14 @@ def test_cli_queue_prepare_param_flag(tmp_path: pathlib.Path) -> None:
         pipeline_directory=None,
         config_key="default",
         content_ids=None,
-        params_override="custom_params",
+        parameters_key="custom_params",
         limit=None,
     )
 
 
 @pytest.mark.ai_generated
-def test_prepare_queue_params_override_replaces_params_priority(tmp_path: pathlib.Path) -> None:
-    """prepare_queue uses params_override instead of params_priority when provided."""
+def test_prepare_queue_params_key_replaces_params_priority(tmp_path: pathlib.Path) -> None:
+    """prepare_queue uses parameters_key instead of params_priority when provided."""
     queue_dir = _make_queue_dir(tmp_path)
 
     qualifying_ids = ["asset-bbb"]
@@ -2093,7 +2093,7 @@ def test_prepare_queue_params_override_replaces_params_priority(tmp_path: pathli
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(queue_directory=queue_dir, params_override="custom_params")
+        prepare_queue(queue_directory=queue_dir, parameters_key="custom_params")
 
     assert mock_prepare.call_count == 1
     assert mock_prepare.call_args.kwargs["parameters_key"] == "custom_params"

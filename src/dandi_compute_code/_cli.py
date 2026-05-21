@@ -342,8 +342,8 @@ def _queue_process_command(
 )
 @click.option(
     "--params",
-    "params_override",
-    help="Override the params_priority for all pipelines with this single parameters key.",
+    "parameters_key",
+    help="The name of the parameters to use for all pipelines.",
     required=False,
     type=str,
     default=None,
@@ -354,7 +354,7 @@ def _queue_prepare_command(
     config_key: str = "default",
     limit: int | None = None,
     test: bool = False,
-    params_override: str | None = None,
+    parameters_key: str | None = None,
 ) -> None:
     """Prepare queued jobs across configured pipelines without submitting them."""
     if "DANDI_API_KEY" not in os.environ:
@@ -364,7 +364,7 @@ def _queue_prepare_command(
         pipeline_directory=pipeline_directory,
         config_key=config_key,
         content_ids=[TEST_QUEUE_CONTENT_ID] if test else None,
-        params_override=params_override,
+        parameters_key=parameters_key,
         limit=limit,
     )
 

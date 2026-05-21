@@ -631,7 +631,7 @@ def prepare_queue(
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
     content_ids: list[str] | None = None,
-    params_override: str | None = None,
+    parameters_key: str | None = None,
     limit: int | None = None,
 ) -> None:
     """
@@ -665,7 +665,7 @@ def prepare_queue(
         content IDs list is not fetched from the network and these IDs are used
         directly instead.  Useful for targeted runs such as testing with one or
         more known content IDs.
-    params_override : str, optional
+    parameters_key : str, optional
         When provided, replaces the ``params_priority`` list for every pipeline
         in the queue config with this single parameters key.  Useful for
         testing a specific parameter set without modifying the queue config.
@@ -712,7 +712,7 @@ def prepare_queue(
         for version in pipeline_data.get("version_priority", []):
             if limit is not None and prepared_count >= limit:
                 break
-            params_list = [params_override] if params_override is not None else pipeline_data.get("params_priority", [])
+            params_list = [parameters_key] if parameters_key is not None else pipeline_data.get("params_priority", [])
             for params in params_list:
                 if limit is not None and prepared_count >= limit:
                     break
