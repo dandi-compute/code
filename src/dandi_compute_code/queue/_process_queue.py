@@ -9,8 +9,8 @@ import urllib.request
 import warnings
 from collections import defaultdict
 
-from linkml_runtime.processing.referencevalidator import ReferenceValidator
-from linkml_runtime.utils.schemaview import SchemaView
+import linkml_runtime.processing.referencevalidator
+import linkml_runtime.utils.schemaview
 
 from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
 from ..dandiset import scan_dandiset_directory
@@ -29,13 +29,15 @@ except (OSError, json.JSONDecodeError):
 
 
 def _validate_queue_config(*, queue_config: dict) -> None:
-    """Validate queue_config payload against the LinkML queue config schema."""
-    validator = ReferenceValidator(SchemaView(str(_QUEUE_CONFIG_SCHEMA_PATH)))
+    """Validate queue_config payload (top-level ``pipelines`` mapping) against the LinkML schema."""
+    validator = linkml_runtime.processing.referencevalidator.ReferenceValidator(
+        linkml_runtime.utils.schemaview.SchemaView(str(_QUEUE_CONFIG_SCHEMA_PATH))
+    )
     report = validator.validate(queue_config, target="PipelinesConfig")
-    errors = [result for result in report.results if not (result.normalized and result.repaired)]
+    errors = [result for result in report.results if not (result.normalized or result.repaired)]
     if errors:
         message = (
-            f"Invalid queue_config.json: LinkML validation failed with {len(errors)} error(s). "
+            f"Invalid queue configuration: LinkML validation failed with {len(errors)} error(s). "
             f"First error: {errors[0]!r}"
         )
         raise ValueError(message)

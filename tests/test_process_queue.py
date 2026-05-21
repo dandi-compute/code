@@ -998,6 +998,7 @@ def test_refresh_queue_raises_when_queue_config_fails_linkml_validation(tmp_path
     queue_dir.mkdir()
     invalid_queue_config = {
         "pipelines": {
+            # Violates schema minimum_value: 0 constraint.
             "test": {"version_priority": ["v1.0"], "params_priority": ["default"], "max_attempts_per_asset": -1}
         }
     }
@@ -1017,6 +1018,7 @@ def test_prepare_queue_raises_when_queue_config_fails_linkml_validation(tmp_path
     queue_dir.mkdir()
     invalid_queue_config = {
         "pipelines": {
+            # Violates schema minimum_value: 0 constraint.
             "test": {"version_priority": ["v1.0"], "params_priority": ["default"], "max_fail_per_dandiset": -1}
         }
     }
