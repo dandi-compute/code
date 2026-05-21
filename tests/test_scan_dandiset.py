@@ -79,6 +79,11 @@ def _make_attempt_dir(
     return attempt_dir
 
 
+def _mapping_for_content_id(*, content_id: str, dandiset_id: str, asset_path: str) -> dict[str, dict[str, str]]:
+    """Build a minimal content ID → unique dandiset path mapping payload."""
+    return {content_id: {dandiset_id: asset_path}}
+
+
 # ---------------------------------------------------------------------------
 # Tests for scan_dandiset_directory
 # ---------------------------------------------------------------------------
@@ -100,6 +105,7 @@ def mock_dandi_api_asset_lookup() -> Iterator[None]:
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_EmptyClient()),
+        mock.patch("dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path", return_value={}),
     ):
         yield
 
@@ -368,6 +374,14 @@ def test_scan_job_completion_time_populated_from_dandi_date_modified(tmp_path: p
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+        mock.patch(
+            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            return_value=_mapping_for_content_id(
+                content_id=content_id,
+                dandiset_id="000001",
+                asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+            ),
+        ),
     ):
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
@@ -539,7 +553,7 @@ def test_scan_parses_asset_size_from_dandi_asset_lookup(tmp_path: pathlib.Path) 
 
     class _FakeDandiset:
         def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == "sub-mouse01"
+            assert path == "sub-mouse01/sub-mouse01_ecephys.nwb"
             return iter(
                 [
                     _FakeAsset(
@@ -573,6 +587,14 @@ def test_scan_parses_asset_size_from_dandi_asset_lookup(tmp_path: pathlib.Path) 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+        mock.patch(
+            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            return_value=_mapping_for_content_id(
+                content_id=content_id,
+                dandiset_id="000001",
+                asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+            ),
+        ),
     ):
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
@@ -601,7 +623,7 @@ def test_scan_resolves_asset_size_with_session_subdirectory(tmp_path: pathlib.Pa
 
     class _FakeDandiset:
         def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == "sub-CGM3"
+            assert path == "sub-CGM3/sub-CGM3_ses-CGM3_ecephys.nwb"
             return iter(
                 [
                     _FakeAsset(
@@ -636,6 +658,14 @@ def test_scan_resolves_asset_size_with_session_subdirectory(tmp_path: pathlib.Pa
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+        mock.patch(
+            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            return_value=_mapping_for_content_id(
+                content_id=content_id,
+                dandiset_id="000001",
+                asset_path="sub-CGM3/sub-CGM3_ses-CGM3_ecephys.nwb",
+            ),
+        ),
     ):
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
@@ -674,7 +704,7 @@ def test_scan_resolves_asset_size_for_no_session_and_extra_entities(
 
     class _FakeDandiset:
         def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == "sub-SUB1"
+            assert path == asset_filename
             return iter(
                 [
                     _FakeAsset(
@@ -709,6 +739,14 @@ def test_scan_resolves_asset_size_for_no_session_and_extra_entities(
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+        mock.patch(
+            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            return_value=_mapping_for_content_id(
+                content_id=content_id,
+                dandiset_id="000001",
+                asset_path=asset_filename,
+            ),
+        ),
     ):
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
@@ -759,7 +797,7 @@ def test_scan_uses_expected_dandi_api_url_for_dandiset(
 
     class _FakeDandiset:
         def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
-            if path in {"sub-mouse01", expected_log_path}:
+            if path in {"sub-mouse01/sub-mouse01_ecephys.nwb", expected_log_path}:
                 return iter([_FakeAsset()])
             return iter(())
 
@@ -772,6 +810,14 @@ def test_scan_uses_expected_dandi_api_url_for_dandiset(
         mock.patch(
             "dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()
         ) as mock_client_ctor,
+        mock.patch(
+            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            return_value=_mapping_for_content_id(
+                content_id=content_id,
+                dandiset_id=dandiset_id,
+                asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+            ),
+        ),
     ):
         scan_dandiset_directory(dandiset_directory=tmp_path)
 
@@ -822,28 +868,16 @@ def test_scan_raises_on_empty_content_id_in_nwb_file_path(tmp_path: pathlib.Path
 
 
 @pytest.mark.ai_generated
-def test_scan_asset_size_lookup_falls_back_to_none_on_blob_mismatch(
+def test_scan_asset_size_lookup_falls_back_to_none_when_mapped_asset_path_has_no_match(
     tmp_path: pathlib.Path,
 ) -> None:
-    """asset_size_bytes falls back to None when no asset under the subject prefix has a matching blob ID."""
+    """asset_size_bytes falls back to None when the mapped unique asset path has no API match."""
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
 
-    class _FakeAsset:
-        path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-
-        def get_raw_metadata(self) -> dict[str, Any]:
-            return {
-                "contentUrl": [
-                    "https://api.dandiarchive.org/api/assets/download/",
-                    "https://dandiarchive.s3.amazonaws.com/blobs/000/000/not-the-right-blob",
-                ],
-                "contentSize": 123,
-            }
-
     class _FakeDandiset:
-        def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == "sub-mouse01"
-            return iter([_FakeAsset()])
+        def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
+            assert path == "sub-mouse01/sub-mouse01_ecephys.nwb"
+            return iter(())
 
     class _FakeClient:
         def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
@@ -864,6 +898,14 @@ def test_scan_asset_size_lookup_falls_back_to_none_on_blob_mismatch(
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+        mock.patch(
+            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            return_value=_mapping_for_content_id(
+                content_id=content_id,
+                dandiset_id="000001",
+                asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+            ),
+        ),
     ):
         with pytest.warns(UserWarning, match="but found 0"):
             records = scan_dandiset_directory(dandiset_directory=tmp_path)
@@ -940,7 +982,7 @@ def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Pat
 
     class _FakeDandiset:
         def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == "sub-mouse01"
+            assert path == resolved_asset_path
             return iter([_FakeAsset(resolved_asset_path)])
 
     class _FakeClient:
@@ -978,6 +1020,14 @@ def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Pat
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+        mock.patch(
+            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            return_value=_mapping_for_content_id(
+                content_id=content_id,
+                dandiset_id="000001",
+                asset_path=resolved_asset_path,
+            ),
+        ),
     ):
         refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
@@ -1009,7 +1059,7 @@ def test_refresh_queue_keeps_scanned_dandi_path_when_resolved_asset_parent_is_ro
 
     class _FakeDandiset:
         def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == "sub-mouse01"
+            assert path == root_asset_path
             return iter([_FakeAsset(root_asset_path)])
 
     class _FakeClient:
@@ -1047,6 +1097,14 @@ def test_refresh_queue_keeps_scanned_dandi_path_when_resolved_asset_parent_is_ro
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
         mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+        mock.patch(
+            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            return_value=_mapping_for_content_id(
+                content_id=content_id,
+                dandiset_id="000001",
+                asset_path=root_asset_path,
+            ),
+        ),
     ):
         refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 

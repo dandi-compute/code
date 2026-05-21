@@ -1,7 +1,10 @@
 import datetime
+import gzip
+import json
 import os
 import pathlib
 import re
+import urllib.request
 import warnings
 
 import dandi.dandiapi
@@ -12,6 +15,10 @@ _ATTEMPT_DIR_RE = re.compile(
 _ATTEMPT_SUFFIX_RE = re.compile(r"_attempt-\d+$")
 _SANDBOX_DANDISET_ID = "214527"
 _SANDBOX_API_URL = "https://api.sandbox.dandiarchive.org/api"
+_CONTENT_ID_TO_UNIQUE_DANDISET_PATH_URL = (
+    "https://raw.githubusercontent.com/dandi-cache/content-id-to-unique-dandiset-path/refs/heads/min/"
+    "derivatives/content_id_to_unique_dandiset_path.min.json.gz"
+)
 
 
 def _asset_parent_path(asset_path: str) -> str | None:
@@ -27,6 +34,12 @@ def _create_dandi_api_client(*, api_token: str, dandiset_id: str) -> dandi.dandi
     if dandiset_id == _SANDBOX_DANDISET_ID:
         return dandi.dandiapi.DandiAPIClient(api_url=_SANDBOX_API_URL)
     return dandi.dandiapi.DandiAPIClient(token=api_token)
+
+
+def _load_content_id_to_unique_dandiset_path() -> dict[str, dict[str, str]]:
+    """Load the content ID to unique Dandiset path mapping."""
+    with urllib.request.urlopen(url=_CONTENT_ID_TO_UNIQUE_DANDISET_PATH_URL) as response:
+        return json.loads(gzip.decompress(response.read()))
 
 
 def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str:
@@ -68,7 +81,7 @@ def _lookup_asset_size_bytes(
     dandiset_id : str
         DANDI dandiset identifier.
     dandi_path : str
-        Source path value from local scan, used to choose API prefix and filename filtering.
+        Source path value from local scan, used in fallback warnings when mapping resolution fails.
     content_id : str
         Blob/content identifier extracted from ``NWB_FILE_PATH`` in ``code/submit.sh``.
 
@@ -76,56 +89,55 @@ def _lookup_asset_size_bytes(
     The first value is ``int | None`` and the second value is ``str | None``.
     Either tuple value can be ``None`` when lookup conditions are not met.
     """
-    client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
-    dandiset = client.get_dandiset(dandiset_id=dandiset_id)
-
-    path_parts = pathlib.PurePosixPath(dandi_path).parts
-    if len(path_parts) > 1:
-        # DANDI stores assets directly under the subject directory even when the
-        # pipeline run lives inside a deeper hierarchy (e.g. sub-*/ses-*/pipeline-*).
-        # Use only the subject segment as the API prefix and filter candidate assets
-        # by a filename prefix built from all path segments joined with underscores.
-        api_path_prefix = path_parts[0]
-        filename_prefix = "_".join(path_parts)
-    else:
-        api_path_prefix = dandi_path
-        filename_prefix = None
-
-    filtered_assets: list[tuple[str, dict]] = []
-    for asset in dandiset.get_assets_with_path_prefix(path=api_path_prefix):
-        if filename_prefix is not None:
-            asset_filename = pathlib.PurePosixPath(asset.path).name
-            if not (asset_filename.startswith(filename_prefix) and asset_filename.endswith(".nwb")):
-                continue
-        metadata = asset.get_raw_metadata()
-        filtered_assets.append((asset.path, metadata))
-
-    matching_assets: list[tuple[str, dict]] = []
-    for asset_path, metadata in filtered_assets:
-        content_urls = metadata.get("contentUrl")
-        if not isinstance(content_urls, list) or len(content_urls) < 2:
-            continue
-        blob_url = content_urls[1]
-        if not isinstance(blob_url, str):
-            continue
-        if pathlib.PurePosixPath(blob_url).name == content_id:
-            matching_assets.append((asset_path, metadata))
-
-    if len(matching_assets) != 1:
-        candidate_paths = [p for p, _ in filtered_assets]
+    content_id_to_unique_dandiset_path = _load_content_id_to_unique_dandiset_path()
+    if content_id not in content_id_to_unique_dandiset_path:
         warnings.warn(
             (
                 f"Unable to resolve asset_size_bytes for {content_id}. "
-                f"Expected exactly 1 asset under {dandi_path} "
-                f"with blob ID {content_id} but found {len(matching_assets)}. "
-                f"Matching path assets: {candidate_paths}."
+                "Content ID is not present in content-id-to-unique-dandiset-path mapping."
             ),
             stacklevel=2,
         )
         return None, None
 
-    matching_asset_path, matching_metadata = matching_assets[0]
-    resolved_dandi_path = _asset_parent_path(matching_asset_path)
+    mapped_dandiset_path = content_id_to_unique_dandiset_path[content_id]
+    if len(mapped_dandiset_path) != 1:
+        warnings.warn(
+            (
+                f"Unable to resolve asset_size_bytes for {content_id}. "
+                f"Expected exactly 1 mapped dandiset/path pair but found {len(mapped_dandiset_path)}."
+            ),
+            stacklevel=2,
+        )
+        return None, None
+
+    mapped_dandiset_id, mapped_asset_path = next(iter(mapped_dandiset_path.items()))
+    if mapped_dandiset_id != dandiset_id:
+        warnings.warn(
+            (
+                f"Unable to resolve asset_size_bytes for {content_id}. "
+                f"Mapped dandiset_id {mapped_dandiset_id} does not match scanned dandiset_id {dandiset_id} "
+                f"for scanned path {dandi_path}."
+            ),
+            stacklevel=2,
+        )
+        return None, None
+
+    client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
+    dandiset = client.get_dandiset(dandiset_id=dandiset_id)
+    matching_assets = list(dandiset.get_assets_with_path_prefix(path=mapped_asset_path))
+    if len(matching_assets) != 1:
+        warnings.warn(
+            (
+                f"Unable to resolve asset_size_bytes for {content_id}. "
+                f"Expected exactly 1 asset at mapped path {mapped_asset_path} but found {len(matching_assets)}."
+            ),
+            stacklevel=2,
+        )
+        return None, None
+
+    matching_metadata = matching_assets[0].get_raw_metadata()
+    resolved_dandi_path = _asset_parent_path(mapped_asset_path)
 
     content_size = matching_metadata.get("contentSize")
     if isinstance(content_size, int):
@@ -286,8 +298,8 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         * ``dandi_path`` – resolved source asset parent path (from DANDI API lookup when uniquely matched),
           falling back to the scanned path segment under ``dandiset-{id}/`` preceding ``pipeline-*``
         * ``content_id``  – input content identifier parsed from ``code/submit.sh``
-        * ``asset_size_bytes`` – source asset size in bytes from DANDI API lookup;
-          ``null`` when no unique match is found, blob ID mismatches, or size is missing
+        * ``asset_size_bytes`` – source asset size in bytes from DANDI API lookup at the
+          mapped unique asset path; ``null`` when mapping/path lookup fails or size is missing
         * ``pipeline``    – value of the ``pipeline-`` BIDS entity
         * ``version``     – value of the ``version-`` BIDS entity
         * ``params``      – params portion of the attempt directory name
