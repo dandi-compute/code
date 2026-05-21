@@ -25,6 +25,7 @@ from dandi_compute_code.queue._process_queue import (
     _build_processing_order,
     _count_dandiset_failures,
     _count_running_aind_ephys_pipeline_jobs,
+    _load_queue_config,
     _resolve_params_key_to_id,
     _submit_next,
     _version_matches,
@@ -51,6 +52,18 @@ _EXAMPLE_QUEUE_CONFIG = {
             "max_attempts_per_asset": 2,
             "asset_overrides": {"asset-aaa": 1},
             "max_fail_per_dandiset": 2,
+        }
+    }
+}
+
+_ISSUE_EXAMPLE_QUEUE_CONFIG = {
+    "pipelines": {
+        "aind+ephys": {
+            "version_priority": ["v1.1.1+b268fd2"],
+            "params_priority": ["default"],
+            "max_attempts_per_asset": 1,
+            "asset_overrides": {"048d1ee9-83b7-491f-8f02-1ca615b1d455": None},
+            "max_fail_per_dandiset": 10,
         }
     }
 }
@@ -964,6 +977,53 @@ def test_order_queue_raises_when_queue_config_missing(tmp_path: pathlib.Path) ->
 
     with pytest.raises(FileNotFoundError, match="queue_config.json"):
         refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
+
+
+@pytest.mark.ai_generated
+def test_load_queue_config_validates_issue_example_schema(tmp_path: pathlib.Path) -> None:
+    """Issue-provided queue config validates against the LinkML schema."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(json.dumps(_ISSUE_EXAMPLE_QUEUE_CONFIG))
+
+    loaded = _load_queue_config(queue_directory=queue_dir)
+
+    assert loaded == _ISSUE_EXAMPLE_QUEUE_CONFIG
+
+
+@pytest.mark.ai_generated
+def test_refresh_queue_raises_when_queue_config_fails_linkml_validation(tmp_path: pathlib.Path) -> None:
+    """refresh_queue raises when queue_config violates LinkML constraints."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    invalid_queue_config = {
+        "pipelines": {
+            "test": {"version_priority": ["v1.0"], "params_priority": ["default"], "max_attempts_per_asset": -1}
+        }
+    }
+    (queue_dir / "queue_config.json").write_text(json.dumps(invalid_queue_config))
+
+    with (
+        mock.patch("dandi_compute_code.queue._process_queue.scan_dandiset_directory", return_value=[]),
+        pytest.raises(ValueError, match="LinkML validation failed"),
+    ):
+        refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_raises_when_queue_config_fails_linkml_validation(tmp_path: pathlib.Path) -> None:
+    """prepare_queue raises when queue_config violates LinkML constraints."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    invalid_queue_config = {
+        "pipelines": {
+            "test": {"version_priority": ["v1.0"], "params_priority": ["default"], "max_fail_per_dandiset": -1}
+        }
+    }
+    (queue_dir / "queue_config.json").write_text(json.dumps(invalid_queue_config))
+
+    with pytest.raises(ValueError, match="LinkML validation failed"):
+        prepare_queue(queue_directory=queue_dir, content_ids=[])
 
 
 @pytest.mark.ai_generated

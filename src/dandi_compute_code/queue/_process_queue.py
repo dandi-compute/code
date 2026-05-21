@@ -9,12 +9,16 @@ import urllib.request
 import warnings
 from collections import defaultdict
 
+from linkml_runtime.processing.referencevalidator import ReferenceValidator
+from linkml_runtime.utils.schemaview import SchemaView
+
 from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
 from ..dandiset import scan_dandiset_directory
 
 _AIND_EPHYS_PARAMS_REGISTRY_PATH = (
     pathlib.Path(__file__).parent.parent / "aind_ephys_pipeline" / "registries" / "registered_params.json"
 )
+_QUEUE_CONFIG_SCHEMA_PATH = pathlib.Path(__file__).parent / "schemas" / "queue_config.linkml.yaml"
 _FLAT_ATTEMPT_DIR_RE = re.compile(r"^version-(?P<version>.+?)_params-[^_]+_config-.+_attempt-\d+$")
 TEST_QUEUE_CONTENT_ID = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
 
@@ -22,6 +26,31 @@ try:
     _AIND_EPHYS_PARAMS_REGISTRY: dict = json.loads(_AIND_EPHYS_PARAMS_REGISTRY_PATH.read_text())
 except (OSError, json.JSONDecodeError):
     _AIND_EPHYS_PARAMS_REGISTRY = {}
+
+
+def _validate_queue_config(*, queue_config: dict) -> None:
+    """Validate queue_config payload against the LinkML queue config schema."""
+    validator = ReferenceValidator(SchemaView(str(_QUEUE_CONFIG_SCHEMA_PATH)))
+    report = validator.validate(queue_config, target="PipelinesConfig")
+    errors = [result for result in report.results if not (result.normalized and result.repaired)]
+    if errors:
+        message = (
+            f"Invalid queue_config.json: LinkML validation failed with {len(errors)} error(s). "
+            f"First error: {errors[0]!r}"
+        )
+        raise ValueError(message)
+
+
+def _load_queue_config(*, queue_directory: pathlib.Path) -> dict:
+    """Read queue_config.json and validate it against the LinkML schema."""
+    queue_config_file = queue_directory / "queue_config.json"
+    if not queue_config_file.exists():
+        message = f"'queue_config.json' not found in '{queue_directory}'."
+        raise FileNotFoundError(message)
+
+    queue_config = json.loads(queue_config_file.read_text())
+    _validate_queue_config(queue_config=queue_config)
+    return queue_config
 
 
 def _subject_session_to_dandi_path(entry: dict) -> str | None:
@@ -562,11 +591,6 @@ def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
         "DANDI_API_KEY" in os.environ and os.environ["DANDI_API_KEY"]
     ), "`DANDI_API_KEY` environment variable must be set before refreshing queue state."
 
-    queue_config_file = queue_directory / "queue_config.json"
-    if not queue_config_file.exists():
-        message = f"'queue_config.json' not found in '{queue_directory}'."
-        raise FileNotFoundError(message)
-
     state_file = queue_directory / "state.jsonl"
     records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
     with state_file.open(mode="w") as file_stream:
@@ -574,7 +598,7 @@ def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
             file_stream.write(json.dumps(record) + "\n")
 
     state_entries = [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
-    queue_config = json.loads(queue_config_file.read_text())
+    queue_config = _load_queue_config(queue_directory=queue_directory)
     ordered = order_queue(state_entries=state_entries, queue_config=queue_config)
     waiting_file = queue_directory / "waiting.jsonl"
     waiting_file.write_text("".join(json.dumps(e) + "\n" for e in ordered))
@@ -668,7 +692,7 @@ def prepare_queue(
         If provided, stop after preparing *limit* assets in total (across all
         pipeline/version/params combinations).  Useful for testing.
     """
-    queue_config = json.loads((queue_directory / "queue_config.json").read_text())
+    queue_config = _load_queue_config(queue_directory=queue_directory)
 
     if content_ids is None:
         qualifying_aind_content_ids_url = (
