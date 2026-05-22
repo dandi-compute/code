@@ -23,7 +23,6 @@ dependencies = [
     "dandi",
     "linkml-runtime>=1.10.0,<1.11",
 ]
-dynamic = ["version"]
 
 
 [project.scripts]
