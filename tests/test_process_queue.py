@@ -1679,7 +1679,10 @@ def test_prepare_queue_limit_samples_uniformly_over_dandisets(tmp_path: pathlib.
             "dandi_compute_code.queue._process_queue._load_content_id_to_unique_dandiset_path",
             return_value=content_id_mapping,
         ),
-        mock.patch("dandi_compute_code.queue._process_queue.random.shuffle", side_effect=lambda items: None),
+        mock.patch(
+            "dandi_compute_code.queue._process_queue.random.shuffle",
+            side_effect=lambda items: None,
+        ) as mock_shuffle,
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
@@ -1687,6 +1690,7 @@ def test_prepare_queue_limit_samples_uniformly_over_dandisets(tmp_path: pathlib.
 
     prepared_ids = [call.kwargs["content_id"] for call in mock_prepare.call_args_list]
     assert prepared_ids == ["asset-a1", "asset-b1"]
+    assert mock_shuffle.call_count == 3
 
 
 @pytest.mark.ai_generated

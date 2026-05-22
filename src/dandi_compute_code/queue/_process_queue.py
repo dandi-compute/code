@@ -805,7 +805,13 @@ def _strip_commit_hash_suffix(version: str) -> str:
 
 
 def _order_content_ids_for_uniform_dandiset_sampling(*, content_ids: list[str]) -> list[str]:
-    """Return content IDs ordered by randomized round-robin across source Dandisets."""
+    """
+    Return content IDs ordered by randomized round-robin across source Dandisets.
+
+    Content IDs without exactly one mapped source Dandiset are kept as their own
+    singleton groups so they remain eligible without being merged into the
+    randomization for any unrelated Dandiset.
+    """
     content_id_to_dandiset_path = _load_content_id_to_unique_dandiset_path()
     content_ids_by_dandiset: dict[str, list[str]] = defaultdict(list)
     for content_id in content_ids:
