@@ -1523,6 +1523,7 @@ def test_prepare_queue_calls_prepare_for_each_qualifying_asset(tmp_path: pathlib
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.queue._process_queue._load_content_id_to_unique_dandiset_path", return_value={}),
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
@@ -1582,6 +1583,7 @@ def test_prepare_queue_skips_when_failures_reach_max(tmp_path: pathlib.Path) -> 
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.queue._process_queue._load_content_id_to_unique_dandiset_path", return_value={}),
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
@@ -1604,6 +1606,7 @@ def test_prepare_queue_strips_commit_suffix_from_version(tmp_path: pathlib.Path)
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.queue._process_queue._load_content_id_to_unique_dandiset_path", return_value={}),
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
@@ -1625,6 +1628,7 @@ def test_prepare_queue_passes_optional_args_through(tmp_path: pathlib.Path) -> N
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.queue._process_queue._load_content_id_to_unique_dandiset_path", return_value={}),
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
@@ -1649,12 +1653,50 @@ def test_prepare_queue_limit_stops_after_n_assets(tmp_path: pathlib.Path) -> Non
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.queue._process_queue._load_content_id_to_unique_dandiset_path", return_value={}),
         mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
         prepare_queue(queue_directory=queue_dir, limit=2)
 
     assert mock_prepare.call_count == 2
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_limit_samples_uniformly_over_dandisets(tmp_path: pathlib.Path) -> None:
+    """prepare_queue interleaves qualifying assets so --limit is not biased by asset-rich Dandisets."""
+    queue_dir = _make_queue_dir(tmp_path)
+    qualifying_ids = ["asset-a1", "asset-a2", "asset-b1"]
+    content_id_mapping = {
+        "asset-a1": {"000001": "sub-a1/sub-a1_ecephys.nwb"},
+        "asset-a2": {"000001": "sub-a2/sub-a2_ecephys.nwb"},
+        "asset-b1": {"000002": "sub-b1/sub-b1_ecephys.nwb"},
+    }
+
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch(
+            "dandi_compute_code.queue._process_queue._load_content_id_to_unique_dandiset_path",
+            return_value=content_id_mapping,
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._process_queue.random.shuffle",
+            side_effect=lambda items: None,
+        ) as mock_shuffle,
+        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+    ):
+        mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
+        prepare_queue(queue_directory=queue_dir, limit=2)
+
+    prepared_ids = [call.kwargs["content_id"] for call in mock_prepare.call_args_list]
+    assert prepared_ids == ["asset-a1", "asset-b1"]
+    assert mock_shuffle.call_count == 3
+    assert {tuple(group) for group in mock_shuffle.call_args_list[0].args[0]} == {
+        ("asset-a1", "asset-a2"),
+        ("asset-b1",),
+    }
+    assert set(mock_shuffle.call_args_list[1].args[0]) == {"asset-a1", "asset-a2"}
+    assert set(mock_shuffle.call_args_list[2].args[0]) == {"asset-b1"}
 
 
 @pytest.mark.ai_generated
