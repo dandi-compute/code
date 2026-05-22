@@ -200,8 +200,8 @@ def test_attempt_dir_candidates_constructs_both_layouts(
 
 
 @pytest.mark.ai_generated
-def test_attempt_dir_candidates_supports_legacy_subject_session_entry(tmp_path: pathlib.Path) -> None:
-    """_attempt_dir_candidates falls back to subject/session when dandi_path is missing."""
+def test_attempt_dir_candidates_requires_dandi_path(tmp_path: pathlib.Path) -> None:
+    """_attempt_dir_candidates rejects entries that omit dandi_path."""
     entry = {
         "dandiset_id": "000001",
         "subject": "mouse01",
@@ -213,34 +213,8 @@ def test_attempt_dir_candidates_supports_legacy_subject_session_entry(tmp_path: 
         "attempt": 2,
     }
 
-    with pytest.warns(
-        UserWarning,
-        match=(
-            "Legacy queue entry missing dandi_path; falling back to subject/session-derived path. "
-            "Please update queue entries to include dandi_path."
-        ),
-    ):
-        flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
-
-    assert flat_path == (
-        tmp_path
-        / "derivatives"
-        / "dandiset-000001"
-        / "sub-mouse01"
-        / "ses-01"
-        / "pipeline-test"
-        / "version-v1.0_params-abc1234_config-def5678_attempt-2"
-    )
-    assert legacy_path == (
-        tmp_path
-        / "derivatives"
-        / "dandiset-000001"
-        / "sub-mouse01"
-        / "ses-01"
-        / "pipeline-test"
-        / "version-v1.0"
-        / "params-abc1234_config-def5678_attempt-2"
-    )
+    with pytest.raises(KeyError, match="Entry missing dandi_path"):
+        _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
 
 
 def _make_attempt_dir_with_script(
