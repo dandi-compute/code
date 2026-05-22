@@ -981,6 +981,7 @@ def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Pat
     """refresh_queue writes the API-resolved source path in state.jsonl when lookup succeeds."""
     content_id = "0fbbca6a-0000-0000-0000-000000000001"
     asset_size_bytes = 1234
+    mapped_asset_path = "sub-mouse01/./sub-mouse01_ses-ses001_obj-raw.nwb"
     resolved_asset_path = "sub-mouse01/sub-mouse01_ses-ses001_obj-raw.nwb"
 
     class _FakeAsset:
@@ -998,7 +999,7 @@ def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Pat
 
     class _FakeDandiset:
         def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == resolved_asset_path
+            assert path == mapped_asset_path
             return iter([_FakeAsset(resolved_asset_path)])
 
     class _FakeClient:
@@ -1041,7 +1042,7 @@ def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Pat
             return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
-                asset_path=resolved_asset_path,
+                asset_path=mapped_asset_path,
             ),
         ),
     ):

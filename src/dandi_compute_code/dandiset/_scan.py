@@ -78,7 +78,7 @@ def _lookup_asset_size_bytes(
     dandi_path: str,
     content_id: str,
 ) -> tuple[int | None, str | None]:
-    """Lookup asset size and resolved source directory path from DANDI API.
+    """Lookup asset size and resolved source asset path from DANDI API.
 
     Parameters
     ----------
