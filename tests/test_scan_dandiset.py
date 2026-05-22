@@ -770,23 +770,14 @@ def test_scan_resolves_asset_size_for_no_session_and_extra_entities(
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize(
-    ("dandiset_id", "expected_api_url"),
-    [
-        ("000001", None),
-        ("214527", "https://api.sandbox.dandiarchive.org/api"),
-    ],
-)
 def test_scan_uses_expected_dandi_api_url_for_dandiset(
     tmp_path: pathlib.Path,
-    dandiset_id: str,
-    expected_api_url: str | None,
 ) -> None:
-    """scan_dandiset_directory uses sandbox API only for the testing-source dandiset."""
+    """scan_dandiset_directory uses the live API with token for standard dandisets."""
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
     attempt_dir = _make_attempt_dir(
         tmp_path,
-        dandiset_id,
+        "000001",
         "mouse01",
         "aind+ephys",
         "v1.0",
@@ -830,7 +821,7 @@ def test_scan_uses_expected_dandi_api_url_for_dandiset(
             "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
             return_value=_build_mapping_for_content_id(
                 content_id=content_id,
-                dandiset_id=dandiset_id,
+                dandiset_id="000001",
                 asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
             ),
         ),
@@ -839,12 +830,40 @@ def test_scan_uses_expected_dandi_api_url_for_dandiset(
 
     assert mock_client_ctor.call_count >= 2
     for call in mock_client_ctor.call_args_list:
-        if expected_api_url is None:
-            assert call.kwargs["token"] == "live-token"
-            assert "api_url" not in call.kwargs
-        else:
-            assert call.kwargs["api_url"] == expected_api_url
-            assert "token" not in call.kwargs
+        assert call.kwargs["token"] == "live-token"
+        assert "api_url" not in call.kwargs
+
+
+@pytest.mark.ai_generated
+def test_scan_skips_sandbox_dandiset_directories(tmp_path: pathlib.Path) -> None:
+    """scan_dandiset_directory omits attempt directories under the sandbox dandiset-214527 folder."""
+    content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+    _make_attempt_dir(
+        tmp_path,
+        "214527",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        content_id=content_id,
+    )
+    _make_attempt_dir(
+        tmp_path,
+        "000001",
+        "mouse01",
+        "aind+ephys",
+        "v1.0",
+        "abc1234",
+        "def5678",
+        1,
+        content_id=content_id,
+    )
+    records = scan_dandiset_directory(dandiset_directory=tmp_path)
+    dandiset_ids = [r["dandiset_id"] for r in records]
+    assert "214527" not in dandiset_ids
+    assert "000001" in dandiset_ids
 
 
 @pytest.mark.ai_generated

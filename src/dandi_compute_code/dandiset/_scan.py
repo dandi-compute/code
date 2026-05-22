@@ -340,6 +340,8 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
     for dandiset_path in sorted(derivatives.iterdir()):
         if not dandiset_path.is_dir() or not dandiset_path.name.startswith("dandiset-"):
             continue
+        if dandiset_path.name == f"dandiset-{_SANDBOX_DANDISET_ID}":
+            continue
         for attempt_dir in sorted(dandiset_path.rglob("*_attempt-*")):
             if not attempt_dir.is_dir():
                 continue
