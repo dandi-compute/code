@@ -18,6 +18,9 @@ from dandi_compute_code._cli import _dandicompute_group
         (["queue", "refresh", "--help"], "Rescan the dandiset directory and regenerate waiting.jsonl."),
         (["queue", "clean", "--help"], "Delete unsubmitted capsules that are no longer present in the queue."),
         (["queue", "stats", "--help"], "Write aggregate queue statistics from state.jsonl and timeline reports."),
+        (["issues", "--help"], "Scan logs and write per-capsule and aggregate issue reports."),
+        (["issues", "dump", "--help"], "Scan nextflow and slurm logs and write per-capsule issue records."),
+        (["issues", "summarize", "--help"], "Summarize discovered issue lines by descending occurrence count."),
         (["delete", "--help"], "Delete remote and local derivatives for specific version patterns."),
     ],
 )

@@ -13,9 +13,11 @@ from .queue import (
     TEST_QUEUE_CONTENT_ID,
     aggregate_queue_statistics,
     clean_unsubmitted_capsules,
+    dump_issues,
     prepare_queue,
     process_queue,
     refresh_queue,
+    summarize_issues,
 )
 
 
@@ -393,6 +395,63 @@ def _queue_prepare_command(
         config_key=config_key,
         limit=limit,
     )
+
+
+# dandicompute issues
+@_dandicompute_group.group(name="issues")
+def _issues_group() -> None:
+    """Scan logs and write per-capsule and aggregate issue reports."""
+    pass
+
+
+# dandicompute issues dump [OPTIONS]
+@_issues_group.command(name="dump")
+@click.option(
+    "--directory",
+    "dandiset_directory",
+    help="Path to a local clone of the dandiset repository to scan for logs.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+@click.option(
+    "--queue",
+    "queue_directory",
+    help="Path to the queue root directory.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+def _issues_dump_command(
+    dandiset_directory: pathlib.Path,
+    queue_directory: pathlib.Path,
+) -> None:
+    """Scan nextflow and slurm logs and write per-capsule issue records."""
+    dump_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
+    _styled_echo(text=f"\nWrote issue dump: {queue_directory / 'issues_dump.json'}", color="green")
+
+
+# dandicompute issues summarize [OPTIONS]
+@_issues_group.command(name="summarize")
+@click.option(
+    "--directory",
+    "dandiset_directory",
+    help="Path to a local clone of the dandiset repository to scan for logs.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+@click.option(
+    "--queue",
+    "queue_directory",
+    help="Path to the queue root directory.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+def _issues_summarize_command(
+    dandiset_directory: pathlib.Path,
+    queue_directory: pathlib.Path,
+) -> None:
+    """Summarize discovered issue lines by descending occurrence count."""
+    summarize_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
+    _styled_echo(text=f"\nWrote issue summary: {queue_directory / 'issues_summary.json'}", color="green")
 
 
 # dandicompute delete
