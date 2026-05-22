@@ -1,3 +1,4 @@
+import fcntl
 import gzip
 import json
 import os
@@ -753,6 +754,11 @@ def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
     for currently running ``AIND-Ephys-Pipeline`` jobs, and up to the
     difference from two jobs are submitted.
 
+    To avoid duplicate submissions from overlapping invocations, a non-blocking
+    advisory file lock is acquired on ``process_queue.lock`` in
+    *queue_directory*. If the lock is already held, the invocation returns
+    without submitting jobs.
+
     Parameters
     ----------
     queue_directory : pathlib.Path
@@ -768,15 +774,24 @@ def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
         If ``queue_config.json`` is not found in *queue_directory* (raised by
         :func:`refresh_queue`).
     """
-    waiting_file = queue_directory / "waiting.jsonl"
-    if not waiting_file.exists() or not waiting_file.read_text().strip():
-        refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
+    lock_file = queue_directory / "process_queue.lock"
+    lock_file.touch(exist_ok=True)
+    with lock_file.open("r+") as lock_file_stream:
+        try:
+            fcntl.flock(lock_file_stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print(f"Skipping queue processing: lock already held at `{lock_file}`")
+            return
 
-    running_count = _count_running_aind_ephys_pipeline_jobs()
-    for _ in range(max(0, 2 - running_count)):
-        submitted = _submit_next(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
-        if not submitted:
-            break
+        waiting_file = queue_directory / "waiting.jsonl"
+        if not waiting_file.exists() or not waiting_file.read_text().strip():
+            refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
+
+        running_count = _count_running_aind_ephys_pipeline_jobs()
+        for _ in range(max(0, 2 - running_count)):
+            submitted = _submit_next(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
+            if not submitted:
+                break
 
 
 def _strip_commit_hash_suffix(version: str) -> str:
