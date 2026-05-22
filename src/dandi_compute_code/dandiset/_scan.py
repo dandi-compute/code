@@ -22,12 +22,9 @@ _CONTENT_ID_TO_UNIQUE_DANDISET_PATH_URL = (
 )
 
 
-def _asset_parent_path(asset_path: str) -> str | None:
-    """Return a POSIX parent directory path for an asset, or ``None`` if no parent exists."""
-    parent_path = pathlib.PurePosixPath(asset_path).parent
-    if parent_path == pathlib.PurePosixPath("."):
-        return None
-    return parent_path.as_posix()
+def _normalize_asset_path(asset_path: str) -> str:
+    """Return a normalized POSIX asset path."""
+    return pathlib.PurePosixPath(asset_path).as_posix()
 
 
 def _create_dandi_api_client(*, api_token: str, dandiset_id: str) -> dandi.dandiapi.DandiAPIClient:
@@ -81,7 +78,7 @@ def _lookup_asset_size_bytes(
     dandi_path: str,
     content_id: str,
 ) -> tuple[int | None, str | None]:
-    """Lookup asset size and resolved source directory path from DANDI API.
+    """Lookup asset size and resolved source asset path from DANDI API.
 
     Parameters
     ----------
@@ -94,7 +91,7 @@ def _lookup_asset_size_bytes(
     content_id : str
         Blob/content identifier extracted from ``NWB_FILE_PATH`` in ``code/submit.sh``.
 
-    Returns a tuple ``(asset_size_bytes, resolved_parent_path)``.
+    Returns a tuple ``(asset_size_bytes, resolved_dandi_path)``.
     The first value is ``int | None`` and the second value is ``str | None``.
     Either tuple value can be ``None`` when lookup conditions are not met.
     """
@@ -146,7 +143,7 @@ def _lookup_asset_size_bytes(
         return None, None
 
     matching_metadata = matching_assets[0].get_raw_metadata()
-    resolved_dandi_path = _asset_parent_path(mapped_asset_path)
+    resolved_dandi_path = _normalize_asset_path(mapped_asset_path)
 
     content_size = matching_metadata.get("contentSize")
     if isinstance(content_size, int):
@@ -304,8 +301,8 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         attempt)``.  Each record contains:
 
         * ``dandiset_id`` – value of the ``dandiset-`` BIDS entity
-        * ``dandi_path`` – resolved source asset parent path (from DANDI API lookup when uniquely matched),
-          falling back to the scanned path segment under ``dandiset-{id}/`` preceding ``pipeline-*``
+        * ``dandi_path`` – resolved source asset path from DANDI API lookup when uniquely matched;
+          otherwise the scanned path segment under ``dandiset-{id}/`` preceding ``pipeline-*``
         * ``content_id``  – input content identifier parsed from ``code/submit.sh``
         * ``asset_size_bytes`` – source asset size in bytes from DANDI API lookup at the
           mapped unique asset path; ``null`` when mapping/path lookup fails or size is missing
