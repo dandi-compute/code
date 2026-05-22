@@ -488,8 +488,7 @@ def aggregate_queue_statistics(
     job_step_wall_time_seconds: defaultdict[str, float] = defaultdict(float)
     timeline_files_processed = 0
     for entry in state_entries:
-        flat_attempt_dir, nested_attempt_dir = _attempt_dir_candidates(base_dir=dandiset_directory, entry=entry)
-        attempt_dir = flat_attempt_dir if flat_attempt_dir.is_dir() else nested_attempt_dir
+        attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
         timeline_file = attempt_dir / "logs" / "timeline.html"
         if not timeline_file.is_file():
             continue
@@ -624,8 +623,7 @@ def clean_unsubmitted_capsules(
 
     removed: list[pathlib.Path] = []
     for entry in queued_entries:
-        flat_attempt_dir, nested_attempt_dir = _attempt_dir_candidates(base_dir=dandiset_directory, entry=entry)
-        attempt_dir = flat_attempt_dir if flat_attempt_dir.is_dir() else nested_attempt_dir
+        attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
 
         if attempt_dir.is_dir():
             parent_dir = attempt_dir.parent

@@ -1235,6 +1235,48 @@ def test_aggregate_queue_statistics_skips_invalid_timeline_html(tmp_path: pathli
     assert stats["job_step_wall_time_seconds"] == {}
 
 
+@pytest.mark.ai_generated
+def test_aggregate_queue_statistics_found_timeline_via_fallback_attempt_resolution(tmp_path: pathlib.Path) -> None:
+    """aggregate_queue_statistics finds timeline files when state dandi_path differs from on-disk attempt path."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+    entry = _make_state_entry(
+        dandiset_id="001849",
+        dandi_path="sourcedata",
+        pipeline="aind+ephys",
+        version="v1.1.1+b268fd2+a66c8df",
+        params="4af6a25",
+        config="0d4bf36_date-2026+05+21",
+        has_output=True,
+        has_logs=True,
+    )
+    entry["asset_size_bytes"] = 120
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
+
+    attempt_dir = (
+        dandiset_dir
+        / "derivatives"
+        / "dandiset-001849"
+        / "sub-test"
+        / "pipeline-aind+ephys"
+        / "version-v1.1.1+b268fd2+a66c8df_params-4af6a25_config-0d4bf36_date-2026+05+21_attempt-1"
+    )
+    logs_dir = attempt_dir / "logs"
+    logs_dir.mkdir(parents=True)
+    (logs_dir / "timeline.html").write_text("""<script>
+window.data = {
+  "processes": [
+    {"label": "step_one (step-one)", "times": [{"label": "1s / 1 GB"}]}
+  ]
+};
+</script>""")
+
+    stats = aggregate_queue_statistics(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+
+    assert stats["timeline_files_processed"] == 1
+    assert stats["job_step_wall_time_seconds"]["step_one"] == pytest.approx(1.0)
+
+
 # ---------------------------------------------------------------------------
 # Tests for _count_dandiset_failures
 # ---------------------------------------------------------------------------
@@ -2090,6 +2132,46 @@ def test_clean_unsubmitted_capsules_removes_only_queued_not_submitted(tmp_path: 
     assert removed == [queued_dir]
     assert not queued_dir.exists()
     assert submitted_dir.exists()
+
+
+@pytest.mark.ai_generated
+def test_clean_unsubmitted_capsules_removed_entry_via_fallback_attempt_resolution(tmp_path: pathlib.Path) -> None:
+    """clean_unsubmitted_capsules removes queued entry when dandi_path differs from on-disk attempt path."""
+    dandiset_dir = tmp_path / "dandiset"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    attempt_dir = (
+        dandiset_dir
+        / "derivatives"
+        / "dandiset-001849"
+        / "sub-test"
+        / "pipeline-aind+ephys"
+        / "version-v1.1.1+b268fd2+a66c8df_params-4af6a25_config-0d4bf36_date-2026+05+21_attempt-1"
+    )
+    (attempt_dir / "code").mkdir(parents=True)
+    (attempt_dir / "code" / "submit.sh").write_text("#!/bin/bash\necho hello\n")
+    state_entry = _make_state_entry(
+        dandiset_id="001849",
+        dandi_path="sourcedata",
+        pipeline="aind+ephys",
+        version="v1.1.1+b268fd2+a66c8df",
+        params="4af6a25",
+        config="0d4bf36_date-2026+05+21",
+        has_code=True,
+        has_logs=False,
+        has_output=False,
+    )
+
+    with (
+        mock.patch("dandi_compute_code.dandiset.scan_dandiset_directory", return_value=[state_entry]),
+        mock.patch("subprocess.run") as mock_run,
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}),
+    ):
+        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+
+    assert removed == [attempt_dir]
+    assert not attempt_dir.exists()
+    mock_run.assert_called_once_with(["dandi", "delete", str(attempt_dir)], input=b"y\n", check=True)
 
 
 @pytest.mark.ai_generated
