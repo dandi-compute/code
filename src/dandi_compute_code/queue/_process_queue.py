@@ -893,8 +893,8 @@ def prepare_queue(
             "derivatives/qualifying_aind_content_ids.min.json.gz"
         )
         with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
-            content_ids = json.loads(gzip.decompress(response.read()))
-        content_ids = _order_content_ids_for_uniform_dandiset_sampling(content_ids=content_ids)
+            fetched_content_ids = json.loads(gzip.decompress(response.read()))
+        content_ids = _order_content_ids_for_uniform_dandiset_sampling(content_ids=fetched_content_ids)
 
     state_file = queue_directory / "state.jsonl"
     state_entries = (
