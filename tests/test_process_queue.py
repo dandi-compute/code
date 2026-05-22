@@ -912,6 +912,34 @@ def test_process_queue_skips_order_queue_when_waiting_non_empty(tmp_path: pathli
 
 
 @pytest.mark.ai_generated
+def test_process_queue_skips_when_lock_is_already_held(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """process_queue skips submission when another process holds the lock."""
+    queue_dir = _make_queue_dir(tmp_path)
+    _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
+
+    with (
+        mock.patch(
+            "dandi_compute_code.queue._process_queue.fcntl.flock",
+            side_effect=BlockingIOError,
+        ),
+        mock.patch("dandi_compute_code.queue._process_queue.refresh_queue") as mock_refresh,
+        mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs") as mock_running,
+        mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
+    ):
+        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+
+    captured = capsys.readouterr()
+    assert "Skipping queue processing: lock already held" in captured.out
+    mock_refresh.assert_not_called()
+    mock_running.assert_not_called()
+    mock_submit.assert_not_called()
+
+
+@pytest.mark.ai_generated
 def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> None:
     """process_queue calls _submit_next twice when no AIND jobs are running and entries are available."""
     queue_dir = _make_queue_dir(tmp_path)
