@@ -18,6 +18,7 @@ import dandi.upload
 import pydantic
 
 from ._handle_template import generate_aind_ephys_submission_script
+from ..dandiset._scan import _SANDBOX_DANDISET_ID
 
 
 @pydantic.validate_call
@@ -148,6 +149,12 @@ def prepare_aind_ephys_job(
         raise ValueError(message)
 
     dandiset_id, dandiset_path = next(iter(content_id_to_unique_dandiset_path[content_id].items()))
+    if dandiset_id == _SANDBOX_DANDISET_ID:
+        message = (
+            f"Content ID {content_id} maps to sandbox dandiset {_SANDBOX_DANDISET_ID}, "
+            "which is no longer active. This content ID cannot be prepared."
+        )
+        raise ValueError(message)
     # Parse BIDS entities from all path components (directory parts and filename stem),
     # and skip tokens that are modality suffixes (no "-" separator, e.g. "ecephys").
     # Directory parts are needed for AIND-style paths where "sub-" appears only in the folder name.
