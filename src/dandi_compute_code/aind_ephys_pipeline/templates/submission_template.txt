@@ -33,6 +33,10 @@ DATA_PATH="$DATA_PATH" RESULTS_PATH="$RESULTS_PATH" NXF_APPTAINER_CACHEDIR="$NXF
     --params_file "{{ params_file_path }}" \
     --job_dispatch_args "--nwb-files $NWB_FILE_PATH"
 
+echo "=== Directory tree of \$RESULTS_PATH after nextflow run ==="
+tree "$RESULTS_PATH" || find "$RESULTS_PATH" -print
+echo "=== End of directory tree ==="
+
 cd $RESULTS_PATH
 mv nwb/ ../derivatives/
 mv visualization_output.json visualization/
