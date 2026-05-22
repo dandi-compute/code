@@ -112,6 +112,45 @@ def test_prepare_aind_ephys_job_extracts_sub_entity_from_path(
 
 
 @pytest.mark.ai_generated
+def test_prepare_aind_ephys_job_test_content_id_uses_sub_test(
+    tmp_path: pathlib.Path,
+    fake_pipeline_dir: pathlib.Path,
+) -> None:
+    """The test content ID (sourcedata/aind-sample.nwb) gets sub='test' injected as a special case."""
+    # The production mapping for this ID is {'001849': 'sourcedata/aind-sample.nwb'},
+    # which has no sub- entity in any path component.
+    test_content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+    mapping = {test_content_id: {"001849": "sourcedata/aind-sample.nwb"}}
+
+    temp_dir = tmp_path / "tmpdir"
+    temp_dir.mkdir()
+
+    mock_dandiset = mock.MagicMock()
+    mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
+
+    with (
+        mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
+        mock.patch("subprocess.check_output", side_effect=_git_check_output),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.download.download"),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.upload.upload"),
+        mock.patch("tempfile.mkdtemp", return_value=str(temp_dir)),
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "fake-key"}),
+    ):
+        mock_client.return_value.get_dandiset.return_value = mock_dandiset
+
+        script_path = prepare_aind_ephys_job(
+            pipeline_version="v1.1.0",
+            content_id=test_content_id,
+            config_key="default",
+            parameters_key="default",
+            pipeline_directory=fake_pipeline_dir,
+        )
+
+    assert "sub-test" in str(script_path)
+
+
+@pytest.mark.ai_generated
 def test_prepare_aind_ephys_job_raises_on_missing_sub_entity(tmp_path: pathlib.Path) -> None:
     """prepare_aind_ephys_job raises a clear ValueError when no 'sub' entity can be extracted from the path."""
     content_id = "05000000-0000-0000-0000-000000000000"

@@ -160,17 +160,18 @@ def prepare_aind_ephys_job(
             key, value = token.split("-", 1)
             entities[key] = value
 
+    # Special case - inject missing subject label and add date entity for testing asset
+    if content_id == "048d1ee9-83b7-491f-8f02-1ca615b1d455":
+        entities.setdefault("sub", "test")
+        today = datetime.date.today().isoformat().replace("-", "+")
+        config_id += f"_date-{today}"
+
     if "sub" not in entities:
         message = (
             f"Could not extract 'sub' BIDS entity from dandiset path: {dandiset_path!r}. "
             "The path must contain a directory component or filename token of the form 'sub-<label>'."
         )
         raise ValueError(message)
-
-    # Special case - add date entity for testing asset
-    if content_id == "048d1ee9-83b7-491f-8f02-1ca615b1d455":
-        today = datetime.date.today().isoformat().replace("-", "+")
-        config_id += f"_date-{today}"
 
     # TODO: if first run for asset, skip below and add sourcedata
 
