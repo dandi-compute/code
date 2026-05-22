@@ -1054,7 +1054,7 @@ def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Pat
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_writes_resolved_dandi_path_when_resolved_asset_path_is_root(tmp_path: pathlib.Path) -> None:
+def test_refresh_queue_writes_resolved_dandi_path_for_root_level_asset(tmp_path: pathlib.Path) -> None:
     """refresh_queue writes resolved dandi_path even when matched asset path is at dandiset root."""
     content_id = "0fbbca6a-0000-0000-0000-000000000002"
     asset_size_bytes = 4321

@@ -301,8 +301,8 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         attempt)``.  Each record contains:
 
         * ``dandiset_id`` – value of the ``dandiset-`` BIDS entity
-        * ``dandi_path`` – resolved source asset path from DANDI API lookup when uniquely matched,
-          falling back to the scanned path segment under ``dandiset-{id}/`` preceding ``pipeline-*``
+        * ``dandi_path`` – resolved source asset path from DANDI API lookup when uniquely matched;
+          otherwise the scanned path segment under ``dandiset-{id}/`` preceding ``pipeline-*``
         * ``content_id``  – input content identifier parsed from ``code/submit.sh``
         * ``asset_size_bytes`` – source asset size in bytes from DANDI API lookup at the
           mapped unique asset path; ``null`` when mapping/path lookup fails or size is missing
