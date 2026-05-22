@@ -653,8 +653,8 @@ def test_submit_next_submits_first_entry_in_order(tmp_path: pathlib.Path) -> Non
 
 
 @pytest.mark.ai_generated
-def test_submit_next_returns_false_when_script_missing(tmp_path: pathlib.Path) -> None:
-    """_submit_next returns False when the submit.sh for the first entry does not exist."""
+def test_submit_next_raised_when_script_missing(tmp_path: pathlib.Path) -> None:
+    """_submit_next raises FileNotFoundError when the submit.sh for the first entry does not exist."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "dandiset"
 
@@ -663,9 +663,42 @@ def test_submit_next_returns_false_when_script_missing(tmp_path: pathlib.Path) -
     # Deliberately do NOT create the attempt directory / submit.sh
 
     with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
+        with pytest.raises(FileNotFoundError, match="Submit script not found:"):
+            _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+
+
+@pytest.mark.ai_generated
+def test_submit_next_found_flat_attempt_directory_under_scanned_dandi_path(tmp_path: pathlib.Path) -> None:
+    """_submit_next can submit from flat attempt layout even when dandi_path points to source data."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+    entry = _make_state_entry(
+        dandiset_id="001849",
+        dandi_path="sourcedata",
+        pipeline="aind+ephys",
+        version="v1.1.1+b268fd2+a66c8df",
+        params="4af6a25",
+        config="0d4bf36_date-2026+05+21",
+        attempt=1,
+    )
+    _write_jsonl(queue_dir / "waiting.jsonl", [entry])
+    actual_attempt_dir = (
+        dandiset_dir
+        / "derivatives"
+        / "dandiset-001849"
+        / "sub-test"
+        / "pipeline-aind+ephys"
+        / "version-v1.1.1+b268fd2+a66c8df_params-4af6a25_config-0d4bf36_date-2026+05+21_attempt-1"
+    )
+    (actual_attempt_dir / "code").mkdir(parents=True)
+    script_file_path = actual_attempt_dir / "code" / "submit.sh"
+    script_file_path.write_text("#!/bin/bash\necho hello\n")
+
+    with mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit:
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
-    assert result is False
+    assert result is True
+    mock_submit.assert_called_once_with(script_file_path=script_file_path)
 
 
 @pytest.mark.ai_generated
@@ -2179,3 +2212,26 @@ def test_cli_queue_prepare_required_queue_directory() -> None:
         result = runner.invoke(_dandicompute_group, ["queue", "prepare"])
     assert result.exit_code != 0
     assert "Missing option '--queue'" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_process_failed_when_submit_script_missing(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue process exits non-zero when a queued submit script is missing."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+    _write_jsonl(
+        queue_dir / "waiting.jsonl",
+        [_make_state_entry(dandiset_id="000001", pipeline="test", version="v1.0", params="default")],
+    )
+    runner = CliRunner()
+    with mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=0):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["queue", "process", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
+            env={"DANDI_API_KEY": "test-key"},
+        )
+
+    assert result.exit_code != 0
+    assert result.exception is not None
+    assert "Submit script not found:" in str(result.exception)

@@ -337,6 +337,36 @@ def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pat
     return flat_attempt_dir, nested_attempt_dir
 
 
+def _resolve_attempt_dir(*, base_dir: pathlib.Path, entry: dict) -> pathlib.Path:
+    """Resolve the best attempt-directory path for a queue entry."""
+    flat_attempt_dir, nested_attempt_dir = _attempt_dir_candidates(base_dir=base_dir, entry=entry)
+    if flat_attempt_dir.is_dir():
+        return flat_attempt_dir
+    if nested_attempt_dir.is_dir():
+        return nested_attempt_dir
+
+    dandiset_root = base_dir / "derivatives" / f"dandiset-{entry['dandiset_id']}"
+    if not dandiset_root.is_dir():
+        return nested_attempt_dir
+
+    pipeline_dir_name = f"pipeline-{entry['pipeline']}"
+    flat_attempt_dir_name = (
+        f"version-{entry['version']}_params-{entry['params']}_config-{entry['config']}_attempt-{entry['attempt']}"
+    )
+    nested_attempt_dir_name = f"params-{entry['params']}_config-{entry['config']}_attempt-{entry['attempt']}"
+    for pipeline_dir in sorted(dandiset_root.rglob(pipeline_dir_name)):
+        if not pipeline_dir.is_dir():
+            continue
+        fallback_flat_attempt_dir = pipeline_dir / flat_attempt_dir_name
+        if fallback_flat_attempt_dir.is_dir():
+            return fallback_flat_attempt_dir
+        fallback_nested_attempt_dir = pipeline_dir / f"version-{entry['version']}" / nested_attempt_dir_name
+        if fallback_nested_attempt_dir.is_dir():
+            return fallback_nested_attempt_dir
+
+    return nested_attempt_dir
+
+
 def _entry_identity(entry: dict) -> tuple:
     """Return a stable tuple key for matching queue/state/last-submitted entries."""
     dandi_path = entry.get("dandi_path")
@@ -661,13 +691,12 @@ def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.P
 
     entry = waiting_entries[0]
 
-    flat_attempt_dir, nested_attempt_dir = _attempt_dir_candidates(base_dir=dandiset_directory, entry=entry)
-    attempt_dir = flat_attempt_dir if flat_attempt_dir.is_dir() else nested_attempt_dir
+    attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
 
     script_file_path = attempt_dir / "code" / "submit.sh"
     if not script_file_path.exists():
-        print(f"Submit script not found: {script_file_path}")
-        return False
+        message = f"Submit script not found: {script_file_path}"
+        raise FileNotFoundError(message)
 
     print(f"Submitting run capsule directory: {attempt_dir}")
     submit_job(script_file_path=script_file_path)
