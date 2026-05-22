@@ -686,7 +686,7 @@ def test_scan_resolves_asset_size_with_session_subdirectory(tmp_path: pathlib.Pa
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
     assert records[0]["asset_size_bytes"] == asset_size_bytes
-    assert records[0]["dandi_path"] == "sub-CGM3"
+    assert records[0]["dandi_path"] == "sub-CGM3/sub-CGM3_ses-CGM3_ecephys.nwb"
 
 
 @pytest.mark.ai_generated
@@ -1050,12 +1050,12 @@ def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Pat
     state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
     assert len(state_records) == 1
     assert state_records[0]["asset_size_bytes"] == asset_size_bytes
-    assert state_records[0]["dandi_path"] == "sub-mouse01"
+    assert state_records[0]["dandi_path"] == resolved_asset_path
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_keeps_scanned_dandi_path_when_resolved_asset_parent_is_root(tmp_path: pathlib.Path) -> None:
-    """refresh_queue keeps scanned dandi_path when matched asset path has no parent directory."""
+def test_refresh_queue_writes_resolved_dandi_path_when_resolved_asset_path_is_root(tmp_path: pathlib.Path) -> None:
+    """refresh_queue writes resolved dandi_path even when matched asset path is at dandiset root."""
     content_id = "0fbbca6a-0000-0000-0000-000000000002"
     asset_size_bytes = 4321
     root_asset_path = "sub-mouse01_ses-ses001_obj-raw.nwb"
@@ -1127,7 +1127,7 @@ def test_refresh_queue_keeps_scanned_dandi_path_when_resolved_asset_parent_is_ro
     state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
     assert len(state_records) == 1
     assert state_records[0]["asset_size_bytes"] == asset_size_bytes
-    assert state_records[0]["dandi_path"] == "sub-mouse01/ses-ses001"
+    assert state_records[0]["dandi_path"] == root_asset_path
 
 
 @pytest.mark.ai_generated
