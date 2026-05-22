@@ -1691,6 +1691,9 @@ def test_prepare_queue_limit_samples_uniformly_over_dandisets(tmp_path: pathlib.
     prepared_ids = [call.kwargs["content_id"] for call in mock_prepare.call_args_list]
     assert prepared_ids == ["asset-a1", "asset-b1"]
     assert mock_shuffle.call_count == 3
+    assert mock_shuffle.call_args_list[0].args[0] == [["asset-a1", "asset-a2"], ["asset-b1"]]
+    assert mock_shuffle.call_args_list[1].args[0] == ["asset-a1", "asset-a2"]
+    assert mock_shuffle.call_args_list[2].args[0] == ["asset-b1"]
 
 
 @pytest.mark.ai_generated
