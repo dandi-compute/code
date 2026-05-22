@@ -2336,6 +2336,60 @@ def test_cli_queue_stats_calls_helper_and_reports_output(tmp_path: pathlib.Path)
 
 
 @pytest.mark.ai_generated
+def test_cli_issues_dump_calls_helper(tmp_path: pathlib.Path) -> None:
+    """dandicompute issues dump delegates to dump_issues and reports output."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+
+    runner = CliRunner()
+    with mock.patch("dandi_compute_code._cli.dump_issues", return_value=[]) as mock_dump:
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "issues",
+                "dump",
+                "--directory",
+                str(dandiset_dir),
+                "--queue",
+                str(queue_dir),
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_dump.assert_called_once_with(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    assert "Wrote issue dump" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_issues_summarize_calls_helper(tmp_path: pathlib.Path) -> None:
+    """dandicompute issues summarize delegates to summarize_issues and reports output."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+
+    runner = CliRunner()
+    with mock.patch("dandi_compute_code._cli.summarize_issues", return_value={}) as mock_summarize:
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "issues",
+                "summarize",
+                "--directory",
+                str(dandiset_dir),
+                "--queue",
+                str(queue_dir),
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_summarize.assert_called_once_with(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    assert "Wrote issue summary" in result.output
+
+
+@pytest.mark.ai_generated
 @pytest.mark.parametrize(
     "subcommand",
     [
