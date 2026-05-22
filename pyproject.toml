@@ -2,13 +2,14 @@
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
-[tool.hatch.version]
-source = "vcs"
+[tool.hatch.build.targets.wheel]
+packages = ["src/dandi_compute_code"]
 
 
 
 [project]
 name = "dandi-compute-code"
+version = "0.3.0"
 authors = [
   { name="Cody Baker", email="cody.c.baker.phd@gmail.com" },
 ]
@@ -22,7 +23,7 @@ dependencies = [
     "dandi",
     "linkml-runtime>=1.10.0,<1.11",
 ]
-dynamic = ["version"]
+
 
 [project.scripts]
 dandicompute = "dandi_compute_code._cli:_dandicompute_group"

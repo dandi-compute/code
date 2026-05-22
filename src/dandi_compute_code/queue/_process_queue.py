@@ -6,7 +6,6 @@ import re
 import shutil
 import subprocess
 import urllib.request
-import warnings
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -55,27 +54,6 @@ def _load_queue_config(*, queue_directory: pathlib.Path) -> dict:
     queue_config = json.loads(queue_config_file.read_text())
     _validate_queue_config(queue_config=queue_config)
     return queue_config
-
-
-def _subject_session_to_dandi_path(entry: dict) -> str | None:
-    """
-    Build a BIDS-style dandi_path from legacy subject/session keys when available.
-
-    Returns
-    -------
-    str or None
-        ``sub-{subject}`` (optionally followed by ``/ses-{session}``) when
-        ``subject`` is present, otherwise ``None``.
-    """
-    subject = entry.get("subject")
-    if subject is None:
-        return None
-
-    dandi_path_parts = [f"sub-{subject}"]
-    session = entry.get("session")
-    if session:
-        dandi_path_parts.append(f"ses-{session}")
-    return "/".join(dandi_path_parts)
 
 
 def _resolve_params_key_to_id(pipeline: str, params_key: str) -> str:
@@ -311,18 +289,11 @@ def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pat
     dandiset_id = entry["dandiset_id"]
     dandi_path = entry.get("dandi_path")
     if dandi_path is None:
-        # TODO: Remove this fallback once legacy queue entries without dandi_path are no longer supported.
-        warnings.warn(
-            (
-                "Legacy queue entry missing dandi_path; falling back to subject/session-derived path. "
-                "Please update queue entries to include dandi_path."
-            ),
-            stacklevel=2,
-        )
-        dandi_path = _subject_session_to_dandi_path(entry)
-    if not dandi_path:
-        message = f"Entry missing dandi_path and subject/session fallback: {entry!r}"
-        raise KeyError(message)
+        message = f"Entry has invalid dandi_path field (missing): {entry!r}"
+        raise ValueError(message)
+    if dandi_path == "":
+        message = f"Entry has invalid dandi_path field (empty): {entry!r}"
+        raise ValueError(message)
     pipeline = entry["pipeline"]
     version = entry["version"]
     params = entry["params"]
@@ -369,13 +340,9 @@ def _resolve_attempt_dir(*, base_dir: pathlib.Path, entry: dict) -> pathlib.Path
 
 def _entry_identity(entry: dict) -> tuple:
     """Return a stable tuple key for matching queue/state/last-submitted entries."""
-    dandi_path = entry.get("dandi_path")
-    if dandi_path is None:
-        dandi_path = _subject_session_to_dandi_path(entry)
-
     return (
         entry.get("dandiset_id"),
-        dandi_path,
+        entry.get("dandi_path"),
         entry.get("pipeline"),
         entry.get("version"),
         entry.get("params"),

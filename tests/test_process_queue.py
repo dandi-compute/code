@@ -200,47 +200,47 @@ def test_attempt_dir_candidates_constructs_both_layouts(
 
 
 @pytest.mark.ai_generated
-def test_attempt_dir_candidates_supports_legacy_subject_session_entry(tmp_path: pathlib.Path) -> None:
-    """_attempt_dir_candidates falls back to subject/session when dandi_path is missing."""
-    entry = {
-        "dandiset_id": "000001",
-        "subject": "mouse01",
-        "session": "01",
-        "pipeline": "test",
-        "version": "v1.0",
-        "params": "abc1234",
-        "config": "def5678",
-        "attempt": 2,
-    }
-
-    with pytest.warns(
-        UserWarning,
-        match=(
-            "Legacy queue entry missing dandi_path; falling back to subject/session-derived path. "
-            "Please update queue entries to include dandi_path."
+@pytest.mark.parametrize(
+    ("entry", "expected_exception", "expected_message"),
+    [
+        (
+            {
+                "dandiset_id": "000001",
+                "subject": "mouse01",
+                "session": "01",
+                "pipeline": "test",
+                "version": "v1.0",
+                "params": "abc1234",
+                "config": "def5678",
+                "attempt": 2,
+            },
+            ValueError,
+            r"Entry has invalid dandi_path field \(missing\)",
         ),
-    ):
-        flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
-
-    assert flat_path == (
-        tmp_path
-        / "derivatives"
-        / "dandiset-000001"
-        / "sub-mouse01"
-        / "ses-01"
-        / "pipeline-test"
-        / "version-v1.0_params-abc1234_config-def5678_attempt-2"
-    )
-    assert legacy_path == (
-        tmp_path
-        / "derivatives"
-        / "dandiset-000001"
-        / "sub-mouse01"
-        / "ses-01"
-        / "pipeline-test"
-        / "version-v1.0"
-        / "params-abc1234_config-def5678_attempt-2"
-    )
+        (
+            {
+                "dandiset_id": "000001",
+                "dandi_path": "",
+                "pipeline": "test",
+                "version": "v1.0",
+                "params": "abc1234",
+                "config": "def5678",
+                "attempt": 2,
+            },
+            ValueError,
+            r"Entry has invalid dandi_path field \(empty\)",
+        ),
+    ],
+)
+def test_attempt_dir_candidates_requires_valid_dandi_path(
+    entry: dict,
+    expected_exception: type[Exception],
+    expected_message: str,
+    tmp_path: pathlib.Path,
+) -> None:
+    """_attempt_dir_candidates requires a valid dandi_path value."""
+    with pytest.raises(expected_exception, match=expected_message):
+        _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
 
 
 def _make_attempt_dir_with_script(
