@@ -200,20 +200,46 @@ def test_attempt_dir_candidates_constructs_both_layouts(
 
 
 @pytest.mark.ai_generated
-def test_attempt_dir_candidates_requires_dandi_path(tmp_path: pathlib.Path) -> None:
-    """_attempt_dir_candidates rejects entries that omit dandi_path."""
-    entry = {
-        "dandiset_id": "000001",
-        "subject": "mouse01",
-        "session": "01",
-        "pipeline": "test",
-        "version": "v1.0",
-        "params": "abc1234",
-        "config": "def5678",
-        "attempt": 2,
-    }
-
-    with pytest.raises(KeyError, match="Entry missing dandi_path"):
+@pytest.mark.parametrize(
+    ("entry", "expected_exception", "expected_message"),
+    [
+        (
+            {
+                "dandiset_id": "000001",
+                "subject": "mouse01",
+                "session": "01",
+                "pipeline": "test",
+                "version": "v1.0",
+                "params": "abc1234",
+                "config": "def5678",
+                "attempt": 2,
+            },
+            ValueError,
+            r"Entry has invalid dandi_path field \(missing\)",
+        ),
+        (
+            {
+                "dandiset_id": "000001",
+                "dandi_path": "",
+                "pipeline": "test",
+                "version": "v1.0",
+                "params": "abc1234",
+                "config": "def5678",
+                "attempt": 2,
+            },
+            ValueError,
+            r"Entry has invalid dandi_path field \(empty\)",
+        ),
+    ],
+)
+def test_attempt_dir_candidates_requires_valid_dandi_path(
+    entry: dict,
+    expected_exception: type[Exception],
+    expected_message: str,
+    tmp_path: pathlib.Path,
+) -> None:
+    """_attempt_dir_candidates requires a valid dandi_path value."""
+    with pytest.raises(expected_exception, match=expected_message):
         _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
 
 

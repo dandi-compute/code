@@ -5,6 +5,9 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 source = "vcs"
 
+[tool.hatch.version.raw-options]
+fallback_version = "0.2.dev0"
+
 
 
 [project]
@@ -23,7 +26,6 @@ dependencies = [
     "linkml-runtime>=1.10.0,<1.11",
 ]
 dynamic = ["version"]
-
 [project.scripts]
 dandicompute = "dandi_compute_code._cli:_dandicompute_group"
 
