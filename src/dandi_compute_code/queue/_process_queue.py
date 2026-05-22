@@ -813,13 +813,13 @@ def _order_content_ids_for_uniform_dandiset_sampling(*, content_ids: list[str]) 
     randomization for any unrelated Dandiset.
     """
     content_id_to_dandiset_path = _load_content_id_to_unique_dandiset_path()
-    content_ids_by_dandiset: dict[str, list[str]] = defaultdict(list)
+    content_ids_by_dandiset: dict[str | tuple[str, str], list[str]] = defaultdict(list)
     for content_id in content_ids:
         content_id_mapping = content_id_to_dandiset_path.get(content_id, {})
         if len(content_id_mapping) == 1:
-            dandiset_key = next(iter(content_id_mapping))
+            dandiset_key: str | tuple[str, str] = next(iter(content_id_mapping))
         else:
-            dandiset_key = f"content-id:{content_id}"
+            dandiset_key = ("content-id", content_id)
         content_ids_by_dandiset[dandiset_key].append(content_id)
 
     grouped_content_ids = list(content_ids_by_dandiset.values())
