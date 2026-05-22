@@ -3,11 +3,12 @@ import gzip
 import json
 import os
 import pathlib
+import random
 import re
 import shutil
 import subprocess
 import urllib.request
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 
 import linkml_runtime.processing.referencevalidator
@@ -15,6 +16,7 @@ import linkml_runtime.utils.schemaview
 
 from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
 from ..dandiset import scan_dandiset_directory
+from ..dandiset._scan import _load_content_id_to_unique_dandiset_path
 
 _AIND_EPHYS_PARAMS_REGISTRY_PATH = (
     pathlib.Path(__file__).parent.parent / "aind_ephys_pipeline" / "registries" / "registered_params.json"
@@ -802,6 +804,36 @@ def _strip_commit_hash_suffix(version: str) -> str:
     return version
 
 
+def _order_content_ids_for_uniform_dandiset_sampling(*, content_ids: list[str]) -> list[str]:
+    """Return content IDs ordered by randomized round-robin across source Dandisets."""
+    content_id_to_dandiset_path = _load_content_id_to_unique_dandiset_path()
+    content_ids_by_dandiset: dict[str, list[str]] = defaultdict(list)
+    for content_id in content_ids:
+        content_id_mapping = content_id_to_dandiset_path.get(content_id, {})
+        if len(content_id_mapping) == 1:
+            dandiset_key = next(iter(content_id_mapping))
+        else:
+            dandiset_key = f"content-id:{content_id}"
+        content_ids_by_dandiset[dandiset_key].append(content_id)
+
+    grouped_content_ids = list(content_ids_by_dandiset.values())
+    random.shuffle(grouped_content_ids)
+    grouped_content_id_queues: list[deque[str]] = []
+    for content_ids_for_dandiset in grouped_content_ids:
+        random.shuffle(content_ids_for_dandiset)
+        grouped_content_id_queues.append(deque(content_ids_for_dandiset))
+
+    ordered_content_ids: list[str] = []
+    while grouped_content_id_queues:
+        next_grouped_content_id_queues: list[deque[str]] = []
+        for content_ids_for_dandiset in grouped_content_id_queues:
+            ordered_content_ids.append(content_ids_for_dandiset.popleft())
+            if content_ids_for_dandiset:
+                next_grouped_content_id_queues.append(content_ids_for_dandiset)
+        grouped_content_id_queues = next_grouped_content_id_queues
+    return ordered_content_ids
+
+
 def prepare_queue(
     *,
     queue_directory: pathlib.Path,
@@ -843,7 +875,9 @@ def prepare_queue(
         more known content IDs.
     limit : int, optional
         If provided, stop after preparing *limit* assets in total (across all
-        pipeline/version/params combinations).  Useful for testing.
+        pipeline/version/params combinations).  When qualifying IDs are fetched
+        automatically, they are randomized in round-robin order across source
+        Dandisets before this limit is applied. Useful for testing.
     """
     queue_config = _load_queue_config(queue_directory=queue_directory)
 
@@ -854,6 +888,7 @@ def prepare_queue(
         )
         with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
             content_ids = json.loads(gzip.decompress(response.read()))
+        content_ids = _order_content_ids_for_uniform_dandiset_sampling(content_ids=content_ids)
 
     state_file = queue_directory / "state.jsonl"
     state_entries = (
@@ -904,7 +939,7 @@ def prepare_queue(
                 # Strip the trailing commit-hash suffix before passing to prepare_aind_ephys_job.
                 submission_version = _strip_commit_hash_suffix(version)
 
-                for content_id in sorted(content_ids):
+                for content_id in content_ids:
                     if limit is not None and prepared_count >= limit:
                         break
                     if max_fail is not None:
