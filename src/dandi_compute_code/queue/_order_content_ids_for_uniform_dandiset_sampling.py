@@ -1,5 +1,5 @@
+import collections
 import random
-from collections import deque
 
 from ..dandiset._load_content_id_to_unique_dandiset_path import _load_content_id_to_unique_dandiset_path
 
@@ -24,14 +24,14 @@ def _order_content_ids_for_uniform_dandiset_sampling(*, content_ids: list[str]) 
 
     grouped_content_ids = list(content_ids_by_dandiset.values())
     random.shuffle(grouped_content_ids)
-    grouped_content_id_queues: list[deque[str]] = []
+    grouped_content_id_queues: list[collections.deque[str]] = []
     for content_ids_for_dandiset in grouped_content_ids:
         random.shuffle(content_ids_for_dandiset)
-        grouped_content_id_queues.append(deque(content_ids_for_dandiset))
+        grouped_content_id_queues.append(collections.deque(content_ids_for_dandiset))
 
     ordered_content_ids: list[str] = []
     while grouped_content_id_queues:
-        next_grouped_content_id_queues: list[deque[str]] = []
+        next_grouped_content_id_queues: list[collections.deque[str]] = []
         for content_ids_for_dandiset in grouped_content_id_queues:
             ordered_content_ids.append(content_ids_for_dandiset.popleft())
             if content_ids_for_dandiset:

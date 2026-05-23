@@ -1,7 +1,7 @@
+import collections
+import datetime
 import json
 import pathlib
-from collections import defaultdict
-from datetime import datetime, timezone
 
 from ._duration_string_to_seconds import _duration_string_to_seconds
 from ._extract_nextflow_timeline_data import _extract_nextflow_timeline_data
@@ -30,7 +30,7 @@ def aggregate_queue_statistics(
         and not isinstance(entry.get("asset_size_bytes"), bool)
     )
 
-    job_step_wall_time_seconds: defaultdict[str, float] = defaultdict(float)
+    job_step_wall_time_seconds: collections.defaultdict[str, float] = collections.defaultdict(float)
     timeline_files_processed = 0
     for entry in state_entries:
         attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
@@ -69,7 +69,7 @@ def aggregate_queue_statistics(
                     job_step_wall_time_seconds[step_name] += duration_seconds
 
     statistics = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "state_entry_count": len(state_entries),
         "successful_asset_bytes_total": successful_asset_bytes_total,
         "timeline_files_processed": timeline_files_processed,

@@ -1,8 +1,8 @@
+import collections
 import gzip
 import json
 import pathlib
 import urllib.request
-from collections import defaultdict
 
 from ._load_queue_config import _load_queue_config
 from ._order_content_ids_for_uniform_dandiset_sampling import _order_content_ids_for_uniform_dandiset_sampling
@@ -102,7 +102,7 @@ def prepare_queue(
                 pipeline_cfg = queue_config["pipelines"][pipeline_name]
 
                 max_fail = pipeline_cfg.get("max_fail_per_dandiset")
-                failure_count_by_dandiset: defaultdict[str, int] = defaultdict(int)
+                failure_count_by_dandiset: collections.defaultdict[str, int] = collections.defaultdict(int)
                 if max_fail is not None:
                     for entry in failure_entries:
                         if entry.get("pipeline") != pipeline_name or not _version_matches(
