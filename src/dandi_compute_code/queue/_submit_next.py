@@ -66,7 +66,9 @@ def _submit_next(
         submit_job(script_file_path=script_file_path)
         submitted_marker = attempt_dir / "code" / ".submitted"
         if not submitted_marker.parent.exists():
-            message=f"Local Dandiset shell did not find parents of submission marker.\nCreating for {submitted_marker}"
+            message = (
+                f"Local Dandiset shell did not find parents of submission marker.\nCreating for {submitted_marker}"
+            )
             warnings.warn(message=message, stacklevel=2)
             submitted_marker.parent.mkdir(parents=True, exist_ok=True)  # Likely required on real Dandiset shell
         submitted_marker.touch()
