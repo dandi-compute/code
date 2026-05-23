@@ -13,8 +13,9 @@ def submit_job(script_file_path: pathlib.Path) -> None:
         message = "`DANDI_API_KEY` environment variable is not set."
         raise RuntimeError(message)
 
-    command = ["sbatch", str(script_file_path)]
-    warnings.warn(f"Submitting sbatch script: {script_file_path}", stacklevel=2)
+    absolute_script_file_path = script_file_path.absolute()
+    command = ["sbatch", str(absolute_script_file_path)]
+    warnings.warn(f"Submitting sbatch script: {absolute_script_file_path}", stacklevel=2)
     result = subprocess.run(
         command,
         capture_output=True,

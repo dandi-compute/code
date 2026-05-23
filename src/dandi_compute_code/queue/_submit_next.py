@@ -54,11 +54,14 @@ def _submit_next(
         warnings.warn(f"No pending entries in `{state_file}`", stacklevel=2)
         return False
 
-    pending_attempt_dirs = [
-        attempt_dir
-        for entry in state_entries
-        if (attempt_dir := _resolve_unsubmitted_attempt_dir(base_dir=datalad_directory, entry=entry)) is not None
-    ]
+    pending_attempt_dirs: list[pathlib.Path] = []
+    seen_attempt_dirs: set[pathlib.Path] = set()
+    for entry in state_entries:
+        attempt_dir = _resolve_unsubmitted_attempt_dir(base_dir=datalad_directory, entry=entry)
+        if attempt_dir is None or attempt_dir in seen_attempt_dirs:
+            continue
+        seen_attempt_dirs.add(attempt_dir)
+        pending_attempt_dirs.append(attempt_dir)
     submitted_count = 0
 
     for attempt_dir in pending_attempt_dirs:
