@@ -10,6 +10,7 @@ from ..aind_ephys_pipeline import submit_job
 def _submit_next(
     *,
     queue_directory: pathlib.Path,
+    datalad_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
     max_submissions: int = 2,
 ) -> bool:
@@ -53,7 +54,7 @@ def _submit_next(
     pending_attempt_dirs = [
         attempt_dir
         for entry in state_entries
-        if (attempt_dir := _resolve_unsubmitted_attempt_dir(base_dir=dandiset_directory, entry=entry)) is not None
+        if (attempt_dir := _resolve_unsubmitted_attempt_dir(base_dir=datalad_directory, entry=entry)) is not None
     ]
     submitted_count = 0
 
@@ -64,7 +65,11 @@ def _submit_next(
             raise FileNotFoundError(message)
 
         submit_job(script_file_path=script_file_path)
-        submitted_marker = attempt_dir / "code" / ".submitted"
+
+        # Actual submit marks must go to DANDI backend first
+        attempt_dir_relative_to_datalad = attempt_dir.relative_to(datalad_directory)
+        attempt_dir_relative_to_dandiset = dandiset_directory / attempt_dir_relative_to_datalad
+        submitted_marker = attempt_dir_relative_to_dandiset / "code" / ".submitted"
         if not submitted_marker.parent.exists():
             message = (
                 f"Local Dandiset shell did not find parents of submission marker.\nCreating for {submitted_marker}"
