@@ -1,7 +1,7 @@
+import collections
+import datetime
 import json
 import pathlib
-from collections import Counter, defaultdict
-from datetime import datetime, timezone
 
 from ._dump_issues import dump_issues
 
@@ -20,13 +20,13 @@ def summarize_issues(
         output_file_name=dump_output_file_name,
     )
 
-    counts: Counter[str] = Counter()
+    counts: collections.Counter[str] = collections.Counter()
     for record in records:
         counts.update(record.get("nextflow_errors", []))
         for errors in record.get("slurm_errors", {}).values():
             counts.update(errors)
 
-    errors_by_count: dict[str, list[str]] = defaultdict(list)
+    errors_by_count: dict[str, list[str]] = collections.defaultdict(list)
     for message, count in sorted(counts.items(), key=lambda message_count: (-message_count[1], message_count[0])):
         errors_by_count[str(count)].append(message)
 
@@ -39,7 +39,7 @@ def summarize_issues(
         )
     }
     output_payload = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "summary": summary,
     }
     (queue_directory / output_file_name).write_text(json.dumps(output_payload, indent=2, sort_keys=True) + "\n")

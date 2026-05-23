@@ -20,23 +20,21 @@ import pytest
 from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
-from dandi_compute_code.queue._process_queue import (
-    TEST_QUEUE_CONTENT_ID,
-    _attempt_dir_candidates,
-    _build_processing_order,
-    _count_dandiset_failures,
-    _count_running_aind_ephys_pipeline_jobs,
-    _load_queue_config,
-    _resolve_params_key_to_id,
-    _submit_next,
-    _version_matches,
-    aggregate_queue_statistics,
-    clean_unsubmitted_capsules,
-    order_queue,
-    prepare_queue,
-    process_queue,
-    refresh_queue,
-)
+from dandi_compute_code.queue._aggregate_queue_statistics import aggregate_queue_statistics
+from dandi_compute_code.queue._attempt_dir_candidates import _attempt_dir_candidates
+from dandi_compute_code.queue._build_processing_order import _build_processing_order
+from dandi_compute_code.queue._clean_unsubmitted_capsules import clean_unsubmitted_capsules
+from dandi_compute_code.queue._count_dandiset_failures import _count_dandiset_failures
+from dandi_compute_code.queue._count_running_aind_ephys_pipeline_jobs import _count_running_aind_ephys_pipeline_jobs
+from dandi_compute_code.queue._globals import TEST_QUEUE_CONTENT_ID
+from dandi_compute_code.queue._load_queue_config import _load_queue_config
+from dandi_compute_code.queue._order_queue import order_queue
+from dandi_compute_code.queue._prepare_queue import prepare_queue
+from dandi_compute_code.queue._process_queue import process_queue
+from dandi_compute_code.queue._refresh_queue import refresh_queue
+from dandi_compute_code.queue._resolve_params_key_to_id import _resolve_params_key_to_id
+from dandi_compute_code.queue._submit_next import _submit_next
+from dandi_compute_code.queue._version_matches import _version_matches
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -88,8 +86,14 @@ def mock_scan_dandi_api_asset_lookup() -> Iterator[None]:
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
-        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_EmptyClient()),
-        mock.patch("dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path", return_value={}),
+        mock.patch(
+            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
+            return_value=_EmptyClient(),
+        ),
+        mock.patch(
+            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
+            return_value={},
+        ),
     ):
         yield
 
@@ -546,8 +550,8 @@ def test_submit_next_returns_false_when_no_waiting_file(tmp_path: pathlib.Path) 
     """_submit_next returns False when state.jsonl is absent and refresh finds nothing."""
     queue_dir = _make_queue_dir(tmp_path)
 
-    # refresh_queue is called to try to fill state.jsonl, but produces nothing
-    with mock.patch("dandi_compute_code.queue._process_queue.refresh_queue") as mock_refresh:
+    with mock.patch("dandi_compute_code.queue._submit_next.refresh_queue") as mock_refresh:
+        # refresh_queue is called to try to fill state.jsonl, but produces nothing
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     mock_refresh.assert_called_once_with(queue_directory=queue_dir, dandiset_directory=tmp_path)
@@ -562,7 +566,7 @@ def test_submit_next_returns_false_when_no_pending_entries(tmp_path: pathlib.Pat
     # Empty state.jsonl → triggers refresh retry, which also produces nothing
     (queue_dir / "state.jsonl").write_text("")
 
-    with mock.patch("dandi_compute_code.queue._process_queue.refresh_queue") as mock_refresh:
+    with mock.patch("dandi_compute_code.queue._submit_next.refresh_queue") as mock_refresh:
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     mock_refresh.assert_called_once_with(queue_directory=queue_dir, dandiset_directory=tmp_path)
@@ -605,10 +609,10 @@ def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: 
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._process_queue.refresh_queue",
+            "dandi_compute_code.queue._submit_next.refresh_queue",
             side_effect=_fill_waiting,
         ) as mock_refresh,
-        mock.patch("dandi_compute_code.queue._process_queue.submit_job"),
+        mock.patch("dandi_compute_code.queue._submit_next.submit_job"),
     ):
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
@@ -645,8 +649,8 @@ def test_submit_next_submits_first_entry_in_order(tmp_path: pathlib.Path) -> Non
     )
 
     with (
-        mock.patch("dandi_compute_code.queue._process_queue.order_queue", return_value=[entry]),
-        mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit,
+        mock.patch("dandi_compute_code.queue._submit_next.order_queue", return_value=[entry]),
+        mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit,
     ):
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
@@ -665,7 +669,7 @@ def test_submit_next_raised_when_script_missing(tmp_path: pathlib.Path) -> None:
     _write_jsonl(queue_dir / "state.jsonl", [entry])
     # Deliberately do NOT create the attempt directory / submit.sh
 
-    with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
         with pytest.raises(FileNotFoundError, match="Submit script not found:"):
             _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
@@ -698,8 +702,8 @@ def test_submit_next_found_flat_attempt_directory_under_scanned_dandi_path(tmp_p
     script_file_path.write_text("#!/bin/bash\necho hello\n")
 
     with (
-        mock.patch("dandi_compute_code.queue._process_queue.order_queue", return_value=[entry]),
-        mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit,
+        mock.patch("dandi_compute_code.queue._submit_next.order_queue", return_value=[entry]),
+        mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit,
     ):
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
@@ -737,7 +741,7 @@ def test_submit_next_uses_session_in_path_when_present(tmp_path: pathlib.Path) -
         attempt=1,
     )
 
-    with mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit:
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
@@ -781,7 +785,7 @@ def test_submit_next_leaves_state_jsonl_unchanged_after_submission(tmp_path: pat
         attempt=1,
     )
 
-    with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
         _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     remaining = _read_jsonl(queue_dir / "state.jsonl")
@@ -815,7 +819,7 @@ def test_submit_next_creates_submitted_marker_file(tmp_path: pathlib.Path) -> No
         attempt=1,
     )
 
-    with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
         _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert (attempt_dir / "code" / ".submitted").exists()
@@ -850,7 +854,7 @@ def test_submit_next_logs_explicit_run_capsule_directory(
         attempt=1,
     )
 
-    with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
         _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     captured = capsys.readouterr()
@@ -888,7 +892,7 @@ def test_submit_next_submits_next_entry_when_first_has_submitted_marker(tmp_path
         attempt=1,
     )
 
-    with mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit:
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
         submitted = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert submitted is True
@@ -930,7 +934,7 @@ def test_submit_next_only_submits_entries_pending_in_state_jsonl(tmp_path: pathl
         attempt=1,
     )
 
-    with mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit:
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
         submitted = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert submitted is True
@@ -952,7 +956,7 @@ def test_process_queue_handles_empty_scan_when_waiting_file_missing(tmp_path: pa
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
 
     with (
-        mock.patch("dandi_compute_code.queue._process_queue.scan_dandiset_directory", return_value=[]) as mock_scan,
+        mock.patch("dandi_compute_code.queue._refresh_queue.scan_dandiset_directory", return_value=[]) as mock_scan,
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
@@ -1152,7 +1156,7 @@ def test_refresh_queue_raises_when_queue_config_fails_linkml_validation(tmp_path
     (queue_dir / "queue_config.json").write_text(json.dumps(invalid_queue_config))
 
     with (
-        mock.patch("dandi_compute_code.queue._process_queue.scan_dandiset_directory", return_value=[]),
+        mock.patch("dandi_compute_code.queue._refresh_queue.scan_dandiset_directory", return_value=[]),
         pytest.raises(ValueError, match="LinkML validation failed"),
     ):
         refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
@@ -1196,7 +1200,7 @@ def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.P
         # Already has output (kept in state.jsonl for authoritative tracking)
         _make_state_entry(dandiset_id="000002", has_code=True, has_output=True, has_logs=False),
     ]
-    with mock.patch("dandi_compute_code.queue._process_queue.scan_dandiset_directory", return_value=entries):
+    with mock.patch("dandi_compute_code.queue._refresh_queue.scan_dandiset_directory", return_value=entries):
         refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     state_file = queue_dir / "state.jsonl"
@@ -1214,7 +1218,7 @@ def test_refresh_queue_writes_all_ordered_pending_entries(tmp_path: pathlib.Path
     entries = [
         _make_state_entry(dandiset_id=f"00000{i}", has_code=True, has_output=False, has_logs=False) for i in range(1, 6)
     ]
-    with mock.patch("dandi_compute_code.queue._process_queue.scan_dandiset_directory", return_value=entries):
+    with mock.patch("dandi_compute_code.queue._refresh_queue.scan_dandiset_directory", return_value=entries):
         refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
@@ -1241,7 +1245,7 @@ def test_refresh_queue_excludes_entries_with_submitted_markers(tmp_path: pathlib
     (submitted_attempt_dir / "code" / ".submitted").touch()
 
     with mock.patch(
-        "dandi_compute_code.queue._process_queue.scan_dandiset_directory",
+        "dandi_compute_code.queue._refresh_queue.scan_dandiset_directory",
         return_value=[pending_entry, submitted_entry],
     ):
         refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
@@ -1556,7 +1560,7 @@ def test_submit_next_submits_first_entry_directly(tmp_path: pathlib.Path) -> Non
         attempt=1,
     )
 
-    with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
@@ -1594,7 +1598,7 @@ def test_submit_next_submits_first_entry_with_existing_failure_dirs(tmp_path: pa
         attempt=1,
     )
 
-    with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
@@ -1614,8 +1618,11 @@ def test_prepare_queue_calls_prepare_for_each_qualifying_asset(tmp_path: pathlib
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
-        mock.patch("dandi_compute_code.queue._process_queue._load_content_id_to_unique_dandiset_path", return_value={}),
-        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch(
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_unique_dandiset_path",
+            return_value={},
+        ),
+        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
         prepare_queue(queue_directory=queue_dir)
@@ -1674,8 +1681,11 @@ def test_prepare_queue_skips_when_failures_reach_max(tmp_path: pathlib.Path) -> 
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
-        mock.patch("dandi_compute_code.queue._process_queue._load_content_id_to_unique_dandiset_path", return_value={}),
-        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch(
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_unique_dandiset_path",
+            return_value={},
+        ),
+        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
         prepare_queue(queue_directory=queue_dir)
@@ -1697,8 +1707,11 @@ def test_prepare_queue_strips_commit_suffix_from_version(tmp_path: pathlib.Path)
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
-        mock.patch("dandi_compute_code.queue._process_queue._load_content_id_to_unique_dandiset_path", return_value={}),
-        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch(
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_unique_dandiset_path",
+            return_value={},
+        ),
+        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
         prepare_queue(queue_directory=queue_dir)
@@ -1719,8 +1732,11 @@ def test_prepare_queue_passes_optional_args_through(tmp_path: pathlib.Path) -> N
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
-        mock.patch("dandi_compute_code.queue._process_queue._load_content_id_to_unique_dandiset_path", return_value={}),
-        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch(
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_unique_dandiset_path",
+            return_value={},
+        ),
+        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
         prepare_queue(
@@ -1744,8 +1760,11 @@ def test_prepare_queue_limit_stops_after_n_assets(tmp_path: pathlib.Path) -> Non
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
-        mock.patch("dandi_compute_code.queue._process_queue._load_content_id_to_unique_dandiset_path", return_value={}),
-        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch(
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_unique_dandiset_path",
+            return_value={},
+        ),
+        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
         prepare_queue(queue_directory=queue_dir, limit=2)
@@ -1767,14 +1786,14 @@ def test_prepare_queue_limit_samples_uniformly_over_dandisets(tmp_path: pathlib.
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
         mock.patch(
-            "dandi_compute_code.queue._process_queue._load_content_id_to_unique_dandiset_path",
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_unique_dandiset_path",
             return_value=content_id_mapping,
         ),
         mock.patch(
-            "dandi_compute_code.queue._process_queue.random.shuffle",
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling.random.shuffle",
             side_effect=lambda items: None,
         ) as mock_shuffle,
-        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
         prepare_queue(queue_directory=queue_dir, limit=2)
@@ -1798,7 +1817,7 @@ def test_prepare_queue_uses_explicit_content_ids_when_provided(tmp_path: pathlib
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
-        mock.patch("dandi_compute_code.queue._process_queue.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
     ):
         prepare_queue(queue_directory=queue_dir, content_ids=explicit_ids)
 
@@ -1816,7 +1835,7 @@ def test_cli_prepare_test_calls_prepare_queue_with_test_content_id(tmp_path: pat
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
-        mock.patch("dandi_compute_code._cli.prepare_queue") as mock_prepare_queue,
+        mock.patch("dandi_compute_code._cli._dandicompute_group.prepare_queue") as mock_prepare_queue,
     ):
         result = runner.invoke(_dandicompute_group, ["prepare", "aind", "--test", "--queue", str(queue_dir)])
 
@@ -1838,7 +1857,7 @@ def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
-        mock.patch("dandi_compute_code._cli.prepare_queue") as mock_prepare_queue,
+        mock.patch("dandi_compute_code._cli._dandicompute_group.prepare_queue") as mock_prepare_queue,
     ):
         result = runner.invoke(
             _dandicompute_group,
@@ -1871,7 +1890,7 @@ def test_cli_aind_prepare_passes_config_key() -> None:
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
-        mock.patch("dandi_compute_code._cli.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch("dandi_compute_code._cli._dandicompute_group.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_prepare.return_value = pathlib.Path("/tmp/submit.sh")
         result = runner.invoke(
@@ -2305,7 +2324,9 @@ def test_clean_unsubmitted_capsules_removed_entry_via_fallback_attempt_resolutio
     )
 
     with (
-        mock.patch("dandi_compute_code.dandiset.scan_dandiset_directory", return_value=[state_entry]),
+        mock.patch(
+            "dandi_compute_code.queue._clean_unsubmitted_capsules.scan_dandiset_directory", return_value=[state_entry]
+        ),
         mock.patch("subprocess.run") as mock_run,
         mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}),
     ):
@@ -2327,7 +2348,9 @@ def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
     fake_removed = [dandiset_dir / "derivatives" / "dandiset-000001" / "sub-mouse01" / "attempt-1"]
     runner = CliRunner()
 
-    with mock.patch("dandi_compute_code._cli.clean_unsubmitted_capsules", return_value=fake_removed) as mock_clean:
+    with mock.patch(
+        "dandi_compute_code._cli._dandicompute_group.clean_unsubmitted_capsules", return_value=fake_removed
+    ) as mock_clean:
         result = runner.invoke(
             _dandicompute_group,
             [
@@ -2356,7 +2379,7 @@ def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
 
     runner = CliRunner()
 
-    with mock.patch("dandi_compute_code._cli.clean_unsubmitted_capsules", return_value=[]):
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.clean_unsubmitted_capsules", return_value=[]):
         result = runner.invoke(
             _dandicompute_group,
             [
@@ -2384,7 +2407,8 @@ def test_cli_queue_stats_calls_helper_and_reports_output(tmp_path: pathlib.Path)
 
     runner = CliRunner()
     with mock.patch(
-        "dandi_compute_code._cli.aggregate_queue_statistics", return_value={"successful_asset_bytes_total": 0}
+        "dandi_compute_code._cli._dandicompute_group.aggregate_queue_statistics",
+        return_value={"successful_asset_bytes_total": 0},
     ) as mock_stats:
         result = runner.invoke(
             _dandicompute_group,
@@ -2416,7 +2440,7 @@ def test_cli_issues_dump_calls_helper(tmp_path: pathlib.Path) -> None:
     dandiset_dir.mkdir()
 
     runner = CliRunner()
-    with mock.patch("dandi_compute_code._cli.dump_issues", return_value=[]) as mock_dump:
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.dump_issues", return_value=[]) as mock_dump:
         result = runner.invoke(
             _dandicompute_group,
             [
@@ -2443,7 +2467,7 @@ def test_cli_issues_summarize_calls_helper(tmp_path: pathlib.Path) -> None:
     dandiset_dir.mkdir()
 
     runner = CliRunner()
-    with mock.patch("dandi_compute_code._cli.summarize_issues", return_value={}) as mock_summarize:
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.summarize_issues", return_value={}) as mock_summarize:
         result = runner.invoke(
             _dandicompute_group,
             [

@@ -1,6 +1,6 @@
+import datetime
 import json
 import pathlib
-from datetime import datetime, timezone
 
 from ._extract_error_lines import _extract_error_lines
 from ._list_capsule_log_directories import _list_capsule_log_directories
@@ -38,7 +38,7 @@ def dump_issues(
         )
 
     payload = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "capsule_count": len(records),
         "records": records,
     }

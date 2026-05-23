@@ -120,8 +120,14 @@ def mock_dandi_api_asset_lookup() -> Iterator[None]:
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
-        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_EmptyClient()),
-        mock.patch("dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path", return_value={}),
+        mock.patch(
+            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
+            return_value=_EmptyClient(),
+        ),
+        mock.patch(
+            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
+            return_value={},
+        ),
     ):
         yield
 
@@ -389,9 +395,12 @@ def test_scan_job_completion_time_populated_from_dandi_date_modified(tmp_path: p
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
         mock.patch(
-            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
+            return_value=_FakeClient(),
+        ),
+        mock.patch(
+            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
             return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
@@ -432,7 +441,10 @@ def test_scan_job_completion_time_is_none_with_warning_when_log_asset_not_found(
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+        mock.patch(
+            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
+            return_value=_FakeClient(),
+        ),
         pytest.warns(
             UserWarning, match=f"Unable to resolve job_completion_time for log asset at {re.escape(expected_log_path)}"
         ),
@@ -476,7 +488,10 @@ def test_scan_job_completion_time_is_none_with_warning_when_date_modified_missin
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
+        mock.patch(
+            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
+            return_value=_FakeClient(),
+        ),
         pytest.warns(
             UserWarning, match=f"Unable to resolve job_completion_time for log asset at {re.escape(expected_log_path)}"
         ),
@@ -602,9 +617,12 @@ def test_scan_parses_asset_size_from_dandi_asset_lookup(tmp_path: pathlib.Path) 
     )
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
         mock.patch(
-            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
+            return_value=_FakeClient(),
+        ),
+        mock.patch(
+            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
             return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
@@ -673,9 +691,12 @@ def test_scan_resolves_asset_size_with_session_subdirectory(tmp_path: pathlib.Pa
     )
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
         mock.patch(
-            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
+            return_value=_FakeClient(),
+        ),
+        mock.patch(
+            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
             return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
@@ -754,9 +775,12 @@ def test_scan_resolves_asset_size_for_no_session_and_extra_entities(
     )
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
         mock.patch(
-            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
+            return_value=_FakeClient(),
+        ),
+        mock.patch(
+            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
             return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
@@ -815,10 +839,11 @@ def test_scan_uses_expected_dandi_api_url_for_dandiset(
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
         mock.patch(
-            "dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()
+            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
+            return_value=_FakeClient(),
         ) as mock_client_ctor,
         mock.patch(
-            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
             return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
@@ -932,9 +957,12 @@ def test_scan_asset_size_lookup_falls_back_to_none_when_mapped_asset_path_has_no
     )
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
         mock.patch(
-            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
+            return_value=_FakeClient(),
+        ),
+        mock.patch(
+            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
             return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
@@ -1053,9 +1081,12 @@ def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Pat
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
         mock.patch(
-            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
+            return_value=_FakeClient(),
+        ),
+        mock.patch(
+            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
             return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
@@ -1130,9 +1161,12 @@ def test_refresh_queue_writes_resolved_dandi_path_for_root_level_asset(tmp_path:
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch("dandi_compute_code.dandiset._scan.dandi.dandiapi.DandiAPIClient", return_value=_FakeClient()),
         mock.patch(
-            "dandi_compute_code.dandiset._scan._load_content_id_to_unique_dandiset_path",
+            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
+            return_value=_FakeClient(),
+        ),
+        mock.patch(
+            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
             return_value=_build_mapping_for_content_id(
                 content_id=content_id,
                 dandiset_id="000001",
