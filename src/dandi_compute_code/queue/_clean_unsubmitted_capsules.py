@@ -8,6 +8,7 @@ from ._resolve_unsubmitted_attempt_dir import _resolve_unsubmitted_attempt_dir
 from ..dandiset import scan_dandiset_directory
 
 
+# TODO: review if the return value here is needed at all
 def clean_unsubmitted_capsules(
     *,
     dandiset_directory: pathlib.Path,
