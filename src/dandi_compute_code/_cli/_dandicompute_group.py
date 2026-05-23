@@ -17,7 +17,7 @@ from ..queue import (
     dump_issues,
     prepare_queue,
     process_queue,
-    refresh_queue,
+    refresh_queue_state,
     summarize_issues,
 )
 
@@ -236,7 +236,7 @@ def _queue_group() -> None:
 @click.option(
     "--dandiset",
     "dandiset_directory",
-    help="Path to a local dandiset clone used to rescan and regenerate state.jsonl before waiting.jsonl.",
+    help="Path to a local dandiset clone used to rescan and regenerate state.jsonl.",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
@@ -244,10 +244,10 @@ def _queue_refresh_command(
     queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
 ) -> None:
-    """Rescan the dandiset directory and regenerate waiting.jsonl."""
+    """Rescan the dandiset directory and regenerate state.jsonl."""
     _require_dandi_api_key()
     try:
-        refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
+        refresh_queue_state(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
     except FileNotFoundError as error:
         raise click.ClickException(str(error)) from error
 
