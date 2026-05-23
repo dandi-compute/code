@@ -364,11 +364,12 @@ def _submission_eligible_identities(*, queue_directory: pathlib.Path) -> set[tup
     state_file = queue_directory / "state.jsonl"
     if not state_file.exists():
         return set()
-    return {
-        _entry_identity(entry)
-        for entry in (json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip())
-        if not entry.get("has_logs") and not entry.get("has_output")
+    state_lines = [line.strip() for line in state_file.read_text().splitlines()]
+    state_entries = [json.loads(line) for line in state_lines if line]
+    eligible_identities = {
+        _entry_identity(entry) for entry in state_entries if not entry.get("has_logs") and not entry.get("has_output")
     }
+    return eligible_identities
 
 
 def _duration_string_to_seconds(duration_string: str) -> float:
