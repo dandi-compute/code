@@ -64,14 +64,15 @@ def clean_unsubmitted_capsules(
     }
     submitted_entry_identities = queued_entry_identities - set(unsubmitted_attempt_dirs)
     cleanable_entry_identities = queued_entry_identities - submitted_entry_identities
+    cleanable_attempt_dirs = [
+        attempt_dir
+        for entry in queued_entries
+        if (entry_identity := _entry_identity(entry)) in cleanable_entry_identities
+        if (attempt_dir := unsubmitted_attempt_dirs.get(entry_identity)) is not None
+    ]
 
     removed: list[pathlib.Path] = []
-    for entry in queued_entries:
-        entry_identity = _entry_identity(entry)
-        if entry_identity not in cleanable_entry_identities:
-            continue
-        attempt_dir = unsubmitted_attempt_dirs[entry_identity]
-
+    for attempt_dir in cleanable_attempt_dirs:
         if attempt_dir.is_dir():
             parent_dir = attempt_dir.parent
             subprocess.run(
