@@ -1010,7 +1010,15 @@ def test_refresh_queue_state_with_dandiset_directory_creates_valid_files(tmp_pat
             }
         )
     )
-    refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+    with mock.patch(
+        "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
+        return_value=_build_mapping_for_content_id(
+            content_id=content_id,
+            dandiset_id="000001",
+            asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+        ),
+    ):
+        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
     state_file = queue_dir / "state.jsonl"
     assert state_file.exists()
     lines = [line for line in state_file.read_text().splitlines() if line.strip()]
@@ -1323,11 +1331,19 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
         content_id=content_id,
     )
     runner = CliRunner()
-    result = runner.invoke(
-        _dandicompute_group,
-        ["queue", "refresh", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
-        env={"DANDI_API_KEY": "test-key"},
-    )
+    with mock.patch(
+        "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
+        return_value=_build_mapping_for_content_id(
+            content_id=content_id,
+            dandiset_id="000001",
+            asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+        ),
+    ):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["queue", "refresh", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
+            env={"DANDI_API_KEY": "test-key"},
+        )
     assert result.exit_code == 0, result.output
     assert (queue_dir / "state.jsonl").exists()
     state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]

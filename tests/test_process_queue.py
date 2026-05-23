@@ -1011,7 +1011,7 @@ def test_process_queue_refreshes_state_when_empty(tmp_path: pathlib.Path) -> Non
     dandiset_dir.mkdir()
 
     with (
-        pytest.warns(UserWarning, match="No pending entries in"),
+        pytest.warns(UserWarning, match="No entries in"),
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
