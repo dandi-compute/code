@@ -4,10 +4,10 @@ import pathlib
 import shutil
 import subprocess
 
-from ..dandiset import scan_dandiset_directory
 from ._entry_identity import _entry_identity
 from ._remove_empty_parents import _remove_empty_parents
 from ._resolve_attempt_dir import _resolve_attempt_dir
+from ..dandiset import scan_dandiset_directory
 
 
 def clean_unsubmitted_capsules(

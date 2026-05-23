@@ -2,10 +2,10 @@ import json
 import os
 import pathlib
 
-from ..dandiset import scan_dandiset_directory
 from ._load_queue_config import _load_queue_config
 from ._order_queue import order_queue
 from ._prune_last_submitted import _prune_last_submitted
+from ..dandiset import scan_dandiset_directory
 
 
 def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:

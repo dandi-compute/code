@@ -1,9 +1,9 @@
 import json
 import pathlib
 
-from ..aind_ephys_pipeline import submit_job
 from ._refresh_queue import refresh_queue
 from ._resolve_attempt_dir import _resolve_attempt_dir
+from ..aind_ephys_pipeline import submit_job
 
 
 def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> bool:

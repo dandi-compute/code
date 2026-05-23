@@ -4,11 +4,11 @@ import pathlib
 import urllib.request
 from collections import defaultdict
 
-from ..aind_ephys_pipeline import prepare_aind_ephys_job
 from ._load_queue_config import _load_queue_config
 from ._order_content_ids_for_uniform_dandiset_sampling import _order_content_ids_for_uniform_dandiset_sampling
 from ._strip_commit_hash_suffix import _strip_commit_hash_suffix
 from ._version_matches import _version_matches
+from ..aind_ephys_pipeline import prepare_aind_ephys_job
 
 
 def prepare_queue(

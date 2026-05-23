@@ -1,7 +1,7 @@
 import os
 import pathlib
 
-from ._globals import _SANDBOX_DANDISET_ID, _ATTEMPT_SUFFIX_RE
+from ._globals import _ATTEMPT_SUFFIX_RE, _SANDBOX_DANDISET_ID
 from ._lookup_asset_size_bytes import _lookup_asset_size_bytes
 from ._lookup_job_completion_time import _lookup_job_completion_time
 from ._parse_attempt_dir import _parse_attempt_dir
