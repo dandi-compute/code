@@ -543,10 +543,10 @@ def test_count_running_aind_ephys_pipeline_jobs_returns_zero_when_no_exact_match
 
 @pytest.mark.ai_generated
 def test_submit_next_returns_false_when_no_waiting_file(tmp_path: pathlib.Path) -> None:
-    """_submit_next returns False when waiting.jsonl is absent and refresh finds nothing."""
+    """_submit_next returns False when state.jsonl is absent and refresh finds nothing."""
     queue_dir = _make_queue_dir(tmp_path)
 
-    # refresh_queue is called to try to fill waiting.jsonl, but produces nothing
+    # refresh_queue is called to try to fill state.jsonl, but produces nothing
     with mock.patch("dandi_compute_code.queue._process_queue.refresh_queue") as mock_refresh:
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
@@ -556,11 +556,11 @@ def test_submit_next_returns_false_when_no_waiting_file(tmp_path: pathlib.Path) 
 
 @pytest.mark.ai_generated
 def test_submit_next_returns_false_when_no_pending_entries(tmp_path: pathlib.Path) -> None:
-    """_submit_next returns False when waiting.jsonl is empty and refresh finds nothing."""
+    """_submit_next returns False when state.jsonl is empty and refresh finds nothing."""
     queue_dir = _make_queue_dir(tmp_path)
 
-    # Empty waiting.jsonl → triggers refresh retry, which also produces nothing
-    (queue_dir / "waiting.jsonl").write_text("")
+    # Empty state.jsonl → triggers refresh retry, which also produces nothing
+    (queue_dir / "state.jsonl").write_text("")
 
     with mock.patch("dandi_compute_code.queue._process_queue.refresh_queue") as mock_refresh:
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=tmp_path)
@@ -571,7 +571,7 @@ def test_submit_next_returns_false_when_no_pending_entries(tmp_path: pathlib.Pat
 
 @pytest.mark.ai_generated
 def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: pathlib.Path) -> None:
-    """_submit_next refreshes waiting.jsonl when empty, then submits if entries appear."""
+    """_submit_next refreshes state.jsonl when empty, then submits if entries appear."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "dandiset"
 
@@ -585,8 +585,8 @@ def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: 
         attempt=1,
     )
 
-    # Start with an empty waiting.jsonl
-    (queue_dir / "waiting.jsonl").write_text("")
+    # Start with an empty state.jsonl
+    (queue_dir / "state.jsonl").write_text("")
 
     _make_attempt_dir_with_script(
         dandiset_dir,
@@ -600,8 +600,8 @@ def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: 
     )
 
     def _fill_waiting(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
-        # Simulate refresh_queue populating waiting.jsonl
-        _write_jsonl(queue_directory / "waiting.jsonl", [entry])
+        # Simulate refresh_queue populating state.jsonl
+        _write_jsonl(queue_directory / "state.jsonl", [entry])
 
     with (
         mock.patch(
@@ -618,7 +618,7 @@ def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: 
 
 @pytest.mark.ai_generated
 def test_submit_next_submits_first_entry_in_order(tmp_path: pathlib.Path) -> None:
-    """_submit_next submits the first pending entry from waiting.jsonl."""
+    """_submit_next submits the first pending entry from state.jsonl ordering."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "dandiset"
 
@@ -631,7 +631,7 @@ def test_submit_next_submits_first_entry_in_order(tmp_path: pathlib.Path) -> Non
         config="abc123",
         attempt=1,
     )
-    _write_jsonl(queue_dir / "waiting.jsonl", [entry])
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
 
     _make_attempt_dir_with_script(
         dandiset_dir,
@@ -644,7 +644,10 @@ def test_submit_next_submits_first_entry_in_order(tmp_path: pathlib.Path) -> Non
         attempt=1,
     )
 
-    with mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit:
+    with (
+        mock.patch("dandi_compute_code.queue._process_queue.order_queue", return_value=[entry]),
+        mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit,
+    ):
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
@@ -659,7 +662,7 @@ def test_submit_next_raised_when_script_missing(tmp_path: pathlib.Path) -> None:
     dandiset_dir = tmp_path / "dandiset"
 
     entry = _make_state_entry(dandiset_id="000001", pipeline="test", version="v1.0", params="default")
-    _write_jsonl(queue_dir / "waiting.jsonl", [entry])
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
     # Deliberately do NOT create the attempt directory / submit.sh
 
     with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
@@ -675,26 +678,29 @@ def test_submit_next_found_flat_attempt_directory_under_scanned_dandi_path(tmp_p
     entry = _make_state_entry(
         dandiset_id="001849",
         dandi_path="sourcedata",
-        pipeline="aind+ephys",
+        pipeline="test",
         version="v1.1.1+b268fd2+a66c8df",
         params="4af6a25",
         config="0d4bf36_date-2026+05+21",
         attempt=1,
     )
-    _write_jsonl(queue_dir / "waiting.jsonl", [entry])
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
     actual_attempt_dir = (
         dandiset_dir
         / "derivatives"
         / "dandiset-001849"
         / "sub-test"
-        / "pipeline-aind+ephys"
+        / "pipeline-test"
         / "version-v1.1.1+b268fd2+a66c8df_params-4af6a25_config-0d4bf36_date-2026+05+21_attempt-1"
     )
     (actual_attempt_dir / "code").mkdir(parents=True)
     script_file_path = actual_attempt_dir / "code" / "submit.sh"
     script_file_path.write_text("#!/bin/bash\necho hello\n")
 
-    with mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit:
+    with (
+        mock.patch("dandi_compute_code.queue._process_queue.order_queue", return_value=[entry]),
+        mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit,
+    ):
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
@@ -717,7 +723,7 @@ def test_submit_next_uses_session_in_path_when_present(tmp_path: pathlib.Path) -
         config="abc123",
         attempt=1,
     )
-    _write_jsonl(queue_dir / "waiting.jsonl", [entry])
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
 
     _make_attempt_dir_with_script(
         dandiset_dir,
@@ -739,8 +745,8 @@ def test_submit_next_uses_session_in_path_when_present(tmp_path: pathlib.Path) -
 
 
 @pytest.mark.ai_generated
-def test_submit_next_pops_submitted_entry_from_waiting_jsonl(tmp_path: pathlib.Path) -> None:
-    """_submit_next removes the submitted entry from waiting.jsonl."""
+def test_submit_next_leaves_state_jsonl_unchanged_after_submission(tmp_path: pathlib.Path) -> None:
+    """_submit_next submits without mutating state.jsonl contents."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "dandiset"
 
@@ -762,7 +768,7 @@ def test_submit_next_pops_submitted_entry_from_waiting_jsonl(tmp_path: pathlib.P
         config="abc123",
         attempt=1,
     )
-    _write_jsonl(queue_dir / "waiting.jsonl", [entry1, entry2])
+    _write_jsonl(queue_dir / "state.jsonl", [entry1, entry2])
 
     _make_attempt_dir_with_script(
         dandiset_dir,
@@ -778,9 +784,8 @@ def test_submit_next_pops_submitted_entry_from_waiting_jsonl(tmp_path: pathlib.P
     with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
         _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
-    remaining = _read_jsonl(queue_dir / "waiting.jsonl")
-    assert len(remaining) == 1
-    assert remaining[0]["dandiset_id"] == "000002"
+    remaining = _read_jsonl(queue_dir / "state.jsonl")
+    assert remaining == [entry1, entry2]
 
 
 @pytest.mark.ai_generated
@@ -798,7 +803,7 @@ def test_submit_next_creates_submitted_marker_file(tmp_path: pathlib.Path) -> No
         config="abc123",
         attempt=1,
     )
-    _write_jsonl(queue_dir / "waiting.jsonl", [entry])
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
     attempt_dir = _make_attempt_dir_with_script(
         dandiset_dir,
         dandiset_id="000001",
@@ -833,7 +838,7 @@ def test_submit_next_logs_explicit_run_capsule_directory(
         config="abc123",
         attempt=1,
     )
-    _write_jsonl(queue_dir / "waiting.jsonl", [entry])
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
     attempt_dir = _make_attempt_dir_with_script(
         dandiset_dir,
         dandiset_id="000001",
@@ -859,7 +864,7 @@ def test_submit_next_submits_next_entry_when_first_has_submitted_marker(tmp_path
     dandiset_dir = tmp_path / "dandiset"
     first_entry = _make_state_entry(dandiset_id="000001")
     second_entry = _make_state_entry(dandiset_id="000002", subject="mouse02")
-    _write_jsonl(queue_dir / "waiting.jsonl", [first_entry, second_entry])
+    _write_jsonl(queue_dir / "state.jsonl", [first_entry, second_entry])
 
     first_attempt_dir = _make_attempt_dir_with_script(
         dandiset_dir,
@@ -888,8 +893,8 @@ def test_submit_next_submits_next_entry_when_first_has_submitted_marker(tmp_path
 
     assert submitted is True
     mock_submit.assert_called_once_with(script_file_path=second_attempt_dir / "code" / "submit.sh")
-    remaining = _read_jsonl(queue_dir / "waiting.jsonl")
-    assert remaining == []
+    remaining = _read_jsonl(queue_dir / "state.jsonl")
+    assert remaining == [first_entry, second_entry]
 
 
 @pytest.mark.ai_generated
@@ -897,9 +902,6 @@ def test_submit_next_only_submits_entries_pending_in_state_jsonl(tmp_path: pathl
     """_submit_next only submits entries listed as pending in state.jsonl."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "dandiset"
-    ineligible_entry = _make_state_entry(dandiset_id="000001")
-    eligible_entry = _make_state_entry(dandiset_id="000002", subject="mouse02")
-    _write_jsonl(queue_dir / "waiting.jsonl", [ineligible_entry, eligible_entry])
     _write_jsonl(
         queue_dir / "state.jsonl",
         [
@@ -933,8 +935,8 @@ def test_submit_next_only_submits_entries_pending_in_state_jsonl(tmp_path: pathl
 
     assert submitted is True
     mock_submit.assert_called_once_with(script_file_path=eligible_attempt_dir / "code" / "submit.sh")
-    remaining = _read_jsonl(queue_dir / "waiting.jsonl")
-    assert remaining == []
+    remaining = _read_jsonl(queue_dir / "state.jsonl")
+    assert len(remaining) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -944,7 +946,7 @@ def test_submit_next_only_submits_entries_pending_in_state_jsonl(tmp_path: pathl
 
 @pytest.mark.ai_generated
 def test_process_queue_handles_empty_scan_when_waiting_file_missing(tmp_path: pathlib.Path) -> None:
-    """process_queue handles an empty dandiset scan when waiting.jsonl is absent."""
+    """process_queue handles an empty dandiset scan when state.jsonl is absent."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
@@ -957,12 +959,11 @@ def test_process_queue_handles_empty_scan_when_waiting_file_missing(tmp_path: pa
 
     mock_scan.assert_called_once_with(dandiset_directory=tmp_path)
     assert (queue_dir / "state.jsonl").read_text() == ""
-    assert (queue_dir / "waiting.jsonl").read_text() == ""
 
 
 @pytest.mark.ai_generated
 def test_process_queue_calls_order_queue_when_waiting_empty(tmp_path: pathlib.Path) -> None:
-    """process_queue refreshes waiting.jsonl when it is absent or empty."""
+    """process_queue refreshes state.jsonl when it is absent or empty."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
@@ -978,10 +979,10 @@ def test_process_queue_calls_order_queue_when_waiting_empty(tmp_path: pathlib.Pa
 
 @pytest.mark.ai_generated
 def test_process_queue_skips_order_queue_when_waiting_non_empty(tmp_path: pathlib.Path) -> None:
-    """process_queue does NOT refresh waiting.jsonl when waiting already has entries."""
+    """process_queue does NOT refresh when state.jsonl already has entries."""
     queue_dir = _make_queue_dir(tmp_path)
     entry = _make_state_entry()
-    _write_jsonl(queue_dir / "waiting.jsonl", [entry])
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
@@ -1000,7 +1001,6 @@ def test_process_queue_skips_when_lock_is_already_held(
 ) -> None:
     """process_queue skips submission when another process holds the lock."""
     queue_dir = _make_queue_dir(tmp_path)
-    _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
@@ -1026,7 +1026,7 @@ def test_process_queue_skips_when_lock_is_already_held(
 def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> None:
     """process_queue calls _submit_next twice when no AIND jobs are running and entries are available."""
     queue_dir = _make_queue_dir(tmp_path)
-    _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
+    _write_jsonl(queue_dir / "state.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
@@ -1043,7 +1043,7 @@ def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> N
 def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path) -> None:
     """process_queue does not submit when two AIND-Ephys-Pipeline jobs already run."""
     queue_dir = _make_queue_dir(tmp_path)
-    _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
+    _write_jsonl(queue_dir / "state.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
@@ -1060,7 +1060,7 @@ def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path)
 def test_process_queue_submits_one_when_one_job_running(tmp_path: pathlib.Path) -> None:
     """process_queue submits once when exactly one AIND-Ephys-Pipeline job is running."""
     queue_dir = _make_queue_dir(tmp_path)
-    _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
+    _write_jsonl(queue_dir / "state.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
@@ -1077,7 +1077,7 @@ def test_process_queue_submits_one_when_one_job_running(tmp_path: pathlib.Path) 
 def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathlib.Path) -> None:
     """process_queue forwards dandiset_directory to both _submit_next calls when idle."""
     queue_dir = _make_queue_dir(tmp_path)
-    _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
+    _write_jsonl(queue_dir / "state.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
@@ -1098,7 +1098,7 @@ def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathli
 def test_process_queue_stops_submitting_when_queue_exhausted(tmp_path: pathlib.Path) -> None:
     """process_queue stops early when _submit_next reports no further submissions."""
     queue_dir = _make_queue_dir(tmp_path)
-    _write_jsonl(queue_dir / "waiting.jsonl", [_make_state_entry()])
+    _write_jsonl(queue_dir / "state.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
@@ -1177,39 +1177,38 @@ def test_prepare_queue_raises_when_queue_config_fails_linkml_validation(tmp_path
 
 @pytest.mark.ai_generated
 def test_refresh_queue_writes_empty_files_for_missing_dandiset_directory(tmp_path: pathlib.Path) -> None:
-    """refresh_queue writes empty state and waiting files when dandiset directory does not exist."""
+    """refresh_queue writes an empty state file when dandiset directory does not exist."""
     queue_dir = _make_queue_dir(tmp_path)
     missing_dandiset_dir = tmp_path / "missing_dandiset"
 
     refresh_queue(queue_directory=queue_dir, dandiset_directory=missing_dandiset_dir)
 
     assert (queue_dir / "state.jsonl").read_text() == ""
-    assert (queue_dir / "waiting.jsonl").read_text() == ""
 
 
 @pytest.mark.ai_generated
 def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.Path) -> None:
-    """refresh_queue writes waiting.jsonl containing only pending entries."""
+    """refresh_queue writes scanned entries to state.jsonl."""
     queue_dir = _make_queue_dir(tmp_path)
 
     entries = [
         _make_state_entry(dandiset_id="000001", has_code=True, has_output=False, has_logs=False),
-        # Already has output – should NOT appear in waiting.jsonl
+        # Already has output (kept in state.jsonl for authoritative tracking)
         _make_state_entry(dandiset_id="000002", has_code=True, has_output=True, has_logs=False),
     ]
     with mock.patch("dandi_compute_code.queue._process_queue.scan_dandiset_directory", return_value=entries):
         refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
-    waiting_file = queue_dir / "waiting.jsonl"
-    assert waiting_file.exists()
-    waiting_entries = _read_jsonl(waiting_file)
-    assert len(waiting_entries) == 1
-    assert waiting_entries[0]["dandiset_id"] == "000001"
+    state_file = queue_dir / "state.jsonl"
+    assert state_file.exists()
+    state_entries = _read_jsonl(state_file)
+    assert len(state_entries) == 2
+    assert {entry["dandiset_id"] for entry in state_entries} == {"000001", "000002"}
 
 
 @pytest.mark.ai_generated
 def test_refresh_queue_writes_all_ordered_pending_entries(tmp_path: pathlib.Path) -> None:
-    """refresh_queue writes all ordered pending entries without truncation."""
+    """refresh_queue writes all scanned entries to state.jsonl."""
     queue_dir = _make_queue_dir(tmp_path)
 
     entries = [
@@ -1218,13 +1217,13 @@ def test_refresh_queue_writes_all_ordered_pending_entries(tmp_path: pathlib.Path
     with mock.patch("dandi_compute_code.queue._process_queue.scan_dandiset_directory", return_value=entries):
         refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
-    waiting_entries = _read_jsonl(queue_dir / "waiting.jsonl")
-    assert len(waiting_entries) == 5
+    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    assert len(state_entries) == 5
 
 
 @pytest.mark.ai_generated
 def test_refresh_queue_excludes_entries_with_submitted_markers(tmp_path: pathlib.Path) -> None:
-    """refresh_queue excludes entries with an existing code/.submitted marker."""
+    """refresh_queue writes submitted-marker entries into state.jsonl unchanged."""
     queue_dir = _make_queue_dir(tmp_path)
 
     pending_entry = _make_state_entry(dandiset_id="000001", has_code=True, has_output=False, has_logs=False)
@@ -1247,9 +1246,9 @@ def test_refresh_queue_excludes_entries_with_submitted_markers(tmp_path: pathlib
     ):
         refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
-    waiting_entries = _read_jsonl(queue_dir / "waiting.jsonl")
-    assert len(waiting_entries) == 1
-    assert waiting_entries[0]["dandiset_id"] == "000001"
+    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    assert len(state_entries) == 2
+    assert {entry["dandiset_id"] for entry in state_entries} == {"000001", "000002"}
 
 
 @pytest.mark.ai_generated
@@ -1529,7 +1528,7 @@ _FAKE_CONFIG_ID = "def5678"
 
 @pytest.mark.ai_generated
 def test_submit_next_submits_first_entry_directly(tmp_path: pathlib.Path) -> None:
-    """_submit_next submits the first waiting entry directly."""
+    """_submit_next submits the first ordered state entry directly."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "001697"
 
@@ -1537,9 +1536,9 @@ def test_submit_next_submits_first_entry_directly(tmp_path: pathlib.Path) -> Non
     _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 1, with_logs=True)
     _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 2, with_logs=True)
 
-    # waiting.jsonl: first entry will be submitted directly.
+    # state.jsonl: first entry will be submitted directly.
     _write_jsonl(
-        queue_dir / "waiting.jsonl",
+        queue_dir / "state.jsonl",
         [
             _make_state_entry(dandiset_id="000001", version="v1.0"),
             _make_state_entry(dandiset_id="000002", version="v1.0"),
@@ -1565,7 +1564,7 @@ def test_submit_next_submits_first_entry_directly(tmp_path: pathlib.Path) -> Non
 
 @pytest.mark.ai_generated
 def test_submit_next_submits_first_entry_with_existing_failure_dirs(tmp_path: pathlib.Path) -> None:
-    """_submit_next submits the first waiting entry directly even if failure dirs exist."""
+    """_submit_next submits the first ordered state entry directly even if failure dirs exist."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "001697"
 
@@ -1581,7 +1580,7 @@ def test_submit_next_submits_first_entry_with_existing_failure_dirs(tmp_path: pa
         config="abc123",
         attempt=1,
     )
-    _write_jsonl(queue_dir / "waiting.jsonl", [entry])
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
 
     # Create the submit script so _submit_next can proceed
     _make_attempt_dir_with_script(
@@ -2500,7 +2499,7 @@ def test_cli_queue_process_failed_when_submit_script_missing(tmp_path: pathlib.P
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
     _write_jsonl(
-        queue_dir / "waiting.jsonl",
+        queue_dir / "state.jsonl",
         [_make_state_entry(dandiset_id="000001", pipeline="test", version="v1.0", params="default")],
     )
     runner = CliRunner()

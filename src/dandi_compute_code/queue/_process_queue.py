@@ -600,18 +600,17 @@ def clean_unsubmitted_capsules(
 
 def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> bool:
     """
-    Submit the next pending entry from ``waiting.jsonl``.
+    Submit the next pending entry from ``state.jsonl``.
 
-    Reads ``waiting.jsonl`` from the queue directory — this file is written by
-    :func:`refresh_queue` and contains the priority-ordered list of pending
-    entries produced by :func:`order_queue`.  If the file is absent
-    or empty, :func:`refresh_queue` is called once to attempt to repopulate it
-    from ``state.jsonl``.  If still empty after that, returns ``False``.
+    Reads ``state.jsonl`` from the queue directory and builds the priority
+    ordering via :func:`order_queue` and ``queue_config.json``. If
+    ``state.jsonl`` is absent or empty, :func:`refresh_queue` is called once to
+    repopulate it by scanning *dandiset_directory*. If still empty after that,
+    returns ``False``.
 
-    The first eligible entry from ``waiting.jsonl`` is submitted and then
-    removed from ``waiting.jsonl``. Eligibility is constrained to entries that
-    are still pending in ``state.jsonl`` (no logs/output) and whose
-    ``code/.submitted`` marker does not already exist.
+    The first eligible entry from the ordered state is submitted. Eligibility
+    is constrained to entries that are still pending in ``state.jsonl`` (no
+    logs/output) and whose ``code/.submitted`` marker does not already exist.
 
     Parameters
     ----------
@@ -627,47 +626,43 @@ def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.P
         True if a job was submitted, False if there are no pending entries or
         if the submit script cannot be found.
     """
-    waiting_file = queue_directory / "waiting.jsonl"
+    state_file = queue_directory / "state.jsonl"
 
-    def _read_waiting() -> list[dict]:
-        if not waiting_file.exists():
+    def _read_state() -> list[dict]:
+        if not state_file.exists():
             return []
-        return [json.loads(line.strip()) for line in waiting_file.read_text().splitlines() if line.strip()]
+        return [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
 
-    waiting_entries = _read_waiting()
+    state_entries = _read_state()
 
-    if not waiting_entries:
-        # Attempt to repopulate from dandiset scan before giving up.
+    if not state_entries:
         refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
-        waiting_entries = _read_waiting()
+        state_entries = _read_state()
 
-    if not waiting_entries:
-        print(f"No pending entries in `{waiting_file}`")
+    if not state_entries:
+        print(f"No pending entries in `{state_file}`")
         return False
 
+    queue_config = _load_queue_config(queue_directory=queue_directory)
+    ordered_state_entries = order_queue(state_entries=state_entries, queue_config=queue_config)
     eligible_identities = _submission_eligible_identities(queue_directory=queue_directory)
     if not eligible_identities:
-        eligible_identities = {
-            _entry_identity(entry)
-            for entry in waiting_entries
-            if not entry.get("has_logs") and not entry.get("has_output")
-        }
-    filtered_waiting_entries = []
-    for entry in waiting_entries:
+        print(f"No pending entries in `{state_file}`")
+        return False
+    filtered_entries_with_attempt_dirs: list[tuple[dict, pathlib.Path]] = []
+    for entry in ordered_state_entries:
         if _entry_identity(entry) not in eligible_identities:
             continue
         attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
         if _submitted_marker_path(attempt_dir=attempt_dir).exists():
             continue
-        filtered_waiting_entries.append(entry)
+        filtered_entries_with_attempt_dirs.append((entry, attempt_dir))
 
-    if not filtered_waiting_entries:
-        waiting_file.write_text("")
-        print(f"No pending entries in `{waiting_file}`")
+    if not filtered_entries_with_attempt_dirs:
+        print(f"No pending entries in `{state_file}`")
         return False
 
-    entry = filtered_waiting_entries[0]
-    attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
+    _, attempt_dir = filtered_entries_with_attempt_dirs[0]
     script_file_path = attempt_dir / "code" / "submit.sh"
     if not script_file_path.exists():
         message = f"Submit script not found: {script_file_path}"
@@ -676,9 +671,6 @@ def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.P
     print(f"Submitting run capsule directory: {attempt_dir}")
     submit_job(script_file_path=script_file_path)
     _submitted_marker_path(attempt_dir=attempt_dir).touch()
-
-    # Remove submitted and ineligible entries from waiting.jsonl.
-    waiting_file.write_text("".join(json.dumps(e) + "\n" for e in filtered_waiting_entries[1:]))
 
     return True
 
@@ -710,20 +702,14 @@ def order_queue(*, state_entries: list[dict], queue_config: dict, limit: int | N
 
 def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
     """
-    Scan *dandiset_directory*, regenerate ``state.jsonl``, and write ``waiting.jsonl``.
-
-    Entries that are prepared (``has_code=True``) but not yet run
-    (``has_logs=False``, ``has_output=False``) are ordered via
-    :func:`order_queue` and written to ``waiting.jsonl`` so that subsequent
-    calls to :func:`process_queue` can read them directly.
+    Scan *dandiset_directory* and regenerate ``state.jsonl``.
 
     Parameters
     ----------
     queue_directory : pathlib.Path
         Path to the queue root directory.
     dandiset_directory : pathlib.Path
-        Path to a local dandiset clone used to rewrite ``state.jsonl``
-        before ``waiting.jsonl`` is regenerated.
+        Path to a local dandiset clone used to rewrite ``state.jsonl``.
 
     Raises
     ------
@@ -734,37 +720,23 @@ def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
         "DANDI_API_KEY" in os.environ and os.environ["DANDI_API_KEY"]
     ), "`DANDI_API_KEY` environment variable must be set before refreshing queue state."
 
+    _load_queue_config(queue_directory=queue_directory)
     state_file = queue_directory / "state.jsonl"
     records = scan_dandiset_directory(dandiset_directory=dandiset_directory)
     with state_file.open(mode="w") as file_stream:
         for record in records:
             file_stream.write(json.dumps(record) + "\n")
 
-    state_entries = [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
-    queue_config = _load_queue_config(queue_directory=queue_directory)
-    ordered = order_queue(state_entries=state_entries, queue_config=queue_config)
-    eligible_identities = _submission_eligible_identities(queue_directory=queue_directory)
-    waiting_entries = []
-    for entry in ordered:
-        if _entry_identity(entry) not in eligible_identities:
-            continue
-        attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
-        if _submitted_marker_path(attempt_dir=attempt_dir).exists():
-            continue
-        waiting_entries.append(entry)
-    waiting_file = queue_directory / "waiting.jsonl"
-    waiting_file.write_text("".join(json.dumps(e) + "\n" for e in waiting_entries))
-
 
 def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
     """
-    Submit jobs from the priority-ordered ``waiting.jsonl`` up to two total
+    Submit jobs from ``state.jsonl`` up to two total
     running ``AIND-Ephys-Pipeline`` SLURM jobs.
 
-    If ``waiting.jsonl`` is absent or empty, :func:`refresh_queue` is called
-    first to populate it from ``state.jsonl``. Then ``squeue --me`` is checked
-    for currently running ``AIND-Ephys-Pipeline`` jobs, and up to the
-    difference from two jobs are submitted.
+    If ``state.jsonl`` is absent or empty, :func:`refresh_queue` is called
+    first to populate it. Then ``squeue --me`` is checked for currently running
+    ``AIND-Ephys-Pipeline`` jobs, and up to the difference from two jobs are
+    submitted.
 
     To avoid duplicate submissions from overlapping invocations, a non-blocking
     advisory file lock is acquired on ``process_queue.lock`` in
@@ -795,8 +767,8 @@ def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
             print(f"Skipping queue processing: lock already held at `{lock_file}`")
             return
 
-        waiting_file = queue_directory / "waiting.jsonl"
-        if not waiting_file.exists() or not waiting_file.read_text().strip():
+        state_file = queue_directory / "state.jsonl"
+        if not state_file.exists() or not state_file.read_text().strip():
             refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
 
         running_count = _count_running_aind_ephys_pipeline_jobs()
