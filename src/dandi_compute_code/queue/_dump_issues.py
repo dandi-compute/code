@@ -27,9 +27,13 @@ def dump_issues(
         records.append(
             {
                 "capsule_path": logs_dir.parent.relative_to(dandiset_directory).as_posix(),
-                "nextflow_log": nextflow_log.relative_to(dandiset_directory).as_posix() if nextflow_log.is_file() else None,
+                "nextflow_log": (
+                    nextflow_log.relative_to(dandiset_directory).as_posix() if nextflow_log.is_file() else None
+                ),
                 "nextflow_errors": nextflow_errors,
-                "slurm_errors": {log_name: errors for log_name, errors in sorted(slurm_errors.items(), key=lambda item: item[0])},
+                "slurm_errors": {
+                    log_name: errors for log_name, errors in sorted(slurm_errors.items(), key=lambda item: item[0])
+                },
             }
         )
 

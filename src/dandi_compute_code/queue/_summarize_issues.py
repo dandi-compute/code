@@ -1,7 +1,7 @@
+import json
 import pathlib
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
-import json
 
 from ._dump_issues import dump_issues
 
