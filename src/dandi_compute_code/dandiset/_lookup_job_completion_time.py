@@ -13,6 +13,7 @@ def _lookup_job_completion_time(
     client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
     dandiset = client.get_dandiset(dandiset_id=dandiset_id)
 
+    # TODO: offload this to helper function with LRU cache if this type of thing occurs anywhere else in codebase
     matching_assets = list(dandiset.get_assets_with_path_prefix(path=log_asset_path))
     if len(matching_assets) != 1:
         warnings.warn(

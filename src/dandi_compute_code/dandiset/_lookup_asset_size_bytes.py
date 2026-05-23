@@ -5,6 +5,7 @@ from ._load_content_id_to_unique_dandiset_path import _load_content_id_to_unique
 from ._normalize_asset_path import _normalize_asset_path
 
 
+# TODO: revise input arguments, logic, and combine with _lookup_job_completion_time
 def _lookup_asset_size_bytes(
     *,
     api_token: str,

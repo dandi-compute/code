@@ -1,5 +1,6 @@
 import re
 
+# TODO: rename _ATTEMPT_DIR_RE to JOB_CAPSULE_ID_PATTERN
 _ATTEMPT_DIR_RE = re.compile(
     r"(?:version-(?P<version_in_name>.+?)_)?params-(?P<params>[^_]+)_config-(?P<config>.+)_attempt-(?P<attempt>\d+)"
 )

@@ -5,6 +5,7 @@ from ._globals import _ATTEMPT_DIR_RE
 from ._parse_content_id_from_submission_script import _parse_content_id_from_submission_script
 
 
+# TODO: rename to _parse_job_capsule_id
 def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     """
     Parse a single attempt directory into a flat record dict.
