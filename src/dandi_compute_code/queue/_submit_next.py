@@ -2,7 +2,7 @@ import json
 import pathlib
 import warnings
 
-from ._resolve_attempt_dir import _resolve_attempt_dir
+from ._resolve_unsubmitted_attempt_dir import _resolve_unsubmitted_attempt_dir
 from ..aind_ephys_pipeline import submit_job
 
 
@@ -57,21 +57,21 @@ def _submit_next(
     if max_submissions < 1:
         return False
 
-    pending_entries = [entry for entry in state_entries if not entry.get("has_output") and not entry.get("has_logs")]
+    pending_attempt_dirs = [
+        attempt_dir
+        for entry in state_entries
+        if (attempt_dir := _resolve_unsubmitted_attempt_dir(base_dir=dandiset_directory, entry=entry)) is not None
+    ]
     submitted_count = 0
 
-    for entry in pending_entries:
-        attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
-        submitted_marker = attempt_dir / "code" / ".submitted"
-        if submitted_marker.exists():
-            continue
-
+    for attempt_dir in pending_attempt_dirs:
         script_file_path = attempt_dir / "code" / "submit.sh"
         if not script_file_path.exists():
             message = f"Submit script not found: {script_file_path}"
             raise FileNotFoundError(message)
 
         submit_job(script_file_path=script_file_path)
+        submitted_marker = attempt_dir / "code" / ".submitted"
         submitted_marker.touch()
         submitted_count += 1
         if submitted_count >= max_submissions:
