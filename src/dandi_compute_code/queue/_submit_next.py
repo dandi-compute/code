@@ -69,16 +69,14 @@ def _submit_next(
 
         submit_job(script_file_path=script_file_path)
 
-        # Actual submit marks must go to DANDI backend first
+        # Actual submission marks must go to DANDI backend first
         attempt_dir_relative_to_datalad = attempt_dir.relative_to(datalad_directory)
         attempt_dir_relative_to_dandiset = dandiset_directory / attempt_dir_relative_to_datalad
         submitted_marker = attempt_dir_relative_to_dandiset / "code" / ".submitted"
         if not submitted_marker.parent.exists():
-            message = (
-                f"Local Dandiset shell did not find parents of submission marker.\nCreating for {submitted_marker}"
-            )
+            message = f"Creating '{submitted_marker.parent.absolute()}'\n"  # TODO: could be replaced with logging.info
             warnings.warn(message=message, stacklevel=2)
-            submitted_marker.parent.mkdir(parents=True, exist_ok=True)  # Likely required on real Dandiset shell
+            submitted_marker.parent.mkdir(parents=True, exist_ok=True)
         submitted_marker.touch()
         submitted_count += 1
         if submitted_count >= max_submissions:
