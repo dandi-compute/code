@@ -7,6 +7,7 @@ from ._lookup_job_completion_time import _lookup_job_completion_time
 from ._parse_attempt_dir import _parse_attempt_dir
 
 
+# TODO: create formal JobState LinkML model/schema that and rename this function to relate to that
 def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
     """
     Scan a local dandiset directory and return a flat list of attempt records.

@@ -4,6 +4,7 @@ import re
 from ._globals import _FLAT_ATTEMPT_DIR_RE
 
 
+# TODO: determine where this is used
 def _count_dandiset_failures(
     *,
     dandiset_directory: pathlib.Path,

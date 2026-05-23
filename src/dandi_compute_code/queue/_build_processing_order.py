@@ -2,6 +2,7 @@ from ._resolve_params_key_to_id import _resolve_params_key_to_id
 from ._version_matches import _version_matches
 
 
+# TODO: evaluate if this can be removed
 def _build_processing_order(
     *,
     state_entries: list[dict],

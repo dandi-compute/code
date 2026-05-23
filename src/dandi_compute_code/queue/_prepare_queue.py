@@ -11,6 +11,8 @@ from ._version_matches import _version_matches
 from ..aind_ephys_pipeline import prepare_aind_ephys_job
 
 
+# TODO: rethink the passing of content_ids here (namely for testing) 
+# in favor of direct pipeline job capsule creation
 def prepare_queue(
     *,
     queue_directory: pathlib.Path,
