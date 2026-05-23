@@ -1,6 +1,7 @@
 import re
 
 
+# TODO: might be able to remove this in favor of semantic versions
 def _strip_commit_hash_suffix(version: str) -> str:
     """Strip a trailing +<git-hash> suffix from a version string when present."""
     version_parts = version.split("+")

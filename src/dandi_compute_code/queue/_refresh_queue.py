@@ -8,6 +8,7 @@ from ._prune_last_submitted import _prune_last_submitted
 from ..dandiset import scan_dandiset_directory
 
 
+# TODO: check this is removed after simplification
 def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
     """
     Scan *dandiset_directory*, regenerate ``state.jsonl``, and write ``waiting.jsonl``.

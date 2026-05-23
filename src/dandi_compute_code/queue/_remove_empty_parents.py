@@ -1,6 +1,7 @@
 import pathlib
 
 
+# TODO: refactor this to not use try/except pattern (shouldn't be necessary)
 def _remove_empty_parents(*, start: pathlib.Path, stop: pathlib.Path) -> None:
     """
     Remove empty directories from ``start`` up to but not including ``stop``.

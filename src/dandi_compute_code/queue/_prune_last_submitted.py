@@ -4,6 +4,7 @@ import pathlib
 from ._entry_identity import _entry_identity
 
 
+# TODO: ensure this is removed after simplification
 def _prune_last_submitted(*, queue_directory: pathlib.Path, state_entries: list[dict]) -> None:
     """Remove last_submitted entries that now have logs or output in state."""
     last_submitted_file = queue_directory / "last_submitted.jsonl"

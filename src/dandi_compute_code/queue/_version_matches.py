@@ -1,6 +1,7 @@
 import re
 
 
+# TODO: might be able to get rid of this in favor of the semantic versions
 def _version_matches(state_version: str, config_version: str) -> bool:
     """
     Return True if *state_version* matches *config_version*.
