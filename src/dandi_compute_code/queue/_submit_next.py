@@ -63,19 +63,17 @@ def _submit_next(
         script_file_path = attempt_dir / "code" / "submit.sh"
         if script_file_path in seen_script_file_paths:
             continue
-        if not script_file_path.exists():
-            message = f"Submit script not found: {script_file_path}"
-            raise FileNotFoundError(message)
         seen_script_file_paths.add(script_file_path)
         pending_submissions.append((attempt_dir, script_file_path))
-        if len(pending_submissions) >= max_submissions:
-            break
 
     if not pending_submissions:
         warnings.warn("No eligible pending entries available for submission", stacklevel=2)
         return False
 
-    for attempt_dir, script_file_path in pending_submissions:
+    for attempt_dir, script_file_path in pending_submissions[:max_submissions]:
+        if not script_file_path.exists():
+            message = f"Submit script not found: {script_file_path}"
+            raise FileNotFoundError(message)
         submit_job(script_file_path=script_file_path)
 
         # Actual submission marks must go to DANDI backend first
