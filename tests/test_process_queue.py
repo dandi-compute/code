@@ -547,52 +547,37 @@ def test_count_running_aind_ephys_pipeline_jobs_returns_zero_when_no_exact_match
 
 @pytest.mark.ai_generated
 def test_submit_next_returns_false_when_no_waiting_file(tmp_path: pathlib.Path) -> None:
-    """_submit_next returns False when state.jsonl is absent and refresh finds nothing."""
+    """_submit_next returns False when state.jsonl is absent."""
     queue_dir = _make_queue_dir(tmp_path)
 
-    with mock.patch("dandi_compute_code.queue._submit_next.refresh_queue") as mock_refresh:
-        # refresh_queue is called to try to fill state.jsonl, but produces nothing
+    with pytest.warns(UserWarning, match="No pending entries in"):
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
-    mock_refresh.assert_called_once_with(queue_directory=queue_dir, dandiset_directory=tmp_path)
     assert result is False
 
 
 @pytest.mark.ai_generated
 def test_submit_next_returns_false_when_no_pending_entries(tmp_path: pathlib.Path) -> None:
-    """_submit_next returns False when state.jsonl is empty and refresh finds nothing."""
+    """_submit_next returns False when state.jsonl is empty."""
     queue_dir = _make_queue_dir(tmp_path)
-
-    # Empty state.jsonl → triggers refresh retry, which also produces nothing
     (queue_dir / "state.jsonl").write_text("")
 
-    with mock.patch("dandi_compute_code.queue._submit_next.refresh_queue") as mock_refresh:
+    with pytest.warns(UserWarning, match="No pending entries in"):
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
-    mock_refresh.assert_called_once_with(queue_directory=queue_dir, dandiset_directory=tmp_path)
     assert result is False
 
 
 @pytest.mark.ai_generated
-def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: pathlib.Path) -> None:
-    """_submit_next refreshes state.jsonl when empty, then submits if entries appear."""
+def test_submit_next_returns_false_when_no_eligible_entries(tmp_path: pathlib.Path) -> None:
+    """_submit_next returns False when all ordered entries already have .submitted markers."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "dandiset"
 
-    entry = _make_state_entry(
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-
-    # Start with an empty state.jsonl
-    (queue_dir / "state.jsonl").write_text("")
-
-    _make_attempt_dir_with_script(
+    first_entry = _make_state_entry(dandiset_id="000001")
+    second_entry = _make_state_entry(dandiset_id="000002", subject="mouse02")
+    _write_jsonl(queue_dir / "state.jsonl", [first_entry, second_entry])
+    first_attempt_dir = _make_attempt_dir_with_script(
         dandiset_dir,
         dandiset_id="000001",
         subject="mouse01",
@@ -602,22 +587,27 @@ def test_submit_next_calls_order_queue_when_waiting_empty_and_submits(tmp_path: 
         config="abc123",
         attempt=1,
     )
-
-    def _fill_waiting(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
-        # Simulate refresh_queue populating state.jsonl
-        _write_jsonl(queue_directory / "state.jsonl", [entry])
+    second_attempt_dir = _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000002",
+        subject="mouse02",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+    (first_attempt_dir / "code" / ".submitted").touch()
+    (second_attempt_dir / "code" / ".submitted").touch()
 
     with (
-        mock.patch(
-            "dandi_compute_code.queue._submit_next.refresh_queue",
-            side_effect=_fill_waiting,
-        ) as mock_refresh,
-        mock.patch("dandi_compute_code.queue._submit_next.submit_job"),
+        pytest.warns(UserWarning, match="No eligible pending entries available for submission"),
+        mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit,
     ):
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
-    mock_refresh.assert_called_once_with(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
-    assert result is True
+    assert result is False
+    mock_submit.assert_not_called()
 
 
 @pytest.mark.ai_generated
@@ -784,6 +774,16 @@ def test_submit_next_leaves_state_jsonl_unchanged_after_submission(tmp_path: pat
         config="abc123",
         attempt=1,
     )
+    _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000002",
+        subject="mouse02",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
 
     with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
         _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
@@ -826,14 +826,12 @@ def test_submit_next_creates_submitted_marker_file(tmp_path: pathlib.Path) -> No
 
 
 @pytest.mark.ai_generated
-def test_submit_next_logs_explicit_run_capsule_directory(
-    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """_submit_next prints the full run capsule directory being submitted."""
+def test_submit_next_submits_top_two_eligible_entries(tmp_path: pathlib.Path) -> None:
+    """_submit_next submits the first two eligible entries by default."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "dandiset"
 
-    entry = _make_state_entry(
+    first_entry = _make_state_entry(
         dandiset_id="000001",
         subject="mouse01",
         pipeline="test",
@@ -842,8 +840,26 @@ def test_submit_next_logs_explicit_run_capsule_directory(
         config="abc123",
         attempt=1,
     )
-    _write_jsonl(queue_dir / "state.jsonl", [entry])
-    attempt_dir = _make_attempt_dir_with_script(
+    second_entry = _make_state_entry(
+        dandiset_id="000002",
+        subject="mouse02",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+    third_entry = _make_state_entry(
+        dandiset_id="000003",
+        subject="mouse03",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+    _write_jsonl(queue_dir / "state.jsonl", [first_entry, second_entry, third_entry])
+    first_attempt_dir = _make_attempt_dir_with_script(
         dandiset_dir,
         dandiset_id="000001",
         subject="mouse01",
@@ -853,12 +869,38 @@ def test_submit_next_logs_explicit_run_capsule_directory(
         config="abc123",
         attempt=1,
     )
+    second_attempt_dir = _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000002",
+        subject="mouse02",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+    third_attempt_dir = _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000003",
+        subject="mouse03",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
 
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
         _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
-    captured = capsys.readouterr()
-    assert f"Submitting run capsule directory: {attempt_dir}" in captured.out
+    assert mock_submit.call_count == 2
+    assert mock_submit.call_args_list == [
+        mock.call(script_file_path=first_attempt_dir / "code" / "submit.sh"),
+        mock.call(script_file_path=second_attempt_dir / "code" / "submit.sh"),
+    ]
+    assert (first_attempt_dir / "code" / ".submitted").exists()
+    assert (second_attempt_dir / "code" / ".submitted").exists()
+    assert not (third_attempt_dir / "code" / ".submitted").exists()
 
 
 @pytest.mark.ai_generated
@@ -1028,7 +1070,7 @@ def test_process_queue_skips_when_lock_is_already_held(
 
 @pytest.mark.ai_generated
 def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> None:
-    """process_queue calls _submit_next twice when no AIND jobs are running and entries are available."""
+    """process_queue requests two submissions when no AIND jobs are running."""
     queue_dir = _make_queue_dir(tmp_path)
     _write_jsonl(queue_dir / "state.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
@@ -1040,7 +1082,11 @@ def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> N
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
-    assert mock_submit.call_count == 2
+    mock_submit.assert_called_once_with(
+        queue_directory=queue_dir,
+        dandiset_directory=dandiset_dir,
+        max_submissions=2,
+    )
 
 
 @pytest.mark.ai_generated
@@ -1062,7 +1108,7 @@ def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path)
 
 @pytest.mark.ai_generated
 def test_process_queue_submits_one_when_one_job_running(tmp_path: pathlib.Path) -> None:
-    """process_queue submits once when exactly one AIND-Ephys-Pipeline job is running."""
+    """process_queue requests one submission when exactly one AIND-Ephys-Pipeline job is running."""
     queue_dir = _make_queue_dir(tmp_path)
     _write_jsonl(queue_dir / "state.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
@@ -1074,12 +1120,16 @@ def test_process_queue_submits_one_when_one_job_running(tmp_path: pathlib.Path) 
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
-    assert mock_submit.call_count == 1
+    mock_submit.assert_called_once_with(
+        queue_directory=queue_dir,
+        dandiset_directory=dandiset_dir,
+        max_submissions=1,
+    )
 
 
 @pytest.mark.ai_generated
 def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathlib.Path) -> None:
-    """process_queue forwards dandiset_directory to both _submit_next calls when idle."""
+    """process_queue forwards dandiset_directory to _submit_next when idle."""
     queue_dir = _make_queue_dir(tmp_path)
     _write_jsonl(queue_dir / "state.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
@@ -1091,28 +1141,11 @@ def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathli
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
-    assert mock_submit.call_count == 2
-    assert all(
-        call == mock.call(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
-        for call in mock_submit.call_args_list
+    mock_submit.assert_called_once_with(
+        queue_directory=queue_dir,
+        dandiset_directory=dandiset_dir,
+        max_submissions=2,
     )
-
-
-@pytest.mark.ai_generated
-def test_process_queue_stops_submitting_when_queue_exhausted(tmp_path: pathlib.Path) -> None:
-    """process_queue stops early when _submit_next reports no further submissions."""
-    queue_dir = _make_queue_dir(tmp_path)
-    _write_jsonl(queue_dir / "state.jsonl", [_make_state_entry()])
-    dandiset_dir = tmp_path / "001697"
-    dandiset_dir.mkdir()
-
-    with (
-        mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=0),
-        mock.patch("dandi_compute_code.queue._process_queue._submit_next", side_effect=[True, False]) as mock_submit,
-    ):
-        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
-
-    assert mock_submit.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -1561,7 +1594,7 @@ def test_submit_next_submits_first_entry_directly(tmp_path: pathlib.Path) -> Non
     )
 
     with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
-        result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+        result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir, max_submissions=1)
 
     assert result is True
 

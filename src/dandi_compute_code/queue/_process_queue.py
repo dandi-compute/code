@@ -50,7 +50,10 @@ def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
             refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
 
         running_count = _count_running_aind_ephys_pipeline_jobs()
-        for _ in range(max(0, 2 - running_count)):
-            submitted = _submit_next(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
-            if not submitted:
-                break
+        available_slots = max(0, 2 - running_count)
+        if available_slots > 0:
+            _submit_next(
+                queue_directory=queue_directory,
+                dandiset_directory=dandiset_directory,
+                max_submissions=available_slots,
+            )
