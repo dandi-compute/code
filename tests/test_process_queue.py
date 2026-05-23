@@ -1020,7 +1020,11 @@ def test_process_queue_handles_empty_scan_when_waiting_file_missing(tmp_path: pa
     dandiset_dir.mkdir()
 
     with pytest.raises(FileNotFoundError, match="State file not found"):
-        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+        process_queue(
+            queue_directory=queue_dir,
+            dandiset_directory=dandiset_dir,
+            datalad_directory=dandiset_dir,
+        )
 
 
 @pytest.mark.ai_generated
@@ -1036,7 +1040,11 @@ def test_process_queue_refreshes_state_when_empty(tmp_path: pathlib.Path) -> Non
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
-        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+        process_queue(
+            queue_directory=queue_dir,
+            dandiset_directory=dandiset_dir,
+            datalad_directory=dandiset_dir,
+        )
 
     mock_submit.assert_not_called()
 
@@ -1054,7 +1062,11 @@ def test_process_queue_skips_refresh_when_state_non_empty(tmp_path: pathlib.Path
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
-        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+        process_queue(
+            queue_directory=queue_dir,
+            dandiset_directory=dandiset_dir,
+            datalad_directory=dandiset_dir,
+        )
 
     mock_submit.assert_not_called()
 
@@ -1076,7 +1088,11 @@ def test_process_queue_skips_when_lock_is_already_held(
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs") as mock_running,
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
-        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+        process_queue(
+            queue_directory=queue_dir,
+            dandiset_directory=dandiset_dir,
+            datalad_directory=dandiset_dir,
+        )
 
     captured = capsys.readouterr()
     assert "Skipping queue processing: lock already held" in captured.out
@@ -1096,7 +1112,11 @@ def test_process_queue_submits_when_no_jobs_running(tmp_path: pathlib.Path) -> N
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=0),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next", return_value=True) as mock_submit,
     ):
-        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+        process_queue(
+            queue_directory=queue_dir,
+            dandiset_directory=dandiset_dir,
+            datalad_directory=dandiset_dir,
+        )
 
     mock_submit.assert_called_once_with(
         queue_directory=queue_dir,
@@ -1118,7 +1138,11 @@ def test_process_queue_does_not_submit_when_jobs_running(tmp_path: pathlib.Path)
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
-        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+        process_queue(
+            queue_directory=queue_dir,
+            dandiset_directory=dandiset_dir,
+            datalad_directory=dandiset_dir,
+        )
 
     mock_submit.assert_not_called()
 
@@ -1135,7 +1159,11 @@ def test_process_queue_submits_one_when_one_job_running(tmp_path: pathlib.Path) 
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=1),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next", return_value=True) as mock_submit,
     ):
-        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+        process_queue(
+            queue_directory=queue_dir,
+            dandiset_directory=dandiset_dir,
+            datalad_directory=dandiset_dir,
+        )
 
     mock_submit.assert_called_once_with(
         queue_directory=queue_dir,
@@ -1146,8 +1174,10 @@ def test_process_queue_submits_one_when_one_job_running(tmp_path: pathlib.Path) 
 
 
 @pytest.mark.ai_generated
-def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathlib.Path) -> None:
-    """process_queue forwards dandiset_directory to _submit_next when idle."""
+def test_process_queue_passes_datalad_directory_to_submit_next_when_matching_dandiset(
+    tmp_path: pathlib.Path,
+) -> None:
+    """process_queue forwards datalad_directory to _submit_next when idle."""
     queue_dir = _make_queue_dir(tmp_path)
     _write_jsonl(queue_dir / "state.jsonl", [_make_state_entry()])
     dandiset_dir = tmp_path / "001697"
@@ -1157,7 +1187,11 @@ def test_process_queue_passes_dandiset_directory_to_submit_next(tmp_path: pathli
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=0),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next", return_value=True) as mock_submit,
     ):
-        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+        process_queue(
+            queue_directory=queue_dir,
+            dandiset_directory=dandiset_dir,
+            datalad_directory=dandiset_dir,
+        )
 
     mock_submit.assert_called_once_with(
         queue_directory=queue_dir,
