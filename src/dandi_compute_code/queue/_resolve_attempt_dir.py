@@ -3,6 +3,7 @@ import pathlib
 from ._attempt_dir_candidates import _attempt_dir_candidates
 
 
+# TODO: evaluate if this is necessary
 def _resolve_attempt_dir(*, base_dir: pathlib.Path, entry: dict) -> pathlib.Path:
     """Resolve the best attempt-directory path for a queue entry."""
     flat_attempt_dir, nested_attempt_dir = _attempt_dir_candidates(base_dir=base_dir, entry=entry)
