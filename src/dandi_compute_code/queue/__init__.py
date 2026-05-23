@@ -1,13 +1,11 @@
+from ._aggregate_queue_statistics import aggregate_queue_statistics
+from ._clean_unsubmitted_capsules import clean_unsubmitted_capsules
 from ._dump_issues import dump_issues
-from ._process_queue import (
-    TEST_QUEUE_CONTENT_ID,
-    aggregate_queue_statistics,
-    clean_unsubmitted_capsules,
-    order_queue,
-    prepare_queue,
-    process_queue,
-    refresh_queue,
-)
+from ._globals import TEST_QUEUE_CONTENT_ID
+from ._order_queue import order_queue
+from ._prepare_queue import prepare_queue
+from ._process_queue import process_queue
+from ._refresh_queue import refresh_queue
 from ._summarize_issues import summarize_issues
 
 __all__ = [
