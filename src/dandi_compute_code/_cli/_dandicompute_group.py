@@ -339,13 +339,25 @@ def _queue_stats_command(
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
+@click.option(
+    "--datalad",
+    "datalad_directory",
+    help="Path to the DataLad-backed work tree used to resolve attempt directories.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
 def _queue_process_command(
     queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
+    datalad_directory: pathlib.Path,
 ) -> None:
     """Submit queued jobs when no active dandicompute jobs are running."""
     _require_dandi_api_key()
-    process_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
+    process_queue(
+        queue_directory=queue_directory,
+        dandiset_directory=dandiset_directory,
+        datalad_directory=datalad_directory,
+    )
 
 
 # dandicompute queue prepare [OPTIONS]

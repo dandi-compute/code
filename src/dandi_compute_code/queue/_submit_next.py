@@ -10,6 +10,7 @@ from ..aind_ephys_pipeline import submit_job
 def _submit_next(
     *,
     queue_directory: pathlib.Path,
+    datalad_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
     max_submissions: int = 2,
 ) -> bool:
@@ -22,16 +23,19 @@ def _submit_next(
 
     Entries are filtered to those with no output and no logs. The first up to
     ``max_submissions`` eligible entries that do not already have a
-    ``code/.submitted`` marker are submitted, and each marker is created
+    ``code/submitted`` marker are submitted, and each marker is created
     immediately after submission succeeds.
 
     Parameters
     ----------
     queue_directory : pathlib.Path
         Path to the queue root directory.
+    datalad_directory : pathlib.Path
+        Path to the DataLad-backed work tree used to resolve unsubmitted
+        attempt directories.
     dandiset_directory : pathlib.Path
         Path to a local clone of the 001697 dandiset repository.  Used to
-        locate prepared submission scripts.
+        write submission marker files after backend submission.
     max_submissions : int, optional
         Maximum number of pending jobs to submit from the ordered queue.
 
@@ -53,7 +57,7 @@ def _submit_next(
     pending_attempt_dirs = [
         attempt_dir
         for entry in state_entries
-        if (attempt_dir := _resolve_unsubmitted_attempt_dir(base_dir=dandiset_directory, entry=entry)) is not None
+        if (attempt_dir := _resolve_unsubmitted_attempt_dir(base_dir=datalad_directory, entry=entry)) is not None
     ]
     submitted_count = 0
 
@@ -64,14 +68,16 @@ def _submit_next(
             raise FileNotFoundError(message)
 
         submit_job(script_file_path=script_file_path)
-        submitted_marker = attempt_dir / "code" / ".submitted"
+
+        # Actual submission marks must go to DANDI backend first
+        attempt_dir_relative_to_datalad = attempt_dir.relative_to(datalad_directory)
+        attempt_dir_relative_to_dandiset = dandiset_directory / attempt_dir_relative_to_datalad
+        submitted_marker = attempt_dir_relative_to_dandiset / "code" / "submitted"
         if not submitted_marker.parent.exists():
-            message = (
-                f"Local Dandiset shell did not find parents of submission marker.\nCreating for {submitted_marker}"
-            )
+            message = f"Creating '{submitted_marker.parent.absolute()}'"  # TODO: could be replaced with logging.info
             warnings.warn(message=message, stacklevel=2)
-            submitted_marker.parent.mkdir(parents=True, exist_ok=True)  # Likely required on real Dandiset shell
-        submitted_marker.touch()
+            submitted_marker.parent.mkdir(parents=True, exist_ok=True)
+        submitted_marker.write_bytes(b"1")
         submitted_count += 1
         if submitted_count >= max_submissions:
             break
