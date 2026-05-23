@@ -9,6 +9,7 @@ than touching the network or a SLURM cluster.
 import gzip
 import importlib.resources
 import json
+import logging
 import os
 import pathlib
 from collections.abc import Iterator
@@ -568,19 +569,24 @@ def test_submit_next_returns_false_when_max_submissions_less_than_one(tmp_path: 
 
 
 @pytest.mark.ai_generated
-def test_submit_next_warns_and_returns_false_when_state_file_is_empty(tmp_path: pathlib.Path) -> None:
-    """_submit_next warns and returns False when state.jsonl is empty."""
+def test_submit_next_logs_and_returns_false_when_state_file_is_empty(
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """_submit_next logs and returns False when state.jsonl is empty."""
     queue_dir = _make_queue_dir(tmp_path)
     (queue_dir / "state.jsonl").write_text("")
 
-    with pytest.warns(UserWarning, match="No pending entries in"):
+    with caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._submit_next"):
         result = _submit_next(queue_directory=queue_dir, datalad_directory=tmp_path, dandiset_directory=tmp_path)
 
     assert result is False
+    assert any("No pending entries in" in record.message for record in caplog.records)
 
 
 @pytest.mark.ai_generated
-def test_submit_next_returns_false_when_no_eligible_entries(tmp_path: pathlib.Path) -> None:
+def test_submit_next_returns_false_when_no_eligible_entries(
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """_submit_next returns False when all ordered entries already have submitted markers."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "dandiset"
@@ -612,7 +618,7 @@ def test_submit_next_returns_false_when_no_eligible_entries(tmp_path: pathlib.Pa
     (second_attempt_dir / "code" / "submitted").touch()
 
     with (
-        pytest.warns(UserWarning, match="No eligible pending entries available for submission"),
+        caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._submit_next"),
         mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit,
     ):
         result = _submit_next(
@@ -621,6 +627,7 @@ def test_submit_next_returns_false_when_no_eligible_entries(tmp_path: pathlib.Pa
 
     assert result is False
     mock_submit.assert_not_called()
+    assert any("No eligible pending entries available for submission" in record.message for record in caplog.records)
 
 
 @pytest.mark.ai_generated
@@ -1058,15 +1065,15 @@ def test_process_queue_handles_empty_scan_when_waiting_file_missing(tmp_path: pa
 
 
 @pytest.mark.ai_generated
-def test_process_queue_refreshes_state_when_empty(tmp_path: pathlib.Path) -> None:
-    """process_queue warns and returns when state.jsonl is empty."""
+def test_process_queue_refreshes_state_when_empty(tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture) -> None:
+    """process_queue logs and returns when state.jsonl is empty."""
     queue_dir = _make_queue_dir(tmp_path)
     (queue_dir / "state.jsonl").write_text("")
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
     with (
-        pytest.warns(UserWarning, match="No entries in"),
+        caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._process_queue"),
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
@@ -1077,6 +1084,7 @@ def test_process_queue_refreshes_state_when_empty(tmp_path: pathlib.Path) -> Non
         )
 
     mock_submit.assert_not_called()
+    assert any("No entries in" in record.message for record in caplog.records)
 
 
 @pytest.mark.ai_generated
@@ -1103,7 +1111,7 @@ def test_process_queue_skips_refresh_when_state_non_empty(tmp_path: pathlib.Path
 
 @pytest.mark.ai_generated
 def test_process_queue_skips_when_lock_is_already_held(
-    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """process_queue skips submission when another process holds the lock."""
     queue_dir = _make_queue_dir(tmp_path)
@@ -1111,6 +1119,7 @@ def test_process_queue_skips_when_lock_is_already_held(
     dandiset_dir.mkdir()
 
     with (
+        caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._process_queue"),
         mock.patch(
             "dandi_compute_code.queue._process_queue.fcntl.flock",
             side_effect=BlockingIOError,
@@ -1124,8 +1133,7 @@ def test_process_queue_skips_when_lock_is_already_held(
             datalad_directory=dandiset_dir,
         )
 
-    captured = capsys.readouterr()
-    assert "Skipping queue processing: lock already held" in captured.out
+    assert any("Skipping queue processing: lock already held" in record.message for record in caplog.records)
     mock_running.assert_not_called()
     mock_submit.assert_not_called()
 

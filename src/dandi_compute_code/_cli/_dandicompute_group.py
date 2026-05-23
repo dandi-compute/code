@@ -4,6 +4,7 @@ import pathlib
 import click
 
 from ._clean_work_directory import clean_work_directory
+from ._configure_logging import _configure_logging
 from ._styled_echo import _styled_echo
 from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
 from ..dandiset import (
@@ -43,10 +44,19 @@ def _dandicompute_group():
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
-def _clean_command(directory: pathlib.Path) -> None:
+@click.option(
+    "--silent",
+    help="Suppress informational log output.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
+def _clean_command(directory: pathlib.Path, silent: bool = False) -> None:
     """Remove all files and directories under a work directory except apptainer cache."""
+    _configure_logging(silent=silent)
     clean_work_directory(directory=directory)
-    _styled_echo(text="\nWork directory cleaned!", color="green")
+    if not silent:
+        _styled_echo(text="\nWork directory cleaned!", color="green")
 
 
 # dandicompute submit [OPTIONS]
@@ -58,8 +68,16 @@ def _clean_command(directory: pathlib.Path) -> None:
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
 )
-def _submit_command(script_file_path: pathlib.Path) -> None:
+@click.option(
+    "--silent",
+    help="Suppress informational log output.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
+def _submit_command(script_file_path: pathlib.Path, silent: bool = False) -> None:
     """Submit a previously prepared pipeline script via sbatch."""
+    _configure_logging(silent=silent)
     submit_job(script_file_path=script_file_path)
 
 
@@ -171,6 +189,7 @@ def _prepare_aind_command(
     queue_directory: pathlib.Path | None = None,
 ) -> None:
     """Prepare an AIND ephys job, or prepare test queue entries with --test."""
+    _configure_logging(silent=silent)
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
 
@@ -240,11 +259,20 @@ def _queue_group() -> None:
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
+@click.option(
+    "--silent",
+    help="Suppress informational log output.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
 def _queue_refresh_command(
     queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
+    silent: bool = False,
 ) -> None:
     """Rescan the dandiset directory and regenerate state.jsonl."""
+    _configure_logging(silent=silent)
     _require_dandi_api_key()
     try:
         refresh_queue_state(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
@@ -268,19 +296,29 @@ def _queue_refresh_command(
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
+@click.option(
+    "--silent",
+    help="Suppress informational log output.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
 def _queue_clean_command(
     queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
+    silent: bool = False,
 ) -> None:
     """Delete unsubmitted capsules that are no longer present in the queue."""
+    _configure_logging(silent=silent)
     _require_dandi_api_key()
     removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
     if removed:
-        for path in removed:
-            _styled_echo(text=f"  Removed: {path}", color="yellow")
-        noun = "capsule" if len(removed) == 1 else "capsules"
-        _styled_echo(text=f"\nCleaned {len(removed)} unsubmitted {noun}.", color="green")
-    else:
+        if not silent:
+            for path in removed:
+                _styled_echo(text=f"  Removed: {path}", color="yellow")
+            noun = "capsule" if len(removed) == 1 else "capsules"
+            _styled_echo(text=f"\nCleaned {len(removed)} unsubmitted {noun}.", color="green")
+    elif not silent:
         _styled_echo(text="\nNo unsubmitted capsules found.", color="yellow")
 
 
@@ -309,18 +347,28 @@ def _queue_clean_command(
     default="queue_stats.json",
     show_default=True,
 )
+@click.option(
+    "--silent",
+    help="Suppress informational log output.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
 def _queue_stats_command(
     queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
     output_file_name: str = "queue_stats.json",
+    silent: bool = False,
 ) -> None:
     """Write aggregate queue statistics from state.jsonl and timeline reports."""
+    _configure_logging(silent=silent)
     aggregate_queue_statistics(
         queue_directory=queue_directory,
         dandiset_directory=dandiset_directory,
         output_file_name=output_file_name,
     )
-    _styled_echo(text=f"\nWrote queue aggregate statistics: {queue_directory / output_file_name}", color="green")
+    if not silent:
+        _styled_echo(text=f"\nWrote queue aggregate statistics: {queue_directory / output_file_name}", color="green")
 
 
 # dandicompute queue process [OPTIONS]
@@ -346,12 +394,21 @@ def _queue_stats_command(
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
+@click.option(
+    "--silent",
+    help="Suppress informational log output.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
 def _queue_process_command(
     queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
     datalad_directory: pathlib.Path,
+    silent: bool = False,
 ) -> None:
     """Submit queued jobs when no active dandicompute jobs are running."""
+    _configure_logging(silent=silent)
     _require_dandi_api_key()
     process_queue(
         queue_directory=queue_directory,
@@ -393,13 +450,22 @@ def _queue_process_command(
     type=click.IntRange(min=1),
     default=None,
 )
+@click.option(
+    "--silent",
+    help="Suppress informational log output.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
 def _queue_prepare_command(
     queue_directory: pathlib.Path,
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
     limit: int | None = None,
+    silent: bool = False,
 ) -> None:
     """Prepare queued jobs across configured pipelines without submitting them."""
+    _configure_logging(silent=silent)
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
     prepare_queue(
@@ -433,13 +499,23 @@ def _issues_group() -> None:
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
+@click.option(
+    "--silent",
+    help="Suppress informational log output.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
 def _issues_dump_command(
     dandiset_directory: pathlib.Path,
     queue_directory: pathlib.Path,
+    silent: bool = False,
 ) -> None:
     """Scan nextflow and slurm logs and write per-capsule issue records."""
+    _configure_logging(silent=silent)
     dump_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
-    _styled_echo(text=f"\nWrote issue dump: {queue_directory / 'issues_dump.json'}", color="green")
+    if not silent:
+        _styled_echo(text=f"\nWrote issue dump: {queue_directory / 'issues_dump.json'}", color="green")
 
 
 # dandicompute issues summarize [OPTIONS]
@@ -458,13 +534,23 @@ def _issues_dump_command(
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
+@click.option(
+    "--silent",
+    help="Suppress informational log output.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
 def _issues_summarize_command(
     dandiset_directory: pathlib.Path,
     queue_directory: pathlib.Path,
+    silent: bool = False,
 ) -> None:
     """Summarize discovered issue lines by descending occurrence count."""
+    _configure_logging(silent=silent)
     summarize_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
-    _styled_echo(text=f"\nWrote issue summary: {queue_directory / 'issues_summary.json'}", color="green")
+    if not silent:
+        _styled_echo(text=f"\nWrote issue summary: {queue_directory / 'issues_summary.json'}", color="green")
 
 
 # dandicompute delete
@@ -494,13 +580,22 @@ def _delete_group() -> None:
     required=True,
     type=str,
 )
-def _delete_version_command(dandiset_directory: pathlib.Path, version: str) -> None:
+@click.option(
+    "--silent",
+    help="Suppress informational log output.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
+def _delete_version_command(dandiset_directory: pathlib.Path, version: str, silent: bool = False) -> None:
     """Delete version-matching derivatives from the archive and local filesystem."""
+    _configure_logging(silent=silent)
     if not os.environ.get("DANDI_API_KEY", "").strip():
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set or is blank.")
     version_dirs = scan_version_directories(dandiset_directory=dandiset_directory, version=version)
     if not version_dirs:
-        _styled_echo(text=f"\nNo 'version-{version}' directories found.", color="yellow")
+        if not silent:
+            _styled_echo(text=f"\nNo 'version-{version}' directories found.", color="yellow")
         return
 
     count = len(version_dirs)
@@ -515,4 +610,5 @@ def _delete_version_command(dandiset_directory: pathlib.Path, version: str) -> N
         abort=True,
     )
     deleted = delete_dandiset_version(dandiset_directory=dandiset_directory, version=version)
-    _styled_echo(text=f"\nDeleted {len(deleted)} version {noun}.", color="green")
+    if not silent:
+        _styled_echo(text=f"\nDeleted {len(deleted)} version {noun}.", color="green")

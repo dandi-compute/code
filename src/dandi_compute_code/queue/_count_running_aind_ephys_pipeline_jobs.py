@@ -1,4 +1,7 @@
+import logging
 import subprocess
+
+_log = logging.getLogger(__name__)
 
 
 def _count_running_aind_ephys_pipeline_jobs() -> int:
@@ -19,5 +22,5 @@ def _count_running_aind_ephys_pipeline_jobs() -> int:
         message = f"command: {command}\nstdout: {result.stdout}\nstderr: {result.stderr}"
         raise RuntimeError(message)
     if result.stderr:
-        print(result.stderr)
+        _log.warning(result.stderr)
     return sum(1 for line in result.stdout.splitlines() if line.strip() == "AIND-Ephys-Pipeline")

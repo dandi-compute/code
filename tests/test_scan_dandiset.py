@@ -4,8 +4,8 @@ Unit tests for scan_dandiset_directory and writing state/waiting files via refre
 """
 
 import json
+import logging
 import pathlib
-import re
 from collections.abc import Iterator
 from typing import Any
 from unittest import mock
@@ -414,8 +414,10 @@ def test_scan_job_completion_time_populated_from_dandi_date_modified(tmp_path: p
 
 
 @pytest.mark.ai_generated
-def test_scan_job_completion_time_is_none_with_warning_when_log_asset_not_found(tmp_path: pathlib.Path) -> None:
-    """job_completion_time is None with a warning when no DANDI asset matches the log path."""
+def test_scan_job_completion_time_is_none_with_warning_when_log_asset_not_found(
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """job_completion_time is None with a log warning when no DANDI asset matches the log path."""
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
     attempt_dir = _make_attempt_dir(
         tmp_path,
@@ -445,18 +447,22 @@ def test_scan_job_completion_time_is_none_with_warning_when_log_asset_not_found(
             "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
             return_value=_FakeClient(),
         ),
-        pytest.warns(
-            UserWarning, match=f"Unable to resolve job_completion_time for log asset at {re.escape(expected_log_path)}"
-        ),
+        caplog.at_level(logging.WARNING, logger="dandi_compute_code.dandiset._lookup_job_completion_time"),
     ):
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
     assert records[0]["job_completion_time"] is None
+    assert any(
+        f"Unable to resolve job_completion_time for log asset at {expected_log_path}" in record.message
+        for record in caplog.records
+    )
 
 
 @pytest.mark.ai_generated
-def test_scan_job_completion_time_is_none_with_warning_when_date_modified_missing(tmp_path: pathlib.Path) -> None:
-    """job_completion_time is None with a warning when the log asset has no dateModified field."""
+def test_scan_job_completion_time_is_none_with_warning_when_date_modified_missing(
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """job_completion_time is None with a log warning when the log asset has no dateModified field."""
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
     attempt_dir = _make_attempt_dir(
         tmp_path,
@@ -492,13 +498,15 @@ def test_scan_job_completion_time_is_none_with_warning_when_date_modified_missin
             "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
             return_value=_FakeClient(),
         ),
-        pytest.warns(
-            UserWarning, match=f"Unable to resolve job_completion_time for log asset at {re.escape(expected_log_path)}"
-        ),
+        caplog.at_level(logging.WARNING, logger="dandi_compute_code.dandiset._lookup_job_completion_time"),
     ):
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
     assert records[0]["job_completion_time"] is None
+    assert any(
+        f"Unable to resolve job_completion_time for log asset at {expected_log_path}" in record.message
+        for record in caplog.records
+    )
 
 
 @pytest.mark.ai_generated
@@ -930,6 +938,7 @@ def test_scan_raises_on_empty_content_id_in_nwb_file_path(tmp_path: pathlib.Path
 @pytest.mark.ai_generated
 def test_scan_asset_size_lookup_falls_back_to_none_when_mapped_asset_path_has_no_match(
     tmp_path: pathlib.Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """asset_size_bytes falls back to None when the mapped unique asset path has no API match."""
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
@@ -969,11 +978,12 @@ def test_scan_asset_size_lookup_falls_back_to_none_when_mapped_asset_path_has_no
                 asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
             ),
         ),
+        caplog.at_level(logging.WARNING, logger="dandi_compute_code.dandiset._lookup_asset_size_bytes"),
     ):
-        with pytest.warns(UserWarning, match="but found 0"):
-            records = scan_dandiset_directory(dandiset_directory=tmp_path)
+        records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
     assert records[0]["asset_size_bytes"] is None
+    assert any("but found 0" in record.message for record in caplog.records)
 
 
 # ---------------------------------------------------------------------------

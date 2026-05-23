@@ -1,3 +1,4 @@
+import logging
 import pathlib
 from unittest import mock
 
@@ -7,7 +8,7 @@ from dandi_compute_code.aind_ephys_pipeline import submit_job
 
 
 @pytest.mark.ai_generated
-def test_submit_job_warns_with_sbatch_script_path(tmp_path: pathlib.Path) -> None:
+def test_submit_job_logs_sbatch_script_path(tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture) -> None:
     script_file_path = tmp_path / "submit.sh"
     script_file_path.write_text("#!/usr/bin/env bash\n")
 
@@ -20,12 +21,12 @@ def test_submit_job_warns_with_sbatch_script_path(tmp_path: pathlib.Path) -> Non
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "fake-key"}, clear=True),
         mock.patch("subprocess.run", return_value=completed_process) as mock_run,
-        pytest.warns(UserWarning) as captured_warnings,
+        caplog.at_level(logging.INFO, logger="dandi_compute_code.aind_ephys_pipeline._submit_job"),
     ):
         submit_job(script_file_path=script_file_path)
 
-    warning_messages = [str(record.message) for record in captured_warnings]
-    assert warning_messages == [
+    log_messages = [record.message for record in caplog.records]
+    assert log_messages == [
         f"Submitting sbatch script: {script_file_path}",
         "sbatch return code: 0\nstdout: Submitted batch job 123\n\nstderr: ",
     ]
@@ -37,9 +38,10 @@ def test_submit_job_warns_with_sbatch_script_path(tmp_path: pathlib.Path) -> Non
 
 
 @pytest.mark.ai_generated
-def test_submit_job_warns_with_absolute_sbatch_script_path_for_relative_input(
+def test_submit_job_logs_absolute_sbatch_script_path_for_relative_input(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     relative_script_file_path = pathlib.Path("submit.sh")
@@ -55,12 +57,12 @@ def test_submit_job_warns_with_absolute_sbatch_script_path_for_relative_input(
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "fake-key"}, clear=True),
         mock.patch("subprocess.run", return_value=completed_process) as mock_run,
-        pytest.warns(UserWarning) as captured_warnings,
+        caplog.at_level(logging.INFO, logger="dandi_compute_code.aind_ephys_pipeline._submit_job"),
     ):
         submit_job(script_file_path=relative_script_file_path)
 
-    warning_messages = [str(record.message) for record in captured_warnings]
-    assert warning_messages == [
+    log_messages = [record.message for record in caplog.records]
+    assert log_messages == [
         f"Submitting sbatch script: {absolute_script_file_path}",
         "sbatch return code: 0\nstdout: Submitted batch job 123\n\nstderr: ",
     ]
@@ -95,6 +97,7 @@ def test_submit_job_raises_with_relayed_streams_on_nonzero_exit(
     tmp_path: pathlib.Path,
     stdout: str,
     stderr: str,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     script_file_path = tmp_path / "submit.sh"
     script_file_path.write_text("#!/usr/bin/env bash\n")
@@ -103,13 +106,13 @@ def test_submit_job_raises_with_relayed_streams_on_nonzero_exit(
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "fake-key"}, clear=True),
         mock.patch("subprocess.run", return_value=completed_process),
-        pytest.warns(UserWarning) as captured_warnings,
+        caplog.at_level(logging.INFO, logger="dandi_compute_code.aind_ephys_pipeline._submit_job"),
         pytest.raises(RuntimeError) as exc_info,
     ):
         submit_job(script_file_path=script_file_path)
 
-    warning_messages = [str(record.message) for record in captured_warnings]
-    assert warning_messages == [
+    log_messages = [record.message for record in caplog.records]
+    assert log_messages == [
         f"Submitting sbatch script: {script_file_path}",
         f"sbatch return code: 1\nstdout: {stdout}\nstderr: {stderr}",
     ]

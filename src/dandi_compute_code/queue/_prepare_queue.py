@@ -1,6 +1,7 @@
 import collections
 import gzip
 import json
+import logging
 import pathlib
 import urllib.request
 
@@ -9,6 +10,8 @@ from ._order_content_ids_for_uniform_dandiset_sampling import _order_content_ids
 from ._strip_commit_hash_suffix import _strip_commit_hash_suffix
 from ._version_matches import _version_matches
 from ..aind_ephys_pipeline import prepare_aind_ephys_job
+
+_log = logging.getLogger(__name__)
 
 
 # TODO: rethink the passing of content_ids here (namely for testing)
@@ -127,7 +130,7 @@ def prepare_queue(
                             dandiset_id = next(iter(dandiset_ids))
                             failure_count = failure_count_by_dandiset.get(dandiset_id, 0)
                             if failure_count >= max_fail:
-                                print(
+                                _log.info(
                                     f"Skipping preparation for {pipeline_name}/{version}/{params}/{content_id}: "
                                     f"failure count ({failure_count}) for dandiset-{dandiset_id} has reached "
                                     f"max_fail_per_dandiset ({max_fail})."
@@ -135,13 +138,13 @@ def prepare_queue(
                                 continue
                         else:
                             mapped_dandisets = ", ".join(sorted(dandiset_ids)) if dandiset_ids else "<none>"
-                            print(
+                            _log.info(
                                 f"Preparing {content_id} without max_fail_per_dandiset enforcement for "
                                 f"{pipeline_name}/{version}/{params}: expected exactly 1 mapped dandiset but "
                                 f"found {len(dandiset_ids)} ({mapped_dandisets})."
                             )
 
-                    print(f"Preparing content ID: {content_id}")
+                    _log.info(f"Preparing content ID: {content_id}")
                     prepare_aind_ephys_job(
                         content_id=content_id,
                         parameters_key=params,
