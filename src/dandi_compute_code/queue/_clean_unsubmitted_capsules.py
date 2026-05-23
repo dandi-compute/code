@@ -3,7 +3,6 @@ import pathlib
 import shutil
 import subprocess
 
-from ._entry_identity import _entry_identity
 from ._remove_empty_parents import _remove_empty_parents
 from ._resolve_unsubmitted_attempt_dir import _resolve_unsubmitted_attempt_dir
 from ..dandiset import scan_dandiset_directory
@@ -51,24 +50,10 @@ def clean_unsubmitted_capsules(
 
     state_entries = scan_dandiset_directory(dandiset_directory=dandiset_directory)
 
-    queued_entries = [
-        entry
-        for entry in state_entries
-        if entry.get("has_code") and not entry.get("has_output") and not entry.get("has_logs")
-    ]
-    queued_entry_identities = {_entry_identity(entry) for entry in queued_entries}
-    unsubmitted_attempt_dirs = {
-        _entry_identity(entry): attempt_dir
-        for entry in queued_entries
-        if (attempt_dir := _resolve_unsubmitted_attempt_dir(base_dir=dandiset_directory, entry=entry)) is not None
-    }
-    submitted_entry_identities = queued_entry_identities - set(unsubmitted_attempt_dirs)
-    cleanable_entry_identities = queued_entry_identities - submitted_entry_identities
     cleanable_attempt_dirs = [
         attempt_dir
-        for entry in queued_entries
-        if (entry_identity := _entry_identity(entry)) in cleanable_entry_identities
-        if (attempt_dir := unsubmitted_attempt_dirs.get(entry_identity)) is not None
+        for entry in state_entries
+        if (attempt_dir := _resolve_unsubmitted_attempt_dir(base_dir=dandiset_directory, entry=entry)) is not None
     ]
 
     removed: list[pathlib.Path] = []
