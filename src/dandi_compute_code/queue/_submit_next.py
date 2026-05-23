@@ -39,14 +39,14 @@ def _submit_next(
     bool
         True if at least one job was submitted, False otherwise.
     """
+    if max_submissions < 1:
+        return False
+
     state_file = queue_directory / "state.jsonl"
     state_entries = _read_state_entries(state_file)
 
     if not state_entries:
         warnings.warn(f"No pending entries in `{state_file}`", stacklevel=2)
-        return False
-
-    if max_submissions < 1:
         return False
 
     pending_attempt_dirs = [

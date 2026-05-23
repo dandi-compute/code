@@ -555,6 +555,14 @@ def test_submit_next_raises_when_state_file_is_absent(tmp_path: pathlib.Path) ->
 
 
 @pytest.mark.ai_generated
+def test_submit_next_returns_false_when_max_submissions_less_than_one(tmp_path: pathlib.Path) -> None:
+    """_submit_next returns False for invalid max_submissions before reading state.jsonl."""
+    queue_dir = _make_queue_dir(tmp_path)
+    result = _submit_next(queue_directory=queue_dir, dandiset_directory=tmp_path, max_submissions=0)
+    assert result is False
+
+
+@pytest.mark.ai_generated
 def test_submit_next_warns_and_returns_false_when_state_file_is_empty(tmp_path: pathlib.Path) -> None:
     """_submit_next warns and returns False when state.jsonl is empty."""
     queue_dir = _make_queue_dir(tmp_path)
