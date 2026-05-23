@@ -1,0 +1,91 @@
+import warnings
+
+from ._create_dandi_api_client import _create_dandi_api_client
+from ._load_content_id_to_unique_dandiset_path import _load_content_id_to_unique_dandiset_path
+from ._normalize_asset_path import _normalize_asset_path
+
+
+def _lookup_asset_size_bytes(
+    *,
+    api_token: str,
+    dandiset_id: str,
+    dandi_path: str,
+    content_id: str,
+) -> tuple[int | None, str | None]:
+    """Lookup asset size and resolved source asset path from DANDI API.
+
+    Parameters
+    ----------
+    api_token : str
+        DANDI API token used for authenticated requests.
+    dandiset_id : str
+        DANDI dandiset identifier.
+    dandi_path : str
+        Source path value from local scan, used only in mapped/scanned dandiset mismatch warnings.
+    content_id : str
+        Blob/content identifier extracted from ``NWB_FILE_PATH`` in ``code/submit.sh``.
+
+    Returns a tuple ``(asset_size_bytes, resolved_dandi_path)``.
+    The first value is ``int | None`` and the second value is ``str | None``.
+    Either tuple value can be ``None`` when lookup conditions are not met.
+    """
+    content_id_to_unique_dandiset_path = _load_content_id_to_unique_dandiset_path()
+    if content_id not in content_id_to_unique_dandiset_path:
+        warnings.warn(
+            (
+                f"Unable to resolve asset_size_bytes for {content_id}. "
+                "Content ID is not present in content-id-to-unique-dandiset-path mapping."
+            ),
+            stacklevel=2,
+        )
+        return None, None
+
+    mapped_dandiset_path = content_id_to_unique_dandiset_path[content_id]
+    if len(mapped_dandiset_path) != 1:
+        warnings.warn(
+            (
+                f"Unable to resolve asset_size_bytes for {content_id}. "
+                f"Expected exactly 1 mapped dandiset/path pair but found {len(mapped_dandiset_path)}."
+            ),
+            stacklevel=2,
+        )
+        return None, None
+
+    mapped_dandiset_id, mapped_asset_path = next(iter(mapped_dandiset_path.items()))
+    if mapped_dandiset_id != dandiset_id:
+        warnings.warn(
+            (
+                f"Unable to resolve asset_size_bytes for {content_id}. "
+                f"Mapped dandiset_id {mapped_dandiset_id} does not match scanned dandiset_id {dandiset_id} "
+                f"for scanned path {dandi_path}."
+            ),
+            stacklevel=2,
+        )
+        return None, None
+
+    client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
+    dandiset = client.get_dandiset(dandiset_id=dandiset_id)
+    matching_assets = list(dandiset.get_assets_with_path_prefix(path=mapped_asset_path))
+    if len(matching_assets) != 1:
+        warnings.warn(
+            (
+                f"Unable to resolve asset_size_bytes for {content_id}. "
+                f"Expected exactly 1 asset at mapped path {mapped_asset_path} but found {len(matching_assets)}."
+            ),
+            stacklevel=2,
+        )
+        return None, None
+
+    matching_metadata = matching_assets[0].get_raw_metadata()
+    resolved_dandi_path = _normalize_asset_path(mapped_asset_path)
+
+    content_size = matching_metadata.get("contentSize")
+    if isinstance(content_size, int):
+        return content_size, resolved_dandi_path
+    if isinstance(content_size, str) and content_size.isdigit():
+        return int(content_size), resolved_dandi_path
+    warnings.warn(
+        f"Unable to resolve asset_size_bytes for {content_id}. Invalid or missing contentSize value {content_size!r}.",
+        stacklevel=2,
+    )
+    return None, resolved_dandi_path

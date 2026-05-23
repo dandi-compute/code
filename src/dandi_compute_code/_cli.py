@@ -3,7 +3,8 @@ import pathlib
 
 import click
 
-from ._utils import _styled_echo, clean_work_directory
+from ._clean_work_directory import clean_work_directory
+from ._styled_echo import _styled_echo
 from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
 from .dandiset import (
     delete_dandiset_version,

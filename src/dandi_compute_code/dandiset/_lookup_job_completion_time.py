@@ -1,0 +1,39 @@
+import warnings
+
+from ._create_dandi_api_client import _create_dandi_api_client
+
+
+def _lookup_job_completion_time(
+    *,
+    api_token: str,
+    dandiset_id: str,
+    log_asset_path: str,
+) -> str | None:
+    """Look up the ``dateModified`` field for a log asset in the DANDI API."""
+    client = _create_dandi_api_client(api_token=api_token, dandiset_id=dandiset_id)
+    dandiset = client.get_dandiset(dandiset_id=dandiset_id)
+
+    matching_assets = list(dandiset.get_assets_with_path_prefix(path=log_asset_path))
+    if len(matching_assets) != 1:
+        warnings.warn(
+            (
+                f"Unable to resolve job_completion_time for log asset at {log_asset_path}. "
+                f"Expected exactly 1 asset but found {len(matching_assets)}."
+            ),
+            stacklevel=2,
+        )
+        return None
+
+    asset = matching_assets[0]
+    metadata = asset.get_raw_metadata()
+    date_modified = metadata.get("dateModified")
+    if isinstance(date_modified, str):
+        return date_modified
+    warnings.warn(
+        (
+            f"Unable to resolve job_completion_time for log asset at {log_asset_path}. "
+            f"Invalid or missing dateModified value {date_modified!r}."
+        ),
+        stacklevel=2,
+    )
+    return None
