@@ -1,3 +1,4 @@
+import datetime
 import pathlib
 import warnings
 
@@ -84,5 +85,5 @@ def _submit_next(
             message = f"Creating '{submitted_marker.parent.absolute()}'"  # TODO: could be replaced with logging.info
             warnings.warn(message=message, stacklevel=2)
             submitted_marker.parent.mkdir(parents=True, exist_ok=True)
-        submitted_marker.write_bytes(b"1")
+        submitted_marker.write_text(datetime.datetime.now().isoformat())
     return True
