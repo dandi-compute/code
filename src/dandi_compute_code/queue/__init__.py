@@ -5,7 +5,7 @@ from ._globals import TEST_QUEUE_CONTENT_ID
 from ._order_queue import order_queue
 from ._prepare_queue import prepare_queue
 from ._process_queue import process_queue
-from ._refresh_queue import refresh_queue, refresh_queue_state
+from ._refresh_queue import refresh_queue_state
 from ._summarize_issues import summarize_issues
 
 __all__ = [
@@ -16,7 +16,6 @@ __all__ = [
     "order_queue",
     "prepare_queue",
     "process_queue",
-    "refresh_queue",
     "refresh_queue_state",
     "summarize_issues",
 ]

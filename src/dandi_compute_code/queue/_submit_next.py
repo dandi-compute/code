@@ -1,18 +1,9 @@
-import json
 import pathlib
 import warnings
 
+from ._read_state_entries import _read_state_entries
 from ._resolve_unsubmitted_attempt_dir import _resolve_unsubmitted_attempt_dir
 from ..aind_ephys_pipeline import submit_job
-
-
-def _read_state_entries(state_file: pathlib.Path, /) -> list[dict]:
-    if not state_file.exists():
-        return []
-
-    stripped_lines = [line.strip() for line in state_file.read_text().splitlines()]
-    state_entries = [json.loads(line) for line in stripped_lines if line]
-    return state_entries
 
 
 def _submit_next(
@@ -25,7 +16,8 @@ def _submit_next(
     Submit the next eligible pending entry from ``state.jsonl``.
 
     Reads ``state.jsonl`` from the queue directory. If the state file is
-    absent or empty, returns ``False``.
+    absent, raises ``FileNotFoundError``. If the file exists but has no
+    entries, warns and returns ``False``.
 
     Entries are filtered to those with no output and no logs. The first up to
     ``max_submissions`` eligible entries that do not already have a

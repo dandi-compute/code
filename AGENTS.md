@@ -15,5 +15,6 @@
 -   For internal imports, always use the relative import style (e.g., `from .foo import bar`); when monkeypatching such imports in tests, target the importing module's binding, not the original definition module (e.g., `foo.baz`, instead of `foo._bar.baz`)
 - Prefer assigning return values to named locals before `return` when this improves readability and debugger breakpoint placement
 -   Never expose private names (those with a leading underscore) in any module's `__all__`
+-   Do not add compatibility aliases when renaming functions. Update all call sites to the canonical name instead.
 -   Every commit you author MUST include a `Co-Authored-By` trailer identifying both your tool name + version and your underlying model + version. Format (replace all `<…>` placeholders with actual values): `Co-Authored-By: <Tool> <tool-version> / <Model> <model-version> <noreply@<vendor-domain>>
 -   Avoid using excessive em-dashes, colons, and semi-colons in written text such as documentation. Prefer breaking into separate, shorter sentences instead.

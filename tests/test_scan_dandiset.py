@@ -1,5 +1,5 @@
 """
-Unit tests for scan_dandiset_directory and writing state/waiting files via refresh_queue.
+Unit tests for scan_dandiset_directory and writing state/waiting files via refresh_queue_state.
 (dandi_compute_code.dandiset).
 """
 
@@ -15,7 +15,7 @@ from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
 from dandi_compute_code.dandiset import scan_dandiset_directory
-from dandi_compute_code.queue import refresh_queue
+from dandi_compute_code.queue import refresh_queue_state
 
 DEFAULT_TEST_CONTENT_ID = "00000000-0000-0000-0000-000000000000"
 
@@ -977,13 +977,13 @@ def test_scan_asset_size_lookup_falls_back_to_none_when_mapped_asset_path_has_no
 
 
 # ---------------------------------------------------------------------------
-# Tests for refresh_queue with dandiset_directory
+# Tests for refresh_queue_state with dandiset_directory
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_with_dandiset_directory_creates_valid_files(tmp_path: pathlib.Path) -> None:
-    """refresh_queue writes state.jsonl when scanning dandiset_directory."""
+def test_refresh_queue_state_with_dandiset_directory_creates_valid_files(tmp_path: pathlib.Path) -> None:
+    """refresh_queue_state writes state.jsonl when scanning dandiset_directory."""
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
     _make_attempt_dir(
         tmp_path,
@@ -1010,7 +1010,7 @@ def test_refresh_queue_with_dandiset_directory_creates_valid_files(tmp_path: pat
             }
         )
     )
-    refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
+    refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
     state_file = queue_dir / "state.jsonl"
     assert state_file.exists()
     lines = [line for line in state_file.read_text().splitlines() if line.strip()]
@@ -1022,8 +1022,8 @@ def test_refresh_queue_with_dandiset_directory_creates_valid_files(tmp_path: pat
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Path) -> None:
-    """refresh_queue writes the API-resolved source path in state.jsonl when lookup succeeds."""
+def test_refresh_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Path) -> None:
+    """refresh_queue_state writes the API-resolved source path in state.jsonl when lookup succeeds."""
     content_id = "0fbbca6a-0000-0000-0000-000000000001"
     asset_size_bytes = 1234
     mapped_asset_path = "sub-mouse01/./sub-mouse01_ses-ses001_obj-raw.nwb"
@@ -1094,7 +1094,7 @@ def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Pat
             ),
         ),
     ):
-        refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
     assert len(state_records) == 1
@@ -1103,8 +1103,8 @@ def test_refresh_queue_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Pat
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_writes_resolved_dandi_path_for_root_level_asset(tmp_path: pathlib.Path) -> None:
-    """refresh_queue writes resolved dandi_path even when matched asset path is at dandiset root."""
+def test_refresh_queue_state_writes_resolved_dandi_path_for_root_level_asset(tmp_path: pathlib.Path) -> None:
+    """refresh_queue_state writes resolved dandi_path even when matched asset path is at dandiset root."""
     content_id = "0fbbca6a-0000-0000-0000-000000000002"
     asset_size_bytes = 4321
     root_asset_path = "sub-mouse01_ses-ses001_obj-raw.nwb"
@@ -1174,7 +1174,7 @@ def test_refresh_queue_writes_resolved_dandi_path_for_root_level_asset(tmp_path:
             ),
         ),
     ):
-        refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
     assert len(state_records) == 1
@@ -1183,30 +1183,30 @@ def test_refresh_queue_writes_resolved_dandi_path_for_root_level_asset(tmp_path:
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_with_dandiset_directory_empty_when_no_attempts(tmp_path: pathlib.Path) -> None:
-    """refresh_queue writes an empty state file with no attempts."""
+def test_refresh_queue_state_with_dandiset_directory_empty_when_no_attempts(tmp_path: pathlib.Path) -> None:
+    """refresh_queue_state writes an empty state file with no attempts."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
-    refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
+    refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
     state_file = queue_dir / "state.jsonl"
     assert state_file.exists()
     assert state_file.read_text() == ""
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_requires_dandi_api_key(tmp_path: pathlib.Path) -> None:
-    """refresh_queue requires DANDI_API_KEY to be set."""
+def test_refresh_queue_state_requires_dandi_api_key(tmp_path: pathlib.Path) -> None:
+    """refresh_queue_state requires DANDI_API_KEY to be set."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
     with mock.patch.dict("os.environ", {}, clear=True):
         with pytest.raises(AssertionError, match="DANDI_API_KEY"):
-            refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
+            refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_with_dandiset_directory_includes_only_pending_in_waiting(tmp_path: pathlib.Path) -> None:
+def test_refresh_queue_state_with_dandiset_directory_includes_only_pending_in_waiting(tmp_path: pathlib.Path) -> None:
     """state.jsonl contains all scanned entries from the refreshed dandiset scan."""
     _make_attempt_dir(tmp_path, "000001", "mouse01", "test-pipeline", "v1.0", "abc1234", "def5678", 1, with_code=True)
     _make_attempt_dir(
@@ -1237,7 +1237,7 @@ def test_refresh_queue_with_dandiset_directory_includes_only_pending_in_waiting(
         )
     )
 
-    refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
+    refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     state_lines = [line for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
     assert len(state_lines) == 2
@@ -1246,10 +1246,10 @@ def test_refresh_queue_with_dandiset_directory_includes_only_pending_in_waiting(
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_with_dandiset_directory_excludes_entries_with_submitted_markers(
+def test_refresh_queue_state_with_dandiset_directory_excludes_entries_with_submitted_markers(
     tmp_path: pathlib.Path,
 ) -> None:
-    """refresh_queue keeps submitted-marker entries in state.jsonl."""
+    """refresh_queue_state keeps submitted-marker entries in state.jsonl."""
     _make_attempt_dir(tmp_path, "000001", "mouse01", "test-pipeline", "v1.0", "abc1234", "def5678", 1, with_code=True)
     submitted_attempt_dir = _make_attempt_dir(
         tmp_path,
@@ -1278,7 +1278,7 @@ def test_refresh_queue_with_dandiset_directory_excludes_entries_with_submitted_m
             }
         )
     )
-    refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
+    refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     state_lines = [line for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
     assert len(state_lines) == 2
