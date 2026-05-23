@@ -1,6 +1,7 @@
 import os
 import pathlib
 import subprocess
+import warnings
 
 import pydantic
 
@@ -13,6 +14,7 @@ def submit_job(script_file_path: pathlib.Path) -> None:
         raise RuntimeError(message)
 
     command = ["sbatch", str(script_file_path)]
+    warnings.warn(f"Submitting sbatch script: {script_file_path}", stacklevel=2)
     result = subprocess.run(
         command,
         capture_output=True,
