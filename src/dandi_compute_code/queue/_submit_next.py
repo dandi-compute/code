@@ -54,22 +54,28 @@ def _submit_next(
         warnings.warn(f"No pending entries in `{state_file}`", stacklevel=2)
         return False
 
-    pending_attempt_dirs: list[pathlib.Path] = []
-    seen_attempt_dirs: set[pathlib.Path] = set()
+    pending_submissions: list[tuple[pathlib.Path, pathlib.Path]] = []
+    seen_script_file_paths: set[pathlib.Path] = set()
     for entry in state_entries:
         attempt_dir = _resolve_unsubmitted_attempt_dir(base_dir=datalad_directory, entry=entry)
-        if attempt_dir is None or attempt_dir in seen_attempt_dirs:
+        if attempt_dir is None:
             continue
-        seen_attempt_dirs.add(attempt_dir)
-        pending_attempt_dirs.append(attempt_dir)
-    submitted_count = 0
-
-    for attempt_dir in pending_attempt_dirs:
         script_file_path = attempt_dir / "code" / "submit.sh"
+        if script_file_path in seen_script_file_paths:
+            continue
         if not script_file_path.exists():
             message = f"Submit script not found: {script_file_path}"
             raise FileNotFoundError(message)
+        seen_script_file_paths.add(script_file_path)
+        pending_submissions.append((attempt_dir, script_file_path))
+        if len(pending_submissions) >= max_submissions:
+            break
 
+    if not pending_submissions:
+        warnings.warn("No eligible pending entries available for submission", stacklevel=2)
+        return False
+
+    for attempt_dir, script_file_path in pending_submissions:
         submit_job(script_file_path=script_file_path)
 
         # Actual submission marks must go to DANDI backend first
@@ -81,11 +87,4 @@ def _submit_next(
             warnings.warn(message=message, stacklevel=2)
             submitted_marker.parent.mkdir(parents=True, exist_ok=True)
         submitted_marker.write_bytes(b"1")
-        submitted_count += 1
-        if submitted_count >= max_submissions:
-            break
-
-    has_submissions = submitted_count > 0
-    if not has_submissions:
-        warnings.warn("No eligible pending entries available for submission", stacklevel=2)
-    return has_submissions
+    return True
