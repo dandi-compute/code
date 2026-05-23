@@ -573,19 +573,17 @@ def clean_unsubmitted_capsules(
     state_entries = scan_dandiset_directory(dandiset_directory=dandiset_directory)
 
     # Filter to queued entries: has code, no logs, no output, not yet submitted.
-    queued_entries = []
+    queued_attempt_dirs: list[pathlib.Path] = []
     for entry in state_entries:
         if not entry.get("has_code") or entry.get("has_output") or entry.get("has_logs"):
             continue
         attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
         if _submitted_marker_path(attempt_dir=attempt_dir).exists():
             continue
-        queued_entries.append(entry)
+        queued_attempt_dirs.append(attempt_dir)
 
     removed: list[pathlib.Path] = []
-    for entry in queued_entries:
-        attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
-
+    for attempt_dir in queued_attempt_dirs:
         if attempt_dir.is_dir():
             parent_dir = attempt_dir.parent
             subprocess.run(
