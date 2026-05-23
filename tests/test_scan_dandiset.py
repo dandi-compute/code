@@ -1270,7 +1270,7 @@ def test_refresh_queue_state_with_dandiset_directory_excludes_entries_with_submi
         1,
         with_code=True,
     )
-    (submitted_attempt_dir / "code" / ".submitted").touch()
+    (submitted_attempt_dir / "code" / "submitted").touch()
 
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()

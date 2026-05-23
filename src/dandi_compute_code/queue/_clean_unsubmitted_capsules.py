@@ -20,7 +20,7 @@ def clean_unsubmitted_capsules(
     A capsule is considered *queued* (prepared but not yet submitted) when its
     attempt directory has a ``code/`` subdirectory but neither a non-empty
     ``logs/`` subdirectory nor a ``derivatives/`` subdirectory, and the attempt
-    directory does not contain a ``code/.submitted`` marker.
+    directory does not contain a ``code/submitted`` marker.
 
     The function scans *dandiset_directory* for all attempt directories using
     the local filesystem as the ground truth, filters to the queued subset,

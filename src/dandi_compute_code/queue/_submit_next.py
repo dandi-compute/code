@@ -23,7 +23,7 @@ def _submit_next(
 
     Entries are filtered to those with no output and no logs. The first up to
     ``max_submissions`` eligible entries that do not already have a
-    ``code/.submitted`` marker are submitted, and each marker is created
+    ``code/submitted`` marker are submitted, and each marker is created
     immediately after submission succeeds.
 
     Parameters
@@ -72,7 +72,7 @@ def _submit_next(
         # Actual submission marks must go to DANDI backend first
         attempt_dir_relative_to_datalad = attempt_dir.relative_to(datalad_directory)
         attempt_dir_relative_to_dandiset = dandiset_directory / attempt_dir_relative_to_datalad
-        submitted_marker = attempt_dir_relative_to_dandiset / "code" / ".submitted"
+        submitted_marker = attempt_dir_relative_to_dandiset / "code" / "submitted"
         if not submitted_marker.parent.exists():
             message = f"Creating '{submitted_marker.parent.absolute()}'\n"  # TODO: could be replaced with logging.info
             warnings.warn(message=message, stacklevel=2)
