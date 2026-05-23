@@ -5,12 +5,12 @@ import click
 
 from ._clean_work_directory import clean_work_directory
 from ._styled_echo import _styled_echo
-from .aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
-from .dandiset import (
+from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
+from ..dandiset import (
     delete_dandiset_version,
     scan_version_directories,
 )
-from .queue import (
+from ..queue import (
     TEST_QUEUE_CONTENT_ID,
     aggregate_queue_statistics,
     clean_unsubmitted_capsules,

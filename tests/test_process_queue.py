@@ -1744,7 +1744,7 @@ def test_cli_prepare_test_calls_prepare_queue_with_test_content_id(tmp_path: pat
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
-        mock.patch("dandi_compute_code._cli.prepare_queue") as mock_prepare_queue,
+        mock.patch("dandi_compute_code._cli._dandicompute_group.prepare_queue") as mock_prepare_queue,
     ):
         result = runner.invoke(_dandicompute_group, ["prepare", "aind", "--test", "--queue", str(queue_dir)])
 
@@ -1766,7 +1766,7 @@ def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
-        mock.patch("dandi_compute_code._cli.prepare_queue") as mock_prepare_queue,
+        mock.patch("dandi_compute_code._cli._dandicompute_group.prepare_queue") as mock_prepare_queue,
     ):
         result = runner.invoke(
             _dandicompute_group,
@@ -1799,7 +1799,7 @@ def test_cli_aind_prepare_passes_config_key() -> None:
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
-        mock.patch("dandi_compute_code._cli.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch("dandi_compute_code._cli._dandicompute_group.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_prepare.return_value = pathlib.Path("/tmp/submit.sh")
         result = runner.invoke(
@@ -2276,7 +2276,9 @@ def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
     fake_removed = [dandiset_dir / "derivatives" / "dandiset-000001" / "sub-mouse01" / "attempt-1"]
     runner = CliRunner()
 
-    with mock.patch("dandi_compute_code._cli.clean_unsubmitted_capsules", return_value=fake_removed) as mock_clean:
+    with mock.patch(
+        "dandi_compute_code._cli._dandicompute_group.clean_unsubmitted_capsules", return_value=fake_removed
+    ) as mock_clean:
         result = runner.invoke(
             _dandicompute_group,
             [
@@ -2305,7 +2307,7 @@ def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
 
     runner = CliRunner()
 
-    with mock.patch("dandi_compute_code._cli.clean_unsubmitted_capsules", return_value=[]):
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.clean_unsubmitted_capsules", return_value=[]):
         result = runner.invoke(
             _dandicompute_group,
             [
@@ -2333,7 +2335,8 @@ def test_cli_queue_stats_calls_helper_and_reports_output(tmp_path: pathlib.Path)
 
     runner = CliRunner()
     with mock.patch(
-        "dandi_compute_code._cli.aggregate_queue_statistics", return_value={"successful_asset_bytes_total": 0}
+        "dandi_compute_code._cli._dandicompute_group.aggregate_queue_statistics",
+        return_value={"successful_asset_bytes_total": 0},
     ) as mock_stats:
         result = runner.invoke(
             _dandicompute_group,
@@ -2365,7 +2368,7 @@ def test_cli_issues_dump_calls_helper(tmp_path: pathlib.Path) -> None:
     dandiset_dir.mkdir()
 
     runner = CliRunner()
-    with mock.patch("dandi_compute_code._cli.dump_issues", return_value=[]) as mock_dump:
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.dump_issues", return_value=[]) as mock_dump:
         result = runner.invoke(
             _dandicompute_group,
             [
@@ -2392,7 +2395,7 @@ def test_cli_issues_summarize_calls_helper(tmp_path: pathlib.Path) -> None:
     dandiset_dir.mkdir()
 
     runner = CliRunner()
-    with mock.patch("dandi_compute_code._cli.summarize_issues", return_value={}) as mock_summarize:
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.summarize_issues", return_value={}) as mock_summarize:
         result = runner.invoke(
             _dandicompute_group,
             [
