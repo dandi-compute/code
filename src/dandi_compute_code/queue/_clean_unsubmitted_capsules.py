@@ -40,7 +40,9 @@ def clean_unsubmitted_capsules(
     list[pathlib.Path]
         List of attempt directory paths that were deleted.
     """
-    del queue_directory
+    if not queue_directory.is_dir():
+        message = f"Queue directory does not exist or is not a directory: {queue_directory}"
+        raise NotADirectoryError(message)
 
     if not os.environ.get("DANDI_API_KEY", "").strip():
         message = "`DANDI_API_KEY` environment variable is not set or is blank."
