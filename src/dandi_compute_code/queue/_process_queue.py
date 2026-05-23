@@ -50,7 +50,7 @@ def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
             message = f"State file not found: {state_file}"
             raise FileNotFoundError(message)
         if not state_file.read_text().strip():
-            warnings.warn(f"No pending entries in {state_file}", stacklevel=2)
+            warnings.warn(f"No entries in {state_file}", stacklevel=2)
             return
 
         running_count = _count_running_aind_ephys_pipeline_jobs()
