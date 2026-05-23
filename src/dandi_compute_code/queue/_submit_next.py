@@ -74,7 +74,7 @@ def _submit_next(
         attempt_dir_relative_to_dandiset = dandiset_directory / attempt_dir_relative_to_datalad
         submitted_marker = attempt_dir_relative_to_dandiset / "code" / "submitted"
         if not submitted_marker.parent.exists():
-            message = f"Creating '{submitted_marker.parent.absolute()}'\n"  # TODO: could be replaced with logging.info
+            message = f"Creating '{submitted_marker.parent.absolute()}'"  # TODO: could be replaced with logging.info
             warnings.warn(message=message, stacklevel=2)
             submitted_marker.parent.mkdir(parents=True, exist_ok=True)
         submitted_marker.write_bytes(b"1")
