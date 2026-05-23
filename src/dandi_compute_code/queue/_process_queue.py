@@ -677,7 +677,7 @@ def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.P
 
 def order_queue(*, state_entries: list[dict], queue_config: dict, limit: int | None = None) -> list[dict]:
     """
-    Build the priority-ordered waiting list from in-memory state entries.
+    Build the priority-ordered submission list from in-memory state entries.
 
     Parameters
     ----------
