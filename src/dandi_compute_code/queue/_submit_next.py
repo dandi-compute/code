@@ -6,7 +6,7 @@ from ._resolve_unsubmitted_attempt_dir import _resolve_unsubmitted_attempt_dir
 from ..aind_ephys_pipeline import submit_job
 
 
-# TODO: make logic even cleaner
+# TODO: make logic even cleaner and remove return
 def _submit_next(
     *,
     queue_directory: pathlib.Path,
