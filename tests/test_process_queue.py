@@ -784,8 +784,8 @@ def test_submit_next_pops_submitted_entry_from_waiting_jsonl(tmp_path: pathlib.P
 
 
 @pytest.mark.ai_generated
-def test_submit_next_appends_submitted_entry_to_last_submitted_jsonl(tmp_path: pathlib.Path) -> None:
-    """_submit_next appends the submitted entry to last_submitted.jsonl."""
+def test_submit_next_creates_submitted_marker_file(tmp_path: pathlib.Path) -> None:
+    """_submit_next creates a .submitted marker next to code/submit.sh."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "dandiset"
 
@@ -799,7 +799,7 @@ def test_submit_next_appends_submitted_entry_to_last_submitted_jsonl(tmp_path: p
         attempt=1,
     )
     _write_jsonl(queue_dir / "waiting.jsonl", [entry])
-    _make_attempt_dir_with_script(
+    attempt_dir = _make_attempt_dir_with_script(
         dandiset_dir,
         dandiset_id="000001",
         subject="mouse01",
@@ -813,9 +813,7 @@ def test_submit_next_appends_submitted_entry_to_last_submitted_jsonl(tmp_path: p
     with mock.patch("dandi_compute_code.queue._process_queue.submit_job"):
         _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
-    submitted_entries = _read_jsonl(queue_dir / "last_submitted.jsonl")
-    assert len(submitted_entries) == 1
-    assert submitted_entries[0]["dandiset_id"] == "000001"
+    assert (attempt_dir / "code" / ".submitted").exists()
 
 
 @pytest.mark.ai_generated
@@ -852,6 +850,91 @@ def test_submit_next_logs_explicit_run_capsule_directory(
 
     captured = capsys.readouterr()
     assert f"Submitting run capsule directory: {attempt_dir}" in captured.out
+
+
+@pytest.mark.ai_generated
+def test_submit_next_submits_next_entry_when_first_has_submitted_marker(tmp_path: pathlib.Path) -> None:
+    """_submit_next skips entries with code/.submitted markers and submits the next one."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+    first_entry = _make_state_entry(dandiset_id="000001")
+    second_entry = _make_state_entry(dandiset_id="000002", subject="mouse02")
+    _write_jsonl(queue_dir / "waiting.jsonl", [first_entry, second_entry])
+
+    first_attempt_dir = _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+    (first_attempt_dir / "code" / ".submitted").touch()
+    second_attempt_dir = _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000002",
+        subject="mouse02",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+
+    with mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit:
+        submitted = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+
+    assert submitted is True
+    mock_submit.assert_called_once_with(script_file_path=second_attempt_dir / "code" / "submit.sh")
+    remaining = _read_jsonl(queue_dir / "waiting.jsonl")
+    assert remaining == []
+
+
+@pytest.mark.ai_generated
+def test_submit_next_only_submits_entries_pending_in_state_jsonl(tmp_path: pathlib.Path) -> None:
+    """_submit_next only submits entries listed as pending in state.jsonl."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+    ineligible_entry = _make_state_entry(dandiset_id="000001")
+    eligible_entry = _make_state_entry(dandiset_id="000002", subject="mouse02")
+    _write_jsonl(queue_dir / "waiting.jsonl", [ineligible_entry, eligible_entry])
+    _write_jsonl(
+        queue_dir / "state.jsonl",
+        [
+            _make_state_entry(dandiset_id="000001", has_code=True, has_output=True, has_logs=False),
+            _make_state_entry(dandiset_id="000002", subject="mouse02", has_code=True, has_output=False, has_logs=False),
+        ],
+    )
+    _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+    eligible_attempt_dir = _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000002",
+        subject="mouse02",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+
+    with mock.patch("dandi_compute_code.queue._process_queue.submit_job") as mock_submit:
+        submitted = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+
+    assert submitted is True
+    mock_submit.assert_called_once_with(script_file_path=eligible_attempt_dir / "code" / "submit.sh")
+    remaining = _read_jsonl(queue_dir / "waiting.jsonl")
+    assert remaining == []
 
 
 # ---------------------------------------------------------------------------
@@ -1140,24 +1223,33 @@ def test_refresh_queue_writes_all_ordered_pending_entries(tmp_path: pathlib.Path
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_prunes_last_submitted_entries_with_output_or_logs(tmp_path: pathlib.Path) -> None:
-    """refresh_queue removes finished/running entries from last_submitted.jsonl."""
+def test_refresh_queue_excludes_entries_with_submitted_markers(tmp_path: pathlib.Path) -> None:
+    """refresh_queue excludes entries with an existing code/.submitted marker."""
     queue_dir = _make_queue_dir(tmp_path)
 
     pending_entry = _make_state_entry(dandiset_id="000001", has_code=True, has_output=False, has_logs=False)
-    with_output_entry = _make_state_entry(dandiset_id="000002", has_code=True, has_output=True, has_logs=False)
-    with_logs_entry = _make_state_entry(dandiset_id="000003", has_code=True, has_output=False, has_logs=True)
-    _write_jsonl(queue_dir / "last_submitted.jsonl", [pending_entry, with_output_entry, with_logs_entry])
+    submitted_entry = _make_state_entry(dandiset_id="000002", has_code=True, has_output=False, has_logs=False)
+    submitted_attempt_dir = _make_attempt_dir_with_script(
+        tmp_path,
+        dandiset_id="000002",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+    (submitted_attempt_dir / "code" / ".submitted").touch()
 
     with mock.patch(
         "dandi_compute_code.queue._process_queue.scan_dandiset_directory",
-        return_value=[pending_entry, with_output_entry, with_logs_entry],
+        return_value=[pending_entry, submitted_entry],
     ):
         refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
-    last_submitted_entries = _read_jsonl(queue_dir / "last_submitted.jsonl")
-    assert len(last_submitted_entries) == 1
-    assert last_submitted_entries[0]["dandiset_id"] == "000001"
+    waiting_entries = _read_jsonl(queue_dir / "waiting.jsonl")
+    assert len(waiting_entries) == 1
+    assert waiting_entries[0]["dandiset_id"] == "000001"
 
 
 @pytest.mark.ai_generated
@@ -2005,8 +2097,8 @@ def test_clean_unsubmitted_capsules_ignores_dataset_description_in_logs(
 
 
 @pytest.mark.ai_generated
-def test_clean_unsubmitted_capsules_skips_last_submitted_entries(tmp_path: pathlib.Path) -> None:
-    """clean_unsubmitted_capsules does not remove capsules listed in last_submitted.jsonl."""
+def test_clean_unsubmitted_capsules_skips_entries_with_submitted_marker(tmp_path: pathlib.Path) -> None:
+    """clean_unsubmitted_capsules does not remove capsules with a code/.submitted marker."""
     dandiset_dir = tmp_path / "dandiset"
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
@@ -2015,16 +2107,7 @@ def test_clean_unsubmitted_capsules_skips_last_submitted_entries(tmp_path: pathl
         dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
     )
 
-    submitted_entry = {
-        "dandiset_id": "000001",
-        "dandi_path": "sub-mouse01",
-        "pipeline": "aind+ephys",
-        "version": "v1.0",
-        "params": "abc1234",
-        "config": "def5678",
-        "attempt": 1,
-    }
-    (queue_dir / "last_submitted.jsonl").write_text(json.dumps(submitted_entry) + "\n")
+    (queued_dir / "code" / ".submitted").touch()
 
     with mock.patch("subprocess.run") as mock_run, mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
@@ -2180,21 +2263,11 @@ def test_clean_unsubmitted_capsules_removes_only_queued_not_submitted(tmp_path: 
     queued_dir = _make_full_attempt_dir(
         dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
     )
-    # Submitted (in last_submitted.jsonl – should be kept)
+    # Submitted marker exists – should be kept
     submitted_dir = _make_full_attempt_dir(
         dandiset_dir, "000002", "mouse02", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
     )
-
-    submitted_entry = {
-        "dandiset_id": "000002",
-        "dandi_path": "sub-mouse02",
-        "pipeline": "aind+ephys",
-        "version": "v1.0",
-        "params": "abc1234",
-        "config": "def5678",
-        "attempt": 1,
-    }
-    (queue_dir / "last_submitted.jsonl").write_text(json.dumps(submitted_entry) + "\n")
+    (submitted_dir / "code" / ".submitted").touch()
 
     with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)

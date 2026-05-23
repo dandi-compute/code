@@ -342,7 +342,7 @@ def _resolve_attempt_dir(*, base_dir: pathlib.Path, entry: dict) -> pathlib.Path
 
 
 def _entry_identity(entry: dict) -> tuple:
-    """Return a stable tuple key for matching queue/state/last-submitted entries."""
+    """Return a stable tuple key for matching queue/state entries."""
     return (
         entry.get("dandiset_id"),
         entry.get("dandi_path"),
@@ -354,19 +354,21 @@ def _entry_identity(entry: dict) -> tuple:
     )
 
 
-def _prune_last_submitted(*, queue_directory: pathlib.Path, state_entries: list[dict]) -> None:
-    """Remove last_submitted entries that now have logs or output in state."""
-    last_submitted_file = queue_directory / "last_submitted.jsonl"
-    if not last_submitted_file.exists():
-        return
+def _submitted_marker_path(*, attempt_dir: pathlib.Path) -> pathlib.Path:
+    """Return the marker path that indicates a submit script has been submitted."""
+    return attempt_dir / "code" / ".submitted"
 
-    entries_to_prune = {_entry_identity(e) for e in state_entries if e.get("has_output") or e.get("has_logs")}
 
-    last_submitted_entries = [
-        json.loads(line.strip()) for line in last_submitted_file.read_text().splitlines() if line.strip()
-    ]
-    filtered = [entry for entry in last_submitted_entries if _entry_identity(entry) not in entries_to_prune]
-    last_submitted_file.write_text("".join(json.dumps(entry) + "\n" for entry in filtered))
+def _submission_eligible_identities(*, queue_directory: pathlib.Path) -> set[tuple]:
+    """Return identities from state.jsonl that do not yet have logs or output."""
+    state_file = queue_directory / "state.jsonl"
+    if not state_file.exists():
+        return set()
+    return {
+        _entry_identity(entry)
+        for entry in (json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip())
+        if not entry.get("has_logs") and not entry.get("has_output")
+    }
 
 
 def _duration_string_to_seconds(duration_string: str) -> float:
@@ -539,9 +541,8 @@ def clean_unsubmitted_capsules(
 
     A capsule is considered *queued* (prepared but not yet submitted) when its
     attempt directory has a ``code/`` subdirectory but neither a non-empty
-    ``logs/`` subdirectory nor a ``derivatives/`` subdirectory, **and** the
-    entry is not present in ``last_submitted.jsonl`` (which tracks recently
-    submitted in-flight jobs).
+    ``logs/`` subdirectory nor a ``derivatives/`` subdirectory, **and** no
+    ``code/.submitted`` marker is present.
 
     The function scans *dandiset_directory* for all attempt directories using
     the local filesystem as the ground truth, filters to the queued subset,
@@ -555,8 +556,7 @@ def clean_unsubmitted_capsules(
         ``{dandiset_directory}/derivatives/dandiset-*/`` to locate attempt
         directories.
     queue_directory : pathlib.Path
-        Path to the queue root directory.  ``last_submitted.jsonl`` is read
-        from here to exclude in-flight submissions from deletion.
+        Path to the queue root directory.
 
     Returns
     -------
@@ -571,25 +571,15 @@ def clean_unsubmitted_capsules(
 
     state_entries = scan_dandiset_directory(dandiset_directory=dandiset_directory)
 
-    # Build the set of identities that have been recently submitted (in-flight).
-    last_submitted_file = queue_directory / "last_submitted.jsonl"
-    submitted_identities: set[tuple] = set()
-    if last_submitted_file.exists():
-        submitted_identities = {
-            _entry_identity(json.loads(line.strip()))
-            for line in last_submitted_file.read_text().splitlines()
-            if line.strip()
-        }
-
-    # Filter to queued entries: has code, no logs, no output, not submitted.
-    queued_entries = [
-        e
-        for e in state_entries
-        if e.get("has_code")
-        and not e.get("has_output")
-        and not e.get("has_logs")
-        and _entry_identity(e) not in submitted_identities
-    ]
+    # Filter to queued entries: has code, no logs, no output, not yet submitted.
+    queued_entries = []
+    for entry in state_entries:
+        if not entry.get("has_code") or entry.get("has_output") or entry.get("has_logs"):
+            continue
+        attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
+        if _submitted_marker_path(attempt_dir=attempt_dir).exists():
+            continue
+        queued_entries.append(entry)
 
     removed: list[pathlib.Path] = []
     for entry in queued_entries:
@@ -619,11 +609,10 @@ def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.P
     or empty, :func:`refresh_queue` is called once to attempt to repopulate it
     from ``state.jsonl``.  If still empty after that, returns ``False``.
 
-    The first entry from ``waiting.jsonl`` is submitted and then removed from
-    ``waiting.jsonl``; the entry is simultaneously appended to
-    ``last_submitted.jsonl``. The waiting queue is produced upstream by
-    :func:`refresh_queue`; this function applies no additional
-    submission gating beyond requiring the submit script to exist.
+    The first eligible entry from ``waiting.jsonl`` is submitted and then
+    removed from ``waiting.jsonl``. Eligibility is constrained to entries that
+    are still pending in ``state.jsonl`` (no logs/output) and whose
+    ``code/.submitted`` marker does not already exist.
 
     Parameters
     ----------
@@ -657,10 +646,29 @@ def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.P
         print(f"No pending entries in `{waiting_file}`")
         return False
 
-    entry = waiting_entries[0]
+    eligible_identities = _submission_eligible_identities(queue_directory=queue_directory)
+    if not eligible_identities:
+        eligible_identities = {
+            _entry_identity(entry)
+            for entry in waiting_entries
+            if not entry.get("has_logs") and not entry.get("has_output")
+        }
+    filtered_waiting_entries = []
+    for entry in waiting_entries:
+        if _entry_identity(entry) not in eligible_identities:
+            continue
+        attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
+        if _submitted_marker_path(attempt_dir=attempt_dir).exists():
+            continue
+        filtered_waiting_entries.append(entry)
 
+    if not filtered_waiting_entries:
+        waiting_file.write_text("")
+        print(f"No pending entries in `{waiting_file}`")
+        return False
+
+    entry = filtered_waiting_entries[0]
     attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
-
     script_file_path = attempt_dir / "code" / "submit.sh"
     if not script_file_path.exists():
         message = f"Submit script not found: {script_file_path}"
@@ -668,15 +676,10 @@ def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.P
 
     print(f"Submitting run capsule directory: {attempt_dir}")
     submit_job(script_file_path=script_file_path)
+    _submitted_marker_path(attempt_dir=attempt_dir).touch()
 
-    # Pop the submitted entry from waiting.jsonl.
-    waiting_entries.pop(0)
-    waiting_file.write_text("".join(json.dumps(e) + "\n" for e in waiting_entries))
-
-    # Append to last_submitted.jsonl.
-    last_submitted_file = queue_directory / "last_submitted.jsonl"
-    with last_submitted_file.open("a") as f:
-        f.write(json.dumps(entry) + "\n")
+    # Remove submitted and ineligible entries from waiting.jsonl.
+    waiting_file.write_text("".join(json.dumps(e) + "\n" for e in filtered_waiting_entries[1:]))
 
     return True
 
@@ -741,9 +744,17 @@ def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
     state_entries = [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
     queue_config = _load_queue_config(queue_directory=queue_directory)
     ordered = order_queue(state_entries=state_entries, queue_config=queue_config)
+    eligible_identities = _submission_eligible_identities(queue_directory=queue_directory)
+    waiting_entries = []
+    for entry in ordered:
+        if _entry_identity(entry) not in eligible_identities:
+            continue
+        attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
+        if _submitted_marker_path(attempt_dir=attempt_dir).exists():
+            continue
+        waiting_entries.append(entry)
     waiting_file = queue_directory / "waiting.jsonl"
-    waiting_file.write_text("".join(json.dumps(e) + "\n" for e in ordered))
-    _prune_last_submitted(queue_directory=queue_directory, state_entries=state_entries)
+    waiting_file.write_text("".join(json.dumps(e) + "\n" for e in waiting_entries))
 
 
 def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:

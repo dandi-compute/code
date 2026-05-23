@@ -1219,12 +1219,12 @@ def test_refresh_queue_with_dandiset_directory_includes_only_pending_in_waiting(
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_with_dandiset_directory_prunes_last_submitted_entries_with_output_or_logs(
+def test_refresh_queue_with_dandiset_directory_excludes_entries_with_submitted_markers(
     tmp_path: pathlib.Path,
 ) -> None:
-    """refresh_queue removes entries from last_submitted.jsonl when logs/output are present."""
+    """refresh_queue excludes pending entries that already have code/.submitted markers."""
     _make_attempt_dir(tmp_path, "000001", "mouse01", "test-pipeline", "v1.0", "abc1234", "def5678", 1, with_code=True)
-    _make_attempt_dir(
+    submitted_attempt_dir = _make_attempt_dir(
         tmp_path,
         "000002",
         "mouse02",
@@ -1234,20 +1234,8 @@ def test_refresh_queue_with_dandiset_directory_prunes_last_submitted_entries_wit
         "def5678",
         1,
         with_code=True,
-        with_output=True,
     )
-    _make_attempt_dir(
-        tmp_path,
-        "000003",
-        "mouse03",
-        "test-pipeline",
-        "v1.0",
-        "abc1234",
-        "def5678",
-        1,
-        with_code=True,
-        with_logs=True,
-    )
+    (submitted_attempt_dir / "code" / ".submitted").touch()
 
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
@@ -1263,54 +1251,12 @@ def test_refresh_queue_with_dandiset_directory_prunes_last_submitted_entries_wit
             }
         )
     )
-    (queue_dir / "last_submitted.jsonl").write_text(
-        "\n".join(
-            [
-                json.dumps(
-                    {
-                        "dandiset_id": "000001",
-                        "dandi_path": "sub-mouse01",
-                        "pipeline": "test-pipeline",
-                        "version": "v1.0",
-                        "params": "abc1234",
-                        "config": "def5678",
-                        "attempt": 1,
-                    }
-                ),
-                json.dumps(
-                    {
-                        "dandiset_id": "000002",
-                        "dandi_path": "sub-mouse02",
-                        "pipeline": "test-pipeline",
-                        "version": "v1.0",
-                        "params": "abc1234",
-                        "config": "def5678",
-                        "attempt": 1,
-                    }
-                ),
-                json.dumps(
-                    {
-                        "dandiset_id": "000003",
-                        "dandi_path": "sub-mouse03",
-                        "pipeline": "test-pipeline",
-                        "version": "v1.0",
-                        "params": "abc1234",
-                        "config": "def5678",
-                        "attempt": 1,
-                    }
-                ),
-            ]
-        )
-        + "\n"
-    )
-
     refresh_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
-    remaining = [
-        json.loads(line) for line in (queue_dir / "last_submitted.jsonl").read_text().splitlines() if line.strip()
-    ]
-    assert len(remaining) == 1
-    assert remaining[0]["dandiset_id"] == "000001"
+    waiting_lines = [line for line in (queue_dir / "waiting.jsonl").read_text().splitlines() if line.strip()]
+    assert len(waiting_lines) == 1
+    waiting_record = json.loads(waiting_lines[0])
+    assert waiting_record["dandiset_id"] == "000001"
 
 
 # ---------------------------------------------------------------------------
