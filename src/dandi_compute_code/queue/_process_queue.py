@@ -6,6 +6,7 @@ from ._count_running_aind_ephys_pipeline_jobs import _count_running_aind_ephys_p
 from ._submit_next import _submit_next
 
 
+# TODO: remove inherent flock usage and offload that to `flock` in CLI submitter
 def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
     """
     Submit jobs from ``state.jsonl`` up to two total
