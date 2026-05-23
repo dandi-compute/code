@@ -2,8 +2,6 @@ import json
 import pathlib
 import warnings
 
-from ._load_queue_config import _load_queue_config
-from ._order_queue import order_queue
 from ._resolve_attempt_dir import _resolve_attempt_dir
 from ..aind_ephys_pipeline import submit_job
 
@@ -29,8 +27,8 @@ def _submit_next(
     Reads ``state.jsonl`` from the queue directory. If the state file is
     absent or empty, returns ``False``.
 
-    Entries are ordered via :func:`order_queue`. The first up to
-    ``max_submissions`` ordered entries that do not already have a
+    Entries are filtered to those with no output and no logs. The first up to
+    ``max_submissions`` eligible entries that do not already have a
     ``code/.submitted`` marker are submitted, and each marker is created
     immediately after submission succeeds.
 
@@ -59,11 +57,10 @@ def _submit_next(
     if max_submissions < 1:
         return False
 
-    queue_config = _load_queue_config(queue_directory=queue_directory)
-    ordered_entries = order_queue(state_entries=state_entries, queue_config=queue_config)
+    pending_entries = [entry for entry in state_entries if not entry.get("has_output") and not entry.get("has_logs")]
     submitted_count = 0
 
-    for entry in ordered_entries:
+    for entry in pending_entries:
         attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
         submitted_marker = attempt_dir / "code" / ".submitted"
         if submitted_marker.exists():

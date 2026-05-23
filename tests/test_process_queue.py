@@ -611,8 +611,8 @@ def test_submit_next_returns_false_when_no_eligible_entries(tmp_path: pathlib.Pa
 
 
 @pytest.mark.ai_generated
-def test_submit_next_submits_first_entry_in_order(tmp_path: pathlib.Path) -> None:
-    """_submit_next submits the first pending entry from state.jsonl ordering."""
+def test_submit_next_submits_first_pending_entry_in_state_order(tmp_path: pathlib.Path) -> None:
+    """_submit_next submits the first pending entry in state.jsonl order."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "dandiset"
 
@@ -638,10 +638,7 @@ def test_submit_next_submits_first_entry_in_order(tmp_path: pathlib.Path) -> Non
         attempt=1,
     )
 
-    with (
-        mock.patch("dandi_compute_code.queue._submit_next.order_queue", return_value=[entry]),
-        mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit,
-    ):
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
@@ -691,10 +688,7 @@ def test_submit_next_found_flat_attempt_directory_under_scanned_dandi_path(tmp_p
     script_file_path = actual_attempt_dir / "code" / "submit.sh"
     script_file_path.write_text("#!/bin/bash\necho hello\n")
 
-    with (
-        mock.patch("dandi_compute_code.queue._submit_next.order_queue", return_value=[entry]),
-        mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit,
-    ):
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
         result = _submit_next(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
     assert result is True
@@ -1008,14 +1002,14 @@ def test_process_queue_handles_empty_scan_when_waiting_file_missing(tmp_path: pa
 
 
 @pytest.mark.ai_generated
-def test_process_queue_calls_order_queue_when_waiting_empty(tmp_path: pathlib.Path) -> None:
+def test_process_queue_refreshes_state_when_empty(tmp_path: pathlib.Path) -> None:
     """process_queue refreshes state.jsonl when it is absent or empty."""
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
     with (
-        mock.patch("dandi_compute_code.queue._process_queue.refresh_queue") as mock_refresh,
+        mock.patch("dandi_compute_code.queue._process_queue.refresh_queue_state") as mock_refresh,
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
@@ -1024,7 +1018,7 @@ def test_process_queue_calls_order_queue_when_waiting_empty(tmp_path: pathlib.Pa
 
 
 @pytest.mark.ai_generated
-def test_process_queue_skips_order_queue_when_waiting_non_empty(tmp_path: pathlib.Path) -> None:
+def test_process_queue_skips_refresh_when_state_non_empty(tmp_path: pathlib.Path) -> None:
     """process_queue does NOT refresh when state.jsonl already has entries."""
     queue_dir = _make_queue_dir(tmp_path)
     entry = _make_state_entry()
@@ -1033,7 +1027,7 @@ def test_process_queue_skips_order_queue_when_waiting_non_empty(tmp_path: pathli
     dandiset_dir.mkdir()
 
     with (
-        mock.patch("dandi_compute_code.queue._process_queue.refresh_queue") as mock_refresh,
+        mock.patch("dandi_compute_code.queue._process_queue.refresh_queue_state") as mock_refresh,
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
@@ -1055,7 +1049,7 @@ def test_process_queue_skips_when_lock_is_already_held(
             "dandi_compute_code.queue._process_queue.fcntl.flock",
             side_effect=BlockingIOError,
         ),
-        mock.patch("dandi_compute_code.queue._process_queue.refresh_queue") as mock_refresh,
+        mock.patch("dandi_compute_code.queue._process_queue.refresh_queue_state") as mock_refresh,
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs") as mock_running,
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):

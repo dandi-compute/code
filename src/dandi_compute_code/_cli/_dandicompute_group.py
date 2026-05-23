@@ -17,7 +17,7 @@ from ..queue import (
     dump_issues,
     prepare_queue,
     process_queue,
-    refresh_queue,
+    refresh_queue_state,
     summarize_issues,
 )
 
@@ -247,7 +247,7 @@ def _queue_refresh_command(
     """Rescan the dandiset directory and regenerate state.jsonl."""
     _require_dandi_api_key()
     try:
-        refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
+        refresh_queue_state(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
     except FileNotFoundError as error:
         raise click.ClickException(str(error)) from error
 

@@ -7,7 +7,7 @@ from ..dandiset import scan_dandiset_directory
 
 
 # TODO: check this is removed after simplification
-def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
+def refresh_queue_state(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
     """
     Scan *dandiset_directory* and regenerate ``state.jsonl``.
 
@@ -33,3 +33,6 @@ def refresh_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
     with state_file.open(mode="w") as file_stream:
         for record in records:
             file_stream.write(json.dumps(record) + "\n")
+
+
+refresh_queue = refresh_queue_state
