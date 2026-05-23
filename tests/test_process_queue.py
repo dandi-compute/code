@@ -992,40 +992,37 @@ def test_submit_next_only_submits_entries_pending_in_state_jsonl(tmp_path: pathl
 
 @pytest.mark.ai_generated
 def test_process_queue_handles_empty_scan_when_waiting_file_missing(tmp_path: pathlib.Path) -> None:
-    """process_queue handles an empty dandiset scan when state.jsonl is absent."""
+    """process_queue raises when state.jsonl is absent."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
+    dandiset_dir = tmp_path / "001697"
+    dandiset_dir.mkdir()
 
-    with (
-        mock.patch("dandi_compute_code.queue._refresh_queue.scan_dandiset_directory", return_value=[]) as mock_scan,
-        mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
-    ):
-        process_queue(queue_directory=queue_dir, dandiset_directory=tmp_path)
-
-    mock_scan.assert_called_once_with(dandiset_directory=tmp_path)
-    assert (queue_dir / "state.jsonl").read_text() == ""
+    with pytest.raises(FileNotFoundError, match="State file not found"):
+        process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
 
 @pytest.mark.ai_generated
 def test_process_queue_refreshes_state_when_empty(tmp_path: pathlib.Path) -> None:
-    """process_queue refreshes state.jsonl when it is absent or empty."""
+    """process_queue warns and returns when state.jsonl is empty."""
     queue_dir = _make_queue_dir(tmp_path)
+    (queue_dir / "state.jsonl").write_text("")
     dandiset_dir = tmp_path / "001697"
     dandiset_dir.mkdir()
 
     with (
-        mock.patch("dandi_compute_code.queue._process_queue.refresh_queue_state") as mock_refresh,
+        pytest.warns(UserWarning, match="No pending entries in"),
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
+        mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
-    mock_refresh.assert_called_once_with(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
+    mock_submit.assert_not_called()
 
 
 @pytest.mark.ai_generated
 def test_process_queue_skips_refresh_when_state_non_empty(tmp_path: pathlib.Path) -> None:
-    """process_queue does NOT refresh when state.jsonl already has entries."""
+    """process_queue runs without warning when state.jsonl already has entries."""
     queue_dir = _make_queue_dir(tmp_path)
     entry = _make_state_entry()
     _write_jsonl(queue_dir / "state.jsonl", [entry])
@@ -1033,12 +1030,12 @@ def test_process_queue_skips_refresh_when_state_non_empty(tmp_path: pathlib.Path
     dandiset_dir.mkdir()
 
     with (
-        mock.patch("dandi_compute_code.queue._process_queue.refresh_queue_state") as mock_refresh,
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
+        mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
         process_queue(queue_directory=queue_dir, dandiset_directory=dandiset_dir)
 
-    mock_refresh.assert_not_called()
+    mock_submit.assert_not_called()
 
 
 @pytest.mark.ai_generated
@@ -1055,7 +1052,6 @@ def test_process_queue_skips_when_lock_is_already_held(
             "dandi_compute_code.queue._process_queue.fcntl.flock",
             side_effect=BlockingIOError,
         ),
-        mock.patch("dandi_compute_code.queue._process_queue.refresh_queue_state") as mock_refresh,
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs") as mock_running,
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
@@ -1063,7 +1059,6 @@ def test_process_queue_skips_when_lock_is_already_held(
 
     captured = capsys.readouterr()
     assert "Skipping queue processing: lock already held" in captured.out
-    mock_refresh.assert_not_called()
     mock_running.assert_not_called()
     mock_submit.assert_not_called()
 
