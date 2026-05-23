@@ -1,4 +1,4 @@
-from ._issues import dump_issues, summarize_issues
+from ._dump_issues import dump_issues
 from ._process_queue import (
     TEST_QUEUE_CONTENT_ID,
     aggregate_queue_statistics,
@@ -8,6 +8,7 @@ from ._process_queue import (
     process_queue,
     refresh_queue,
 )
+from ._summarize_issues import summarize_issues
 
 __all__ = [
     "TEST_QUEUE_CONTENT_ID",
