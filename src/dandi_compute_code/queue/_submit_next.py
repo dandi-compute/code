@@ -30,9 +30,12 @@ def _submit_next(
     ----------
     queue_directory : pathlib.Path
         Path to the queue root directory.
+    datalad_directory : pathlib.Path
+        Path to the DataLad-backed work tree used to resolve unsubmitted
+        attempt directories.
     dandiset_directory : pathlib.Path
         Path to a local clone of the 001697 dandiset repository.  Used to
-        locate prepared submission scripts.
+        write submission marker files after backend submission.
     max_submissions : int, optional
         Maximum number of pending jobs to submit from the ordered queue.
 

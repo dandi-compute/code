@@ -7,7 +7,12 @@ from ._submit_next import _submit_next
 
 
 # TODO: remove inherent flock usage and offload that to `flock` in CLI submitter
-def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> None:
+def process_queue(
+    *,
+    queue_directory: pathlib.Path,
+    dandiset_directory: pathlib.Path,
+    datalad_directory: pathlib.Path | None = None,
+) -> None:
     """
     Submit jobs from ``state.jsonl`` up to two total
     running ``AIND-Ephys-Pipeline`` SLURM jobs.
@@ -31,6 +36,9 @@ def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
         Path to a local clone of the 001697 dandiset repository.  Used to
         locate prepared submission scripts and to count failure directories
         for ``max_fail_per_dandiset`` enforcement.
+    datalad_directory : pathlib.Path | None, optional
+        Path to the DataLad-backed work tree used to resolve attempt
+        directories. Defaults to ``dandiset_directory``.
 
     Raises
     ------
@@ -57,8 +65,10 @@ def process_queue(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.
         running_count = _count_running_aind_ephys_pipeline_jobs()
         available_slots = max(0, 2 - running_count)
         if available_slots > 0:
+            datalad_root = datalad_directory if datalad_directory is not None else dandiset_directory
             _submit_next(
                 queue_directory=queue_directory,
+                datalad_directory=datalad_root,
                 dandiset_directory=dandiset_directory,
                 max_submissions=available_slots,
             )
