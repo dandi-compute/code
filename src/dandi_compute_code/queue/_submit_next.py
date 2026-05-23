@@ -8,6 +8,15 @@ from ._resolve_attempt_dir import _resolve_attempt_dir
 from ..aind_ephys_pipeline import submit_job
 
 
+def _read_state_entries(state_file: pathlib.Path, /) -> list[dict]:
+    if not state_file.exists():
+        return []
+
+    stripped_lines = [line.strip() for line in state_file.read_text().splitlines()]
+    state_entries = [json.loads(line) for line in stripped_lines if line]
+    return state_entries
+
+
 def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path) -> bool:
     """
     Submit the next eligible pending entry from ``state.jsonl``.
@@ -34,20 +43,11 @@ def _submit_next(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.P
         True if a job was submitted, False if there are no eligible entries.
     """
     state_file = queue_directory / "state.jsonl"
-
-    def _read_state_entries() -> list[dict]:
-        if not state_file.exists():
-            return []
-
-        stripped_lines = [line.strip() for line in state_file.read_text().splitlines()]
-        state_entries = [json.loads(line) for line in stripped_lines if line]
-        return state_entries
-
-    state_entries = _read_state_entries()
+    state_entries = _read_state_entries(state_file)
 
     if not state_entries:
         refresh_queue(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
-        state_entries = _read_state_entries()
+        state_entries = _read_state_entries(state_file)
 
     if not state_entries:
         print(f"No pending entries in `{state_file}`")
