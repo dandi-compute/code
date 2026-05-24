@@ -11,8 +11,16 @@ def _count_running_aind_ephys_pipeline_jobs() -> int:
     Calls ``squeue --me --format=%j`` and counts jobs whose name is exactly
     ``AIND-Ephys-Pipeline``.
 
-    :returns: Number of running jobs with SLURM job-name ``AIND-Ephys-Pipeline``.
-    :rtype: int
+    Returns
+    -------
+    int
+        Number of running jobs with SLURM job-name ``AIND-Ephys-Pipeline``.
+
+    Raises
+    ------
+    RuntimeError
+        If the ``squeue`` invocation exits with a non-zero return code and
+        writes to standard error.
     """
     command = ["squeue", "--me", "--format=%j"]
     result = subprocess.run(command, capture_output=True, text=True)

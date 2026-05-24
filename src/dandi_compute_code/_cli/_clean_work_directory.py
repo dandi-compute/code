@@ -9,8 +9,15 @@ def clean_work_directory(directory: pathlib.Path) -> None:
     """
     Clean all contents of a directory except the 'apptainer_cache' subdirectory.
 
-    :param directory: Path to the directory to clean.
-    :type directory: pathlib.Path
+    Parameters
+    ----------
+    directory : pathlib.Path
+        Path to the directory to clean.
+
+    Raises
+    ------
+    NotADirectoryError
+        If *directory* does not exist or is not a directory.
     """
     if not directory.is_dir():
         message = f"The specified directory does not exist or is not a directory: {directory}"

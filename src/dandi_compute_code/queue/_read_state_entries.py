@@ -3,6 +3,14 @@ import pathlib
 
 
 def _read_state_entries(state_file: pathlib.Path, /) -> list[dict]:
+    """
+    Read newline-delimited JSON entries from a queue state file.
+
+    Raises
+    ------
+    FileNotFoundError
+        If *state_file* does not exist.
+    """
     if not state_file.exists():
         message = f"State file not found: {state_file}"
         raise FileNotFoundError(message)

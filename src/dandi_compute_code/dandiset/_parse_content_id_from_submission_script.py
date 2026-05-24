@@ -2,11 +2,19 @@ import pathlib
 
 
 def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str:
-    """Read a content ID from ``code/submit.sh``."""
+    """
+    Read a content ID from ``code/submit.sh``.
+
+    Raises
+    ------
+    ValueError
+        If ``code/submit.sh`` does not exist under *attempt_dir*, if the
+        ``NWB_FILE_PATH`` assignment is missing or malformed, or if the
+        derived content ID resolves to an empty string.
+    """
     script_file = attempt_dir / "code" / "submit.sh"
     if not script_file.is_file():
-        message = f"Unable to determine `content_id` from `{script_file=}` - the file is missing!"
-        raise ValueError(message)
+        raise ValueError(f"Unable to determine content_id for {attempt_dir}: missing {script_file}")
 
     script_text = script_file.read_text()
 

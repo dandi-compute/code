@@ -15,14 +15,24 @@ def delete_dandiset_version(dandiset_directory: pathlib.Path, version: str) -> l
     the interactive confirmation prompt automatically), and then removes the local
     directory tree.
 
-    :param dandiset_directory: Path to a local clone of the dandiset repository.
-    :type dandiset_directory: pathlib.Path
-    :param version: The base version string to delete (e.g. ``"v1.0.0"``).  Matches the
+    Parameters
+    ----------
+    dandiset_directory : pathlib.Path
+        Path to a local clone of the dandiset repository.
+    version : str
+        The base version string to delete (e.g. ``"v1.0.0"``).  Matches the
         exact directory ``version-v1.0.0`` as well as any hash-suffixed variant
         such as ``version-v1.0.0+fixes+20abeb6``.
-    :type version: str
-    :returns: A list of version directories that were deleted, in sorted order.
-    :rtype: list[pathlib.Path]
+
+    Returns
+    -------
+    list[pathlib.Path]
+        A list of version directories that were deleted, in sorted order.
+
+    Raises
+    ------
+    RuntimeError
+        If the ``DANDI_API_KEY`` environment variable is not set or is blank.
     """
     if not os.environ.get("DANDI_API_KEY", "").strip():
         message = "`DANDI_API_KEY` environment variable is not set or is blank."
