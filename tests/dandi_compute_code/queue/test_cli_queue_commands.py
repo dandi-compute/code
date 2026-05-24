@@ -365,4 +365,4 @@ def test_cli_queue_process_failed_when_submit_script_missing(tmp_path: pathlib.P
 
     assert result.exit_code != 0
     assert result.exception is not None
-    assert "Submit script not found:" in str(result.exception)
+    assert "Submit script not found" in str(result.exception)

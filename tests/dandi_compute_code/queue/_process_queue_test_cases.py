@@ -679,7 +679,7 @@ def test_submit_next_raised_when_script_missing(tmp_path: pathlib.Path) -> None:
     # Deliberately do NOT create the attempt directory / submit.sh
 
     with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
-        with pytest.raises(FileNotFoundError, match="Submit script not found:"):
+        with pytest.raises(FileNotFoundError, match="Submit script not found"):
             _submit_next(queue_directory=queue_dir, datalad_directory=dandiset_dir, dandiset_directory=dandiset_dir)
 
 
@@ -2752,4 +2752,4 @@ def test_cli_queue_process_failed_when_submit_script_missing(tmp_path: pathlib.P
 
     assert result.exit_code != 0
     assert result.exception is not None
-    assert "Submit script not found:" in str(result.exception)
+    assert "Submit script not found" in str(result.exception)

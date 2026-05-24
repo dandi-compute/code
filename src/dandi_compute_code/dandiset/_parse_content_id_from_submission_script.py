@@ -5,7 +5,8 @@ def _parse_content_id_from_submission_script(attempt_dir: pathlib.Path) -> str:
     """Read a content ID from ``code/submit.sh``."""
     script_file = attempt_dir / "code" / "submit.sh"
     if not script_file.is_file():
-        raise ValueError(f"Unable to determine content_id for {attempt_dir}: missing {script_file}")
+        message = f"Unable to determine `content_id` from `{script_file=}` - the file is missing!"
+        raise ValueError(message)
 
     script_text = script_file.read_text()
 

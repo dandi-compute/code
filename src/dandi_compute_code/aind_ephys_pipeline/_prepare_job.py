@@ -151,6 +151,8 @@ def prepare_aind_ephys_job(
             "which is no longer active. This content ID cannot be prepared."
         )
         raise ValueError(message)
+    output_dandi_path = dandiset_path.removesuffix(".nwb")
+
     # Parse BIDS entities from all path components (directory parts and filename stem),
     # and skip tokens that are modality suffixes (no "-" separator, e.g. "ecephys").
     # Directory parts are needed for AIND-style paths where "sub-" appears only in the folder name.
@@ -168,6 +170,8 @@ def prepare_aind_ephys_job(
         entities.setdefault("sub", "test")
         today = datetime.date.today().isoformat().replace("-", "+")
         config_id += f"_date-{today}"
+        if not output_dandi_path.startswith("sub-test/"):
+            output_dandi_path = f"sub-test/{output_dandi_path}"
 
     if "sub" not in entities:
         message = (
@@ -209,9 +213,7 @@ def prepare_aind_ephys_job(
     ).strip()
 
     bidsy_pipeline_version = pipeline_version.replace("-", "+")
-    output_dandiset_path_base = f"derivatives/dandiset-{dandiset_id}/sub-{entities['sub']}/"
-    if "ses" in entities:
-        output_dandiset_path_base += f"ses-{entities['ses']}/"
+    output_dandiset_path_base = f"derivatives/dandiset-{dandiset_id}/{output_dandi_path}/"
     output_dandiset_path_base += (
         f"pipeline-aind+ephys/"
         f"version-{bidsy_pipeline_version}+{pipeline_commit_head}+{dandi_compute_code_commit_head}"
