@@ -1,0 +1,368 @@
+# ruff: noqa: F821
+import importlib.util as _importlib_util
+import pathlib as _pathlib
+
+_spec = _importlib_util.spec_from_file_location(
+    "_process_queue_test_cases",
+    _pathlib.Path(__file__).with_name("_process_queue_test_cases.py"),
+)
+assert _spec is not None
+assert _spec.loader is not None
+_support = _importlib_util.module_from_spec(_spec)
+_spec.loader.exec_module(_support)
+
+globals().update(
+    {
+        name: value
+        for name, value in vars(_support).items()
+        if not name.startswith("__") and not name.startswith("test_")
+    }
+)
+
+
+@pytest.mark.ai_generated
+def test_cli_prepare_test_calls_prepare_queue_with_test_content_id(tmp_path: pathlib.Path) -> None:
+    """dandicompute prepare aind --test calls prepare_queue with the known test content ID."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    runner = CliRunner()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
+        mock.patch("dandi_compute_code._cli._dandicompute_group.prepare_queue") as mock_prepare_queue,
+    ):
+        result = runner.invoke(_dandicompute_group, ["prepare", "aind", "--test", "--queue", str(queue_dir)])
+
+    assert result.exit_code == 0
+    mock_prepare_queue.assert_called_once_with(
+        queue_directory=queue_dir,
+        content_ids=[TEST_QUEUE_CONTENT_ID],
+        pipeline_directory=None,
+        config_key="default",
+    )
+
+
+@pytest.mark.ai_generated
+def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
+    """dandicompute prepare aind --test forwards --config to prepare_queue."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    runner = CliRunner()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
+        mock.patch("dandi_compute_code._cli._dandicompute_group.prepare_queue") as mock_prepare_queue,
+    ):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["prepare", "aind", "--test", "--queue", str(queue_dir), "--config", "mit+engaging+revision-1"],
+        )
+
+    assert result.exit_code == 0
+    mock_prepare_queue.assert_called_once_with(
+        queue_directory=queue_dir,
+        content_ids=[TEST_QUEUE_CONTENT_ID],
+        pipeline_directory=None,
+        config_key="mit+engaging+revision-1",
+    )
+
+
+@pytest.mark.ai_generated
+def test_cli_prepare_test_required_queue_directory() -> None:
+    """dandicompute prepare aind --test requires --queue."""
+    runner = CliRunner()
+    with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
+        result = runner.invoke(_dandicompute_group, ["prepare", "aind", "--test"])
+    assert result.exit_code != 0
+    assert "--queue is required when using --test" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_aind_prepare_passes_config_key() -> None:
+    """dandicompute prepare aind forwards --config to prepare_aind_ephys_job."""
+    runner = CliRunner()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
+        mock.patch("dandi_compute_code._cli._dandicompute_group.prepare_aind_ephys_job") as mock_prepare,
+    ):
+        mock_prepare.return_value = pathlib.Path("/tmp/submit.sh")
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "prepare",
+                "aind",
+                "--id",
+                "abc123",
+                "--version",
+                "v1.2.3",
+                "--config",
+                "mit+engaging+revision-1",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert mock_prepare.call_args.kwargs["config_key"] == "mit+engaging+revision-1"
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue clean delegates to clean_unsubmitted_capsules and reports removed paths."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+
+    fake_removed = [dandiset_dir / "derivatives" / "dandiset-000001" / "sub-mouse01" / "attempt-1"]
+    runner = CliRunner()
+
+    with mock.patch(
+        "dandi_compute_code._cli._dandicompute_group.clean_unsubmitted_capsules", return_value=fake_removed
+    ) as mock_clean:
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "queue",
+                "clean",
+                "--queue",
+                str(queue_dir),
+                "--dandiset",
+                str(dandiset_dir),
+            ],
+            env={"DANDI_API_KEY": "test-key"},
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_clean.assert_called_once_with(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    assert "Cleaned 1 unsubmitted capsule" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue clean reports when no unsubmitted capsules are found."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+
+    runner = CliRunner()
+
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.clean_unsubmitted_capsules", return_value=[]):
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "queue",
+                "clean",
+                "--queue",
+                str(queue_dir),
+                "--dandiset",
+                str(dandiset_dir),
+            ],
+            env={"DANDI_API_KEY": "test-key"},
+        )
+
+    assert result.exit_code == 0, result.output
+    assert "No unsubmitted capsules found" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_stats_calls_helper_and_reports_output(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue stats delegates to aggregate_queue_statistics."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+
+    runner = CliRunner()
+    with mock.patch(
+        "dandi_compute_code._cli._dandicompute_group.aggregate_queue_statistics",
+        return_value={"successful_asset_bytes_total": 0},
+    ) as mock_stats:
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "queue",
+                "stats",
+                "--queue",
+                str(queue_dir),
+                "--dandiset",
+                str(dandiset_dir),
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_stats.assert_called_once_with(
+        queue_directory=queue_dir,
+        dandiset_directory=dandiset_dir,
+        output_file_name="queue_stats.json",
+    )
+    assert "Wrote queue aggregate statistics" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_issues_dump_calls_helper(tmp_path: pathlib.Path) -> None:
+    """dandicompute issues dump delegates to dump_issues and reports output."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+
+    runner = CliRunner()
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.dump_issues", return_value=[]) as mock_dump:
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "issues",
+                "dump",
+                "--directory",
+                str(dandiset_dir),
+                "--queue",
+                str(queue_dir),
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_dump.assert_called_once_with(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    assert "Wrote issue dump" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_issues_summarize_calls_helper(tmp_path: pathlib.Path) -> None:
+    """dandicompute issues summarize delegates to summarize_issues and reports output."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+
+    runner = CliRunner()
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.summarize_issues", return_value={}) as mock_summarize:
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "issues",
+                "summarize",
+                "--directory",
+                str(dandiset_dir),
+                "--queue",
+                str(queue_dir),
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_summarize.assert_called_once_with(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    assert "Wrote issue summary" in result.output
+
+
+@pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    "subcommand",
+    [
+        "clean",
+        "stats",
+        "process",
+    ],
+)
+def test_cli_queue_subcommands_required_queue_directory(tmp_path: pathlib.Path, subcommand: str) -> None:
+    """Queue clean/process commands require --queue."""
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+    args = ["queue", subcommand, "--dandiset", str(dandiset_dir)]
+    runner = CliRunner()
+    with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
+        result = runner.invoke(_dandicompute_group, args)
+    assert result.exit_code != 0
+    assert "Missing option '--queue'" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_prepare_required_queue_directory() -> None:
+    """Queue prepare command requires --queue."""
+    runner = CliRunner()
+    with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
+        result = runner.invoke(_dandicompute_group, ["queue", "prepare"])
+    assert result.exit_code != 0
+    assert "Missing option '--queue'" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_process_requires_datalad_directory(tmp_path: pathlib.Path) -> None:
+    """Queue process command requires --datalad."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+    runner = CliRunner()
+    with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["queue", "process", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
+        )
+    assert result.exit_code != 0
+    assert "Missing option '--datalad'" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_process_passes_explicit_datalad_directory(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue process forwards --datalad to process_queue."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+    datalad_dir = tmp_path / "datalad"
+    datalad_dir.mkdir()
+    runner = CliRunner()
+
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.process_queue") as mock_process:
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "queue",
+                "process",
+                "--queue",
+                str(queue_dir),
+                "--dandiset",
+                str(dandiset_dir),
+                "--datalad",
+                str(datalad_dir),
+            ],
+            env={"DANDI_API_KEY": "test-key"},
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_process.assert_called_once_with(
+        queue_directory=queue_dir,
+        dandiset_directory=dandiset_dir,
+        datalad_directory=datalad_dir,
+    )
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_process_failed_when_submit_script_missing(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue process exits non-zero when a queued submit script is missing."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+    _write_jsonl(
+        queue_dir / "state.jsonl",
+        [_make_state_entry(dandiset_id="000001", pipeline="test", version="v1.0", params="default")],
+    )
+    runner = CliRunner()
+    datalad_dir = tmp_path / "datalad"
+    datalad_dir.mkdir()
+    with mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=0):
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "queue",
+                "process",
+                "--queue",
+                str(queue_dir),
+                "--dandiset",
+                str(dandiset_dir),
+                "--datalad",
+                str(datalad_dir),
+            ],
+            env={"DANDI_API_KEY": "test-key"},
+        )
+
+    assert result.exit_code != 0
+    assert result.exception is not None
+    assert "Submit script not found:" in str(result.exception)
