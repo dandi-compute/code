@@ -19,13 +19,14 @@ def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pat
     if dandi_path == "":
         message = f"Entry has invalid dandi_path field (empty): {entry!r}"
         raise ValueError(message)
+    normalized_dandi_path = dandi_path.removesuffix(".nwb")
     pipeline = entry["pipeline"]
     version = entry["version"]
     params = entry["params"]
     config = entry["config"]
     attempt = entry["attempt"]
 
-    pipeline_dir = base_dir / "derivatives" / f"dandiset-{dandiset_id}" / pathlib.PurePosixPath(dandi_path)
+    pipeline_dir = base_dir / "derivatives" / f"dandiset-{dandiset_id}" / pathlib.PurePosixPath(normalized_dandi_path)
     pipeline_dir = pipeline_dir / f"pipeline-{pipeline}"
 
     flat_attempt_dir = pipeline_dir / f"version-{version}_params-{params}_config-{config}_attempt-{attempt}"
