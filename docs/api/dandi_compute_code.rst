@@ -1,5 +1,5 @@
-dandi_compute_code
-==================
+Top-level
+=========
 
 .. automodule:: dandi_compute_code
    :members:

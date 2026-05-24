@@ -1,5 +1,5 @@
-dandi_compute_code.dandiset
-============================
+Dandiset
+========
 
 .. automodule:: dandi_compute_code.dandiset
    :members:

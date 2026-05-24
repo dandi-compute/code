@@ -1,5 +1,5 @@
-dandi_compute_code.queue
-=========================
+Queue
+=====
 
 .. automodule:: dandi_compute_code.queue
    :members:
