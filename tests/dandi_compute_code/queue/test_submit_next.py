@@ -255,6 +255,51 @@ def test_submit_next_creates_flattened_marker_path_when_dandiset_attempt_is_miss
 
 
 @pytest.mark.ai_generated
+def test_submit_next_writes_submitted_marker_using_dandi_path_without_nwb_suffix(tmp_path: pathlib.Path) -> None:
+    """_submit_next resolves marker and submit paths under dandi_path with the .nwb suffix removed."""
+    queue_dir = _make_queue_dir(tmp_path)
+    dandiset_dir = tmp_path / "dandiset"
+    entry = _make_state_entry(
+        dandiset_id="001849",
+        dandi_path="sub-test/sourcedata/aind-sample.nwb",
+        pipeline="aind+ephys",
+        version="v1.1.1+b268fd2+f37df9f",
+        params="4af6a25",
+        config="0d4bf36_date-2026+05+24",
+        attempt=2,
+    )
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
+    attempt_dir = (
+        dandiset_dir
+        / "derivatives"
+        / "dandiset-001849"
+        / "sub-test"
+        / "sourcedata"
+        / "aind-sample"
+        / "pipeline-aind+ephys"
+        / "version-v1.1.1+b268fd2+f37df9f_params-4af6a25_config-0d4bf36_date-2026+05+24_attempt-2"
+    )
+    (attempt_dir / "code").mkdir(parents=True)
+    script_file_path = attempt_dir / "code" / "submit.sh"
+    script_file_path.write_text("#!/bin/bash\necho hello\n")
+
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
+        submitted = _submit_next(
+            queue_directory=queue_dir,
+            datalad_directory=dandiset_dir,
+            dandiset_directory=dandiset_dir,
+        )
+
+    legacy_dir_with_nwb_suffix = (
+        dandiset_dir / "derivatives" / "dandiset-001849" / "sub-test" / "sourcedata" / "aind-sample.nwb"
+    )
+    assert submitted is True
+    mock_submit.assert_called_once_with(script_file_path=script_file_path)
+    assert (attempt_dir / "code" / "submitted").exists()
+    assert legacy_dir_with_nwb_suffix.exists() is False
+
+
+@pytest.mark.ai_generated
 def test_submit_next_found_flat_attempt_directory_under_scanned_dandi_path(tmp_path: pathlib.Path) -> None:
     """_submit_next can submit from flat attempt layout even when dandi_path points to source data."""
     queue_dir = _make_queue_dir(tmp_path)
