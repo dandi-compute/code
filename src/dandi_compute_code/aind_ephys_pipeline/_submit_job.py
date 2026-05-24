@@ -25,5 +25,5 @@ def submit_job(script_file_path: pathlib.Path) -> None:
     )
     _log.info(f"sbatch return code: {result.returncode}\n" f"stdout: {result.stdout}\n" f"stderr: {result.stderr}")
     if result.returncode != 0:
-        message = f"command: {command}\n{result_message}"
+        message = "sbatch submission failed - please check the logs to see more details."
         raise RuntimeError(message)
