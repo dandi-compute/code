@@ -78,14 +78,4 @@ def _submit_next(
             message = f"Submit script not found: {script_file_path}"
             raise FileNotFoundError(message)
         submit_job(script_file_path=script_file_path)
-
-        # Actual submission marks must go to DANDI backend first
-        attempt_dir_relative_to_datalad = attempt_dir.relative_to(datalad_directory)
-        attempt_dir_relative_to_dandiset = dandiset_directory / attempt_dir_relative_to_datalad
-        submitted_marker = attempt_dir_relative_to_dandiset / "code" / "submitted"
-        if not submitted_marker.parent.exists():
-            message = f"Creating '{submitted_marker.parent.absolute()}'"
-            _log.info(message)
-            submitted_marker.parent.mkdir(parents=True, exist_ok=True)
-        submitted_marker.write_text(datetime.datetime.now().isoformat())
     return True
