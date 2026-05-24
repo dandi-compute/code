@@ -1,9 +1,11 @@
 import fcntl
+import logging
 import pathlib
-import warnings
 
 from ._count_running_aind_ephys_pipeline_jobs import _count_running_aind_ephys_pipeline_jobs
 from ._submit_next import _submit_next
+
+_log = logging.getLogger(__name__)
 
 
 # TODO: remove inherent flock usage and offload that to `flock` in CLI submitter
@@ -50,7 +52,7 @@ def process_queue(
         try:
             fcntl.flock(lock_file_stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            print(f"Skipping queue processing: lock already held at `{lock_file}`")
+            _log.info(f"Skipping queue processing: lock already held at `{lock_file}`")
             return
 
         state_file = queue_directory / "state.jsonl"
@@ -58,7 +60,7 @@ def process_queue(
             message = f"State file not found: {state_file}"
             raise FileNotFoundError(message)
         if not state_file.read_text().strip():
-            warnings.warn(f"No entries in {state_file}", stacklevel=2)
+            _log.info(f"No entries in {state_file}")
             return
 
         running_count = _count_running_aind_ephys_pipeline_jobs()

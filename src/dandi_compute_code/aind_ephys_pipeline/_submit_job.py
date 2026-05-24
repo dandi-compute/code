@@ -1,9 +1,11 @@
+import logging
 import os
 import pathlib
 import subprocess
-import warnings
 
 import pydantic
+
+_log = logging.getLogger(__name__)
 
 
 @pydantic.validate_call
@@ -15,16 +17,13 @@ def submit_job(script_file_path: pathlib.Path) -> None:
 
     absolute_script_file_path = script_file_path.absolute()
     command = ["sbatch", str(absolute_script_file_path)]
-    warnings.warn(f"Submitting sbatch script: {absolute_script_file_path}", stacklevel=2)
+    _log.info(f"Submitting sbatch script: {absolute_script_file_path}")
     result = subprocess.run(
         command,
         capture_output=True,
         text=True,
     )
-    result_message = (
-        f"sbatch return code: {result.returncode}\n" f"stdout: {result.stdout}\n" f"stderr: {result.stderr}"
-    )
-    warnings.warn(result_message, stacklevel=2)
+    _log.info(f"sbatch return code: {result.returncode}\n" f"stdout: {result.stdout}\n" f"stderr: {result.stderr}")
     if result.returncode != 0:
-        message = f"command: {command}\n{result_message}"
+        message = "sbatch submission failed - please check the logs to see more details."
         raise RuntimeError(message)

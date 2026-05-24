@@ -1,10 +1,12 @@
 import datetime
+import logging
 import pathlib
-import warnings
 
 from ._read_state_entries import _read_state_entries
 from ._resolve_unsubmitted_attempt_dir import _resolve_unsubmitted_attempt_dir
 from ..aind_ephys_pipeline import submit_job
+
+_log = logging.getLogger(__name__)
 
 
 # TODO: make logic even cleaner and remove return
@@ -52,7 +54,7 @@ def _submit_next(
     state_entries = _read_state_entries(state_file)
 
     if not state_entries:
-        warnings.warn(f"No pending entries in `{state_file}`", stacklevel=2)
+        _log.info(f"No pending entries in `{state_file}`")
         return False
 
     pending_submissions: list[tuple[pathlib.Path, pathlib.Path]] = []
@@ -68,7 +70,7 @@ def _submit_next(
         pending_submissions.append((attempt_dir, script_file_path))
 
     if not pending_submissions:
-        warnings.warn("No eligible pending entries available for submission", stacklevel=2)
+        _log.info("No eligible pending entries available for submission")
         return False
 
     for attempt_dir, script_file_path in pending_submissions[:max_submissions]:
@@ -82,8 +84,8 @@ def _submit_next(
         attempt_dir_relative_to_dandiset = dandiset_directory / attempt_dir_relative_to_datalad
         submitted_marker = attempt_dir_relative_to_dandiset / "code" / "submitted"
         if not submitted_marker.parent.exists():
-            message = f"Creating '{submitted_marker.parent.absolute()}'"  # TODO: could be replaced with logging.info
-            warnings.warn(message=message, stacklevel=2)
+            message = f"Creating '{submitted_marker.parent.absolute()}'"
+            _log.info(message)
             submitted_marker.parent.mkdir(parents=True, exist_ok=True)
         submitted_marker.write_text(datetime.datetime.now().isoformat())
     return True
