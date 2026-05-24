@@ -2,7 +2,15 @@ import pathlib
 
 
 def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pathlib.Path, pathlib.Path]:
-    """Return (flat_layout_path, legacy_nested_layout_path) for an attempt entry."""
+    """
+    Return (flat_layout_path, legacy_nested_layout_path) for an attempt entry.
+
+    Raises
+    ------
+    ValueError
+        If *entry* has no ``dandi_path`` key, or if its ``dandi_path`` value is
+        an empty string.
+    """
     dandiset_id = entry["dandiset_id"]
     dandi_path = entry.get("dandi_path")
     if dandi_path is None:

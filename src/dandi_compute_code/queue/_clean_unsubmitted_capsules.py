@@ -27,14 +27,26 @@ def clean_unsubmitted_capsules(
     then deletes each matching attempt directory tree from the DANDI archive
     (via ``dandi delete``) and from the local filesystem.
 
-    :param dandiset_directory: Path to a local clone of the dandiset repository.  The function scans
+    Parameters
+    ----------
+    dandiset_directory : pathlib.Path
+        Path to a local clone of the dandiset repository.  The function scans
         ``{dandiset_directory}/derivatives/dandiset-*/`` to locate attempt
         directories.
-    :type dandiset_directory: pathlib.Path
-    :param queue_directory: Path to the queue root directory.
-    :type queue_directory: pathlib.Path
-    :returns: List of attempt directory paths that were deleted.
-    :rtype: list[pathlib.Path]
+    queue_directory : pathlib.Path
+        Path to the queue root directory.
+
+    Returns
+    -------
+    list[pathlib.Path]
+        List of attempt directory paths that were deleted.
+
+    Raises
+    ------
+    NotADirectoryError
+        If *queue_directory* does not exist or is not a directory.
+    RuntimeError
+        If the ``DANDI_API_KEY`` environment variable is not set or is blank.
     """
     if not queue_directory.is_dir():
         message = f"Queue directory does not exist or is not a directory: {queue_directory}"

@@ -35,30 +35,54 @@ def prepare_aind_ephys_job(
     """
     Prepares an AIND ephys job by generating a submission script and returning the script file path.
 
-    :param pipeline_version: The version of the pipeline to use, which will be used to checkout a branch of the
-        pipeline repository.
-    :type pipeline_version: str
-    :param content_id: The content ID for the data to be processed.
-    :type content_id: str
-    :param dandiset_id: The Dandiset ID for the data to be processed. Required if `content_id`
+    Parameters
+    ----------
+    pipeline_version : str
+        The version of the pipeline to use, which will be used to checkout a branch of the pipeline repository.
+    content_id : str
+        The content ID for the data to be processed.
+    dandiset_id : str, optional
+        The Dandiset ID for the data to be processed. Required if `content_id`
         is not provided and will be used to look up the content ID if `content_id` is not provided.
-    :type dandiset_id: str, optional
-    :param dandiset_path: The local path to the Dandiset data to be processed. Required if `content_id
+    dandiset_path : str, optional
+        The local path to the Dandiset data to be processed. Required if `content_id
         is not provided and will be used to look up the content ID if `content_id` is not provided.
-    :type dandiset_path: str, optional
-    :param config_key: The short name of the configuration to use.
+    config_key : str
+        The short name of the configuration to use.
         Must be a key registered in `registries/registered_configs.json`.
-    :type config_key: str
-    :param parameters_key: The short name of the parameters to use.
+    parameters_key : str
+        The short name of the parameters to use.
         Must be a key registered in `registries/registered_params.json`.
-    :type parameters_key: str
-    :param pipeline_directory: Local path to the AIND pipeline repository.
-    :type pipeline_directory: pathlib.Path, optional
-    :param silent: Whether to suppress output messages from the DANDI client.
+    pipeline_directory : pathlib.Path, optional
+        Local path to the AIND pipeline repository.
+    silent : bool, optional
+        Whether to suppress output messages from the DANDI client.
         Default is False.
-    :type silent: bool, optional
-    :returns: The path to the generated submission script.
-    :rtype: pathlib.Path
+
+    Returns
+    -------
+    script_file_path : pathlib.Path
+        The path to the generated submission script.
+
+    Raises
+    ------
+    ValueError
+        Raised in any of the following situations.
+
+        - Neither ``content_id`` nor both ``dandiset_id`` and ``dandiset_path``
+          are provided.
+        - ``pipeline_version`` is an empty string.
+        - ``pipeline_version`` equals the unsupported ``v1.0.0``.
+        - ``config_key`` is not registered in ``registered_configs.json``.
+        - ``parameters_key`` is not registered in ``registered_params.json``.
+        - The MD5 checksum of the resolved config or parameters file does not
+          match its registry entry.
+        - ``content_id`` is not present in the content-id-to-Dandiset mapping.
+        - ``content_id`` maps to the retired sandbox dandiset.
+        - The ``sub`` BIDS entity cannot be extracted from the resolved
+          Dandiset path.
+        - A resolved git commit hash does not match the expected
+          40-character hexadecimal format.
     """
     if not content_id and not (dandiset_id and dandiset_path):
         message = "Either --id or both --dandiset and --dandipath must be provided."
@@ -152,7 +176,6 @@ def prepare_aind_ephys_job(
         )
         raise ValueError(message)
     output_dandi_path = dandiset_path.removesuffix(".nwb")
-
     # Parse BIDS entities from all path components (directory parts and filename stem),
     # and skip tokens that are modality suffixes (no "-" separator, e.g. "ecephys").
     # Directory parts are needed for AIND-style paths where "sub-" appears only in the folder name.

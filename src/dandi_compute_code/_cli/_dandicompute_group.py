@@ -24,6 +24,15 @@ from ..queue import (
 
 
 def _require_dandi_api_key() -> None:
+    """
+    Verify that the ``DANDI_API_KEY`` environment variable is set and non-empty.
+
+    Raises
+    ------
+    click.ClickException
+        If ``DANDI_API_KEY`` is unset or empty.  The CLI catches this and exits
+        with a user-facing error message.
+    """
     if "DANDI_API_KEY" not in os.environ or not os.environ["DANDI_API_KEY"]:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
 
