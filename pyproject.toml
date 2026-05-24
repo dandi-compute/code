@@ -30,8 +30,14 @@ dandicompute = "dandi_compute_code._cli:_dandicompute_group"
 
 [dependency-groups]
 dev = ["ipython", "pre-commit", "pytest"]
+docs = [
+    "sphinx>=7.0",
+    "pydata-sphinx-theme>=0.15",
+    "sphinx-autodoc-typehints>=2.0",
+]
 all = [
     {include-group = "dev"},
+    {include-group = "docs"},
 ]
 
 
