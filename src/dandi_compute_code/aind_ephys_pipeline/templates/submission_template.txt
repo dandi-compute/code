@@ -40,6 +40,8 @@ echo "=== End of directory tree ==="
 cd $RESULTS_PATH
 mv nwb/ ../derivatives/
 mv visualization_output.json visualization/
+mv quality_control.json visualization/
+find quality_control/ -type f -name "*.png" -exec mv -t visualization/ {} +
 mv visualization/ ../derivatives/
 mv postprocessed/ ../derivatives/
 mv nextflow/* ../logs/
