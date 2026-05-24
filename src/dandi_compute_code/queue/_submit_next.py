@@ -1,3 +1,4 @@
+import datetime
 import logging
 import pathlib
 
@@ -86,5 +87,12 @@ def _submit_next(
             )
             raise FileNotFoundError(message)
 
-        submit_job(script_file_path=script_file_path)
+        submit_job(script_file_path=script_file_to_submit)
+
+        submitted_marker = script_file_to_submit.parent / "submitted"
+        if not submitted_marker.parent.exists():
+            message = f"Creating '{submitted_marker.parent.absolute()}'"
+            _log.info(message)
+            submitted_marker.parent.mkdir(parents=True, exist_ok=True)
+        submitted_marker.write_text(datetime.datetime.now().isoformat())
     return True
