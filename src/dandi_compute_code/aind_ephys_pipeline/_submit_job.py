@@ -1,3 +1,4 @@
+import datetime
 import logging
 import os
 import pathlib
@@ -23,7 +24,21 @@ def submit_job(script_file_path: pathlib.Path) -> None:
         capture_output=True,
         text=True,
     )
-    _log.info(f"sbatch return code: {result.returncode}\n" f"stdout: {result.stdout}\n" f"stderr: {result.stderr}")
+    _log.info(f"sbatch returned code: {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}")
     if result.returncode != 0:
         message = "sbatch submission failed - please check the logs to see more details."
+        raise RuntimeError(message)
+
+    submitted_file_path = absolute_script_file_path.parent / "submitted"
+    _log.info(f"Creating `submitted` file at: {submitted_file_path.parent.absolute()}")
+    submitted_file_path.write_text(datetime.datetime.now().isoformat())
+    result = subprocess.run(
+        ["dandi", "upload"],
+        capture_output=True,
+        text=True,
+        cwd=absolute_script_file_path.parent,
+    )
+    _log.info(f"Upload to DANDI returned code: {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}")
+    if result.returncode != 0:
+        message = "DANDI upload failed - please check the logs to see more details."
         raise RuntimeError(message)
