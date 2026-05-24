@@ -153,8 +153,42 @@ def test_submit_next_raised_when_script_missing(tmp_path: pathlib.Path) -> None:
     # Deliberately do NOT create the attempt directory / submit.sh
 
     with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
-        with pytest.raises(FileNotFoundError, match="Submit script not found:"):
+        with pytest.raises(FileNotFoundError, match="Submit script not found in either location:"):
             _submit_next(queue_directory=queue_dir, datalad_directory=dandiset_dir, dandiset_directory=dandiset_dir)
+
+
+@pytest.mark.ai_generated
+def test_submit_next_submits_script_from_dandiset_when_absent_in_datalad(tmp_path: pathlib.Path) -> None:
+    """_submit_next falls back to dandiset submit.sh when datalad path is absent."""
+    queue_dir = _make_queue_dir(tmp_path)
+    datalad_dir = tmp_path / "datalad"
+    datalad_dir.mkdir()
+    dandiset_dir = tmp_path / "dandiset"
+
+    entry = _make_state_entry(dandiset_id="000001", pipeline="test", version="v1.0", params="default")
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
+
+    expected_attempt_dir = _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
+        result = _submit_next(
+            queue_directory=queue_dir,
+            datalad_directory=datalad_dir,
+            dandiset_directory=dandiset_dir,
+        )
+
+    assert result is True
+    mock_submit.assert_called_once_with(script_file_path=expected_attempt_dir / "code" / "submit.sh")
+    assert (expected_attempt_dir / "code" / "submitted").exists()
 
 
 @pytest.mark.ai_generated
