@@ -58,24 +58,30 @@ def fake_pipeline_dir(tmp_path: pathlib.Path) -> pathlib.Path:
 
 @pytest.mark.ai_generated
 @pytest.mark.parametrize(
-    ("dandiset_path", "expected_sub"),
+    ("dandiset_path", "expected_sub", "expected_output_path"),
     [
         # Standard BIDS filename with sub- in stem
-        ("sub-mouse01_ses-01_ecephys.nwb", "mouse01"),
+        ("sub-mouse01_ses-01_ecephys.nwb", "mouse01", "sub-mouse01_ses-01_ecephys"),
         # AIND-style: sub- only in the first directory component
         (
             "sub-703986_2024-09-13_11-19-19"
             "/ecephys_703986_2024-09-13_11-19-19"
             "/ecephys_703986_2024-09-13_11-19-19.nwb",
             "703986",
+            "sub-703986_2024-09-13_11-19-19/ecephys_703986_2024-09-13_11-19-19/ecephys_703986_2024-09-13_11-19-19",
         ),
         # sub- in directory alongside an explicit ses- directory
-        ("sub-mouse01/ses-20240101/sub-mouse01_ses-20240101_ecephys.nwb", "mouse01"),
+        (
+            "sub-mouse01/ses-20240101/sub-mouse01_ses-20240101_ecephys.nwb",
+            "mouse01",
+            "sub-mouse01/ses-20240101/sub-mouse01_ses-20240101_ecephys",
+        ),
     ],
 )
 def test_prepare_aind_ephys_job_extracts_sub_entity_from_path(
     dandiset_path: str,
     expected_sub: str,
+    expected_output_path: str,
     tmp_path: pathlib.Path,
     fake_pipeline_dir: pathlib.Path,
 ) -> None:
@@ -109,6 +115,7 @@ def test_prepare_aind_ephys_job_extracts_sub_entity_from_path(
         )
 
     assert f"sub-{expected_sub}" in str(script_path)
+    assert expected_output_path in str(script_path)
 
 
 @pytest.mark.ai_generated
@@ -147,7 +154,7 @@ def test_prepare_aind_ephys_job_test_content_id_uses_sub_test(
             pipeline_directory=fake_pipeline_dir,
         )
 
-    assert "sub-test" in str(script_path)
+    assert "sub-test/sourcedata/aind-sample" in str(script_path)
 
 
 @pytest.mark.ai_generated

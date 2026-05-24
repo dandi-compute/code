@@ -7,30 +7,44 @@ import pytest
 from dandi_compute_code.aind_ephys_pipeline import submit_job
 
 
+def _prepare_submit_script_path(*, tmp_path: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path]:
+    relative_derivatives_subpath = pathlib.Path("sub-mouse01") / "pipeline-test" / "version-v1.0" / "code"
+    script_file_path = tmp_path / "001697" / "derivatives" / relative_derivatives_subpath / "submit.sh"
+    script_file_path.parent.mkdir(parents=True, exist_ok=True)
+    script_file_path.write_text("#!/usr/bin/env bash\n")
+    return script_file_path, relative_derivatives_subpath
+
+
 @pytest.mark.ai_generated
 def test_submit_job_logs_sbatch_script_path(tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture) -> None:
-    script_file_path = tmp_path / "submit.sh"
-    script_file_path.write_text("#!/usr/bin/env bash\n")
+    script_file_path, relative_derivatives_subpath = _prepare_submit_script_path(tmp_path=tmp_path)
+    download_dir = tmp_path / "download"
+    (download_dir / "001697" / "derivatives" / relative_derivatives_subpath).mkdir(parents=True, exist_ok=True)
 
-    completed_process = mock.Mock(
+    sbatch_process = mock.Mock(
         returncode=0,
         stdout="Submitted batch job 123\n",
         stderr="",
     )
+    download_process = mock.Mock(returncode=0, stdout="", stderr="")
+    upload_process = mock.Mock(returncode=0, stdout="", stderr="")
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "fake-key"}, clear=True),
-        mock.patch("subprocess.run", return_value=completed_process) as mock_run,
+        mock.patch(
+            "subprocess.run",
+            side_effect=[sbatch_process, download_process, upload_process],
+        ) as mock_run,
+        mock.patch("tempfile.mkdtemp", return_value=str(download_dir)),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._submit_job.pathlib.Path.mkdir"),
         caplog.at_level(logging.INFO, logger="dandi_compute_code.aind_ephys_pipeline._submit_job"),
     ):
         submit_job(script_file_path=script_file_path)
 
     log_messages = [record.message for record in caplog.records]
-    assert log_messages == [
-        f"Submitting sbatch script: {script_file_path}",
-        "sbatch return code: 0\nstdout: Submitted batch job 123\n\nstderr: ",
-    ]
-    mock_run.assert_called_once_with(
+    assert log_messages[0] == f"Submitting sbatch script: {script_file_path}"
+    assert log_messages[1] == "sbatch returned code: 0\nstdout: Submitted batch job 123\n\nstderr: "
+    assert mock_run.call_args_list[0] == mock.call(
         ["sbatch", str(script_file_path)],
         capture_output=True,
         text=True,
@@ -44,29 +58,38 @@ def test_submit_job_logs_absolute_sbatch_script_path_for_relative_input(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    relative_script_file_path = pathlib.Path("submit.sh")
+    relative_script_file_path = pathlib.Path("001697/derivatives/sub-mouse01/pipeline-test/version-v1.0/code/submit.sh")
+    relative_script_file_path.parent.mkdir(parents=True, exist_ok=True)
     relative_script_file_path.write_text("#!/usr/bin/env bash\n")
     absolute_script_file_path = relative_script_file_path.absolute()
+    relative_derivatives_subpath = pathlib.Path("sub-mouse01") / "pipeline-test" / "version-v1.0" / "code"
+    download_dir = tmp_path / "download"
+    (download_dir / "001697" / "derivatives" / relative_derivatives_subpath).mkdir(parents=True, exist_ok=True)
 
-    completed_process = mock.Mock(
+    sbatch_process = mock.Mock(
         returncode=0,
         stdout="Submitted batch job 123\n",
         stderr="",
     )
+    download_process = mock.Mock(returncode=0, stdout="", stderr="")
+    upload_process = mock.Mock(returncode=0, stdout="", stderr="")
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "fake-key"}, clear=True),
-        mock.patch("subprocess.run", return_value=completed_process) as mock_run,
+        mock.patch(
+            "subprocess.run",
+            side_effect=[sbatch_process, download_process, upload_process],
+        ) as mock_run,
+        mock.patch("tempfile.mkdtemp", return_value=str(download_dir)),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._submit_job.pathlib.Path.mkdir"),
         caplog.at_level(logging.INFO, logger="dandi_compute_code.aind_ephys_pipeline._submit_job"),
     ):
         submit_job(script_file_path=relative_script_file_path)
 
     log_messages = [record.message for record in caplog.records]
-    assert log_messages == [
-        f"Submitting sbatch script: {absolute_script_file_path}",
-        "sbatch return code: 0\nstdout: Submitted batch job 123\n\nstderr: ",
-    ]
-    mock_run.assert_called_once_with(
+    assert log_messages[0] == f"Submitting sbatch script: {absolute_script_file_path}"
+    assert log_messages[1] == "sbatch returned code: 0\nstdout: Submitted batch job 123\n\nstderr: "
+    assert mock_run.call_args_list[0] == mock.call(
         ["sbatch", str(absolute_script_file_path)],
         capture_output=True,
         text=True,
@@ -114,6 +137,6 @@ def test_submit_job_raises_with_relayed_streams_on_nonzero_exit(
     log_messages = [record.message for record in caplog.records]
     assert log_messages == [
         f"Submitting sbatch script: {script_file_path}",
-        f"sbatch return code: 1\nstdout: {stdout}\nstderr: {stderr}",
+        f"sbatch returned code: 1\nstdout: {stdout}\nstderr: {stderr}",
     ]
     assert str(exc_info.value) == "sbatch submission failed - please check the logs to see more details."

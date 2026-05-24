@@ -153,8 +153,152 @@ def test_submit_next_raised_when_script_missing(tmp_path: pathlib.Path) -> None:
     # Deliberately do NOT create the attempt directory / submit.sh
 
     with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
-        with pytest.raises(FileNotFoundError, match="Submit script not found:"):
+        with pytest.raises(FileNotFoundError, match="Submit script not found in either location:"):
             _submit_next(queue_directory=queue_dir, datalad_directory=dandiset_dir, dandiset_directory=dandiset_dir)
+
+
+@pytest.mark.ai_generated
+def test_submit_next_submits_script_from_dandiset_when_absent_in_datalad(tmp_path: pathlib.Path) -> None:
+    """_submit_next falls back to dandiset submit.sh when datalad path is absent."""
+    queue_dir = _make_queue_dir(tmp_path)
+    datalad_dir = tmp_path / "datalad"
+    datalad_dir.mkdir()
+    dandiset_dir = tmp_path / "dandiset"
+
+    entry = _make_state_entry(dandiset_id="000001", pipeline="test", version="v1.0", params="default")
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
+
+    expected_attempt_dir = _make_attempt_dir_with_script(
+        dandiset_dir,
+        dandiset_id="000001",
+        subject="mouse01",
+        pipeline="test",
+        version="v1.0",
+        params="default",
+        config="abc123",
+        attempt=1,
+    )
+
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
+        result = _submit_next(
+            queue_directory=queue_dir,
+            datalad_directory=datalad_dir,
+            dandiset_directory=dandiset_dir,
+        )
+
+    assert result is True
+    mock_submit.assert_called_once_with(script_file_path=expected_attempt_dir / "code" / "submit.sh")
+    assert (expected_attempt_dir / "code" / "submitted").exists()
+
+
+@pytest.mark.ai_generated
+def test_submit_next_writes_marker_next_to_submitted_script_when_dandiset_attempt_is_missing(
+    tmp_path: pathlib.Path,
+) -> None:
+    """_submit_next writes code/submitted beside the script used for submission."""
+    queue_dir = _make_queue_dir(tmp_path)
+    datalad_dir = tmp_path / "datalad"
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+
+    entry = _make_state_entry(
+        dandiset_id="001849",
+        subject="test",
+        pipeline="aind+ephys",
+        version="v1.1.1+b268fd2+f37df9f",
+        params="4af6a25",
+        config="0d4bf36_date-2026+05+24",
+        attempt=2,
+    )
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
+    datalad_attempt_dir = _make_attempt_dir_with_script(
+        datalad_dir,
+        dandiset_id="001849",
+        subject="test",
+        pipeline="aind+ephys",
+        version="v1.1.1+b268fd2+f37df9f",
+        params="4af6a25",
+        config="0d4bf36_date-2026+05+24",
+        attempt=2,
+    )
+
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
+        submitted = _submit_next(
+            queue_directory=queue_dir,
+            datalad_directory=datalad_dir,
+            dandiset_directory=dandiset_dir,
+        )
+
+    marker_in_datalad = (
+        datalad_dir
+        / "derivatives"
+        / "dandiset-001849"
+        / "sub-test"
+        / "pipeline-aind+ephys"
+        / "version-v1.1.1+b268fd2+f37df9f_params-4af6a25_config-0d4bf36_date-2026+05+24_attempt-2"
+        / "code"
+        / "submitted"
+    )
+    marker_in_dandiset = (
+        dandiset_dir
+        / "derivatives"
+        / "dandiset-001849"
+        / "sub-test"
+        / "pipeline-aind+ephys"
+        / "version-v1.1.1+b268fd2+f37df9f_params-4af6a25_config-0d4bf36_date-2026+05+24_attempt-2"
+        / "code"
+        / "submitted"
+    )
+    assert submitted is True
+    mock_submit.assert_called_once_with(script_file_path=datalad_attempt_dir / "code" / "submit.sh")
+    assert marker_in_datalad.exists()
+    assert marker_in_dandiset.exists() is False
+
+
+@pytest.mark.ai_generated
+def test_submit_next_writes_submitted_marker_using_dandi_path_without_nwb_suffix(tmp_path: pathlib.Path) -> None:
+    """_submit_next resolves marker and submit paths under dandi_path with the .nwb suffix removed."""
+    queue_dir = _make_queue_dir(tmp_path)
+    datalad_dir = tmp_path / "datalad"
+    dandiset_dir = tmp_path / "dandiset"
+    entry = _make_state_entry(
+        dandiset_id="001849",
+        dandi_path="sub-test/sourcedata/aind-sample.nwb",
+        pipeline="aind+ephys",
+        version="v1.1.1+b268fd2+f37df9f",
+        params="4af6a25",
+        config="0d4bf36_date-2026+05+24",
+        attempt=2,
+    )
+    _write_jsonl(queue_dir / "state.jsonl", [entry])
+    attempt_dir = (
+        datalad_dir
+        / "derivatives"
+        / "dandiset-001849"
+        / "sub-test"
+        / "sourcedata"
+        / "aind-sample"
+        / "pipeline-aind+ephys"
+        / "version-v1.1.1+b268fd2+f37df9f_params-4af6a25_config-0d4bf36_date-2026+05+24_attempt-2"
+    )
+    (attempt_dir / "code").mkdir(parents=True)
+    script_file_path = attempt_dir / "code" / "submit.sh"
+    script_file_path.write_text("#!/bin/bash\necho hello\n")
+
+    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
+        submitted = _submit_next(
+            queue_directory=queue_dir,
+            datalad_directory=datalad_dir,
+            dandiset_directory=dandiset_dir,
+        )
+
+    marker_dir_in_dandiset = (
+        dandiset_dir / "derivatives" / "dandiset-001849" / "sub-test" / "sourcedata" / "aind-sample"
+    )
+    assert submitted is True
+    mock_submit.assert_called_once_with(script_file_path=script_file_path)
+    assert (attempt_dir / "code" / "submitted").exists()
+    assert marker_dir_in_dandiset.exists() is False
 
 
 @pytest.mark.ai_generated
