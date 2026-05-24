@@ -116,5 +116,4 @@ def test_submit_job_raises_with_relayed_streams_on_nonzero_exit(
         f"Submitting sbatch script: {script_file_path}",
         f"sbatch return code: 1\nstdout: {stdout}\nstderr: {stderr}",
     ]
-    assert f"stdout: {stdout}" in str(exc_info.value)
-    assert f"stderr: {stderr}" in str(exc_info.value)
+    assert str(exc_info.value) == "sbatch submission failed - please check the logs to see more details."
