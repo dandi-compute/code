@@ -64,8 +64,7 @@ def submit_job(script_file_path: pathlib.Path) -> None:
         cwd=download_dir,
     )
     _log.info(
-        f"DANDI download returned code: {result.returncode}\n"
-        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        f"DANDI download returned code: {result.returncode}\n" f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )
     if result.returncode != 0:
         message = "DANDI download failed - please check the logs to see more details."
