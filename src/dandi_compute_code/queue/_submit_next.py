@@ -2,7 +2,6 @@ import datetime
 import logging
 import pathlib
 
-from ._attempt_dir_candidates import _attempt_dir_candidates
 from ._read_state_entries import _read_state_entries
 from ._resolve_attempt_dir import _resolve_attempt_dir
 from ._resolve_unsubmitted_attempt_dir import _resolve_unsubmitted_attempt_dir
@@ -89,12 +88,7 @@ def _submit_next(
             raise FileNotFoundError(message)
         submit_job(script_file_path=script_file_to_submit)
 
-        # Actual submission marks must go to DANDI backend first
-        marker_attempt_dir = attempt_dir_in_dandiset
-        if not (marker_attempt_dir / "code").exists():
-            flat_attempt_dir, _ = _attempt_dir_candidates(base_dir=dandiset_directory, entry=entry)
-            marker_attempt_dir = flat_attempt_dir
-        submitted_marker = marker_attempt_dir / "code" / "submitted"
+        submitted_marker = script_file_to_submit.parent / "submitted"
         if not submitted_marker.parent.exists():
             message = f"Creating '{submitted_marker.parent.absolute()}'"
             _log.info(message)

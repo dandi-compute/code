@@ -192,8 +192,10 @@ def test_submit_next_submits_script_from_dandiset_when_absent_in_datalad(tmp_pat
 
 
 @pytest.mark.ai_generated
-def test_submit_next_creates_flattened_marker_path_when_dandiset_attempt_is_missing(tmp_path: pathlib.Path) -> None:
-    """_submit_next creates code/submitted in flattened layout when creating a new dandiset-side marker path."""
+def test_submit_next_writes_marker_next_to_submitted_script_when_dandiset_attempt_is_missing(
+    tmp_path: pathlib.Path,
+) -> None:
+    """_submit_next writes code/submitted beside the script used for submission."""
     queue_dir = _make_queue_dir(tmp_path)
     datalad_dir = tmp_path / "datalad"
     dandiset_dir = tmp_path / "dandiset"
@@ -227,7 +229,17 @@ def test_submit_next_creates_flattened_marker_path_when_dandiset_attempt_is_miss
             dandiset_directory=dandiset_dir,
         )
 
-    flattened_marker = (
+    marker_in_datalad = (
+        datalad_dir
+        / "derivatives"
+        / "dandiset-001849"
+        / "sub-test"
+        / "pipeline-aind+ephys"
+        / "version-v1.1.1+b268fd2+f37df9f_params-4af6a25_config-0d4bf36_date-2026+05+24_attempt-2"
+        / "code"
+        / "submitted"
+    )
+    marker_in_dandiset = (
         dandiset_dir
         / "derivatives"
         / "dandiset-001849"
@@ -237,27 +249,17 @@ def test_submit_next_creates_flattened_marker_path_when_dandiset_attempt_is_miss
         / "code"
         / "submitted"
     )
-    nested_marker = (
-        dandiset_dir
-        / "derivatives"
-        / "dandiset-001849"
-        / "sub-test"
-        / "pipeline-aind+ephys"
-        / "version-v1.1.1+b268fd2+f37df9f"
-        / "params-4af6a25_config-0d4bf36_date-2026+05+24_attempt-2"
-        / "code"
-        / "submitted"
-    )
     assert submitted is True
     mock_submit.assert_called_once_with(script_file_path=datalad_attempt_dir / "code" / "submit.sh")
-    assert flattened_marker.exists()
-    assert nested_marker.exists() is False
+    assert marker_in_datalad.exists()
+    assert marker_in_dandiset.exists() is False
 
 
 @pytest.mark.ai_generated
 def test_submit_next_writes_submitted_marker_using_dandi_path_without_nwb_suffix(tmp_path: pathlib.Path) -> None:
     """_submit_next resolves marker and submit paths under dandi_path with the .nwb suffix removed."""
     queue_dir = _make_queue_dir(tmp_path)
+    datalad_dir = tmp_path / "datalad"
     dandiset_dir = tmp_path / "dandiset"
     entry = _make_state_entry(
         dandiset_id="001849",
@@ -270,7 +272,7 @@ def test_submit_next_writes_submitted_marker_using_dandi_path_without_nwb_suffix
     )
     _write_jsonl(queue_dir / "state.jsonl", [entry])
     attempt_dir = (
-        dandiset_dir
+        datalad_dir
         / "derivatives"
         / "dandiset-001849"
         / "sub-test"
@@ -286,17 +288,17 @@ def test_submit_next_writes_submitted_marker_using_dandi_path_without_nwb_suffix
     with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
         submitted = _submit_next(
             queue_directory=queue_dir,
-            datalad_directory=dandiset_dir,
+            datalad_directory=datalad_dir,
             dandiset_directory=dandiset_dir,
         )
 
-    legacy_dir_with_nwb_suffix = (
-        dandiset_dir / "derivatives" / "dandiset-001849" / "sub-test" / "sourcedata" / "aind-sample.nwb"
+    marker_dir_in_dandiset = (
+        dandiset_dir / "derivatives" / "dandiset-001849" / "sub-test" / "sourcedata" / "aind-sample"
     )
     assert submitted is True
     mock_submit.assert_called_once_with(script_file_path=script_file_path)
     assert (attempt_dir / "code" / "submitted").exists()
-    assert legacy_dir_with_nwb_suffix.exists() is False
+    assert marker_dir_in_dandiset.exists() is False
 
 
 @pytest.mark.ai_generated
