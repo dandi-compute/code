@@ -32,6 +32,10 @@ autodoc_member_order = "bysource"
 napoleon_google_docstring = True
 napoleon_numpy_docstring = True
 
+# Mimic black style for arguments in API ref docstrings
+python_maximum_signature_line_length = 88
+python_trailing_comma_in_multi_line_signatures = True
+
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
 }
