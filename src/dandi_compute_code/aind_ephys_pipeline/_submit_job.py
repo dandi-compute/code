@@ -23,10 +23,7 @@ def submit_job(script_file_path: pathlib.Path) -> None:
         capture_output=True,
         text=True,
     )
-    result_message = (
-        f"sbatch return code: {result.returncode}\n" f"stdout: {result.stdout}\n" f"stderr: {result.stderr}"
-    )
-    _log.info(result_message)
+    _log.info(f"sbatch return code: {result.returncode}\n" f"stdout: {result.stdout}\n" f"stderr: {result.stderr}")
     if result.returncode != 0:
         message = f"command: {command}\n{result_message}"
         raise RuntimeError(message)
