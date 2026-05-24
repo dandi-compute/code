@@ -30,21 +30,15 @@ def process_queue(
     *queue_directory*. If the lock is already held, the invocation returns
     without submitting jobs.
 
-    Parameters
-    ----------
-    queue_directory : pathlib.Path
-        Path to the queue root directory.
-    dandiset_directory : pathlib.Path
-        Path to a local clone of the 001697 dandiset repository.  Used to
+    :param queue_directory: Path to the queue root directory.
+    :type queue_directory: pathlib.Path
+    :param dandiset_directory: Path to a local clone of the 001697 dandiset repository.  Used to
         locate prepared submission scripts and to count failure directories
         for ``max_fail_per_dandiset`` enforcement.
-    datalad_directory : pathlib.Path
-        Path to the DataLad-backed Dandiset used to resolve attempt directories.
-
-    Raises
-    ------
-    FileNotFoundError
-        If ``state.jsonl`` is not found in *queue_directory*.
+    :type dandiset_directory: pathlib.Path
+    :param datalad_directory: Path to the DataLad-backed Dandiset used to resolve attempt directories.
+    :type datalad_directory: pathlib.Path
+    :raises FileNotFoundError: If ``state.jsonl`` is not found in *queue_directory*.
     """
     lock_file = queue_directory / "process_queue.lock"
     lock_file.touch(exist_ok=True)

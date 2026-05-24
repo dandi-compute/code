@@ -40,26 +40,24 @@ def prepare_queue(
     version, and source Dandiset.  Run :func:`refresh_queue_state` beforehand to
     ensure ``state.jsonl`` is up to date.
 
-    Parameters
-    ----------
-    queue_directory : pathlib.Path
-        Path to the queue root directory.
-    pipeline_directory : pathlib.Path, optional
-        Local path to the AIND pipeline repository.  Passed directly to
+    :param queue_directory: Path to the queue root directory.
+    :type queue_directory: pathlib.Path
+    :param pipeline_directory: Local path to the AIND pipeline repository.  Passed directly to
         :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job`.
-    config_key : str
-        Key for a registered job configuration. Passed directly to
+    :type pipeline_directory: pathlib.Path, optional
+    :param config_key: Key for a registered job configuration. Passed directly to
         :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job`.
-    content_ids : list of str, optional
-        Explicit list of content IDs to prepare.  When provided, the qualifying
+    :type config_key: str
+    :param content_ids: Explicit list of content IDs to prepare.  When provided, the qualifying
         content IDs list is not fetched from the network and these IDs are used
         directly instead.  Useful for targeted runs such as testing with one or
         more known content IDs.
-    limit : int, optional
-        If provided, stop after preparing *limit* assets in total (across all
+    :type content_ids: list of str, optional
+    :param limit: If provided, stop after preparing *limit* assets in total (across all
         pipeline/version/params combinations).  When qualifying IDs are fetched
         automatically, they are randomized in round-robin order across source
         Dandisets before this limit is applied. Useful for testing.
+    :type limit: int, optional
     """
     queue_config = _load_queue_config(queue_directory=queue_directory)
 

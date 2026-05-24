@@ -17,20 +17,18 @@ def _lookup_asset_size_bytes(
 ) -> tuple[int | None, str | None]:
     """Lookup asset size and resolved source asset path from DANDI API.
 
-    Parameters
-    ----------
-    api_token : str
-        DANDI API token used for authenticated requests.
-    dandiset_id : str
-        DANDI dandiset identifier.
-    dandi_path : str
-        Source path value from local scan, used only in mapped/scanned dandiset mismatch warnings.
-    content_id : str
-        Blob/content identifier extracted from ``NWB_FILE_PATH`` in ``code/submit.sh``.
-
-    Returns a tuple ``(asset_size_bytes, resolved_dandi_path)``.
-    The first value is ``int | None`` and the second value is ``str | None``.
-    Either tuple value can be ``None`` when lookup conditions are not met.
+    :param api_token: DANDI API token used for authenticated requests.
+    :type api_token: str
+    :param dandiset_id: DANDI dandiset identifier.
+    :type dandiset_id: str
+    :param dandi_path: Source path value from local scan, used only in mapped/scanned dandiset mismatch warnings.
+    :type dandi_path: str
+    :param content_id: Blob/content identifier extracted from ``NWB_FILE_PATH`` in ``code/submit.sh``.
+    :type content_id: str
+    :returns: A tuple ``(asset_size_bytes, resolved_dandi_path)``.
+        The first value is ``int | None`` and the second value is ``str | None``.
+        Either tuple value can be ``None`` when lookup conditions are not met.
+    :rtype: tuple[int | None, str | None]
     """
     content_id_to_unique_dandiset_path = _load_content_id_to_unique_dandiset_path()
     if content_id not in content_id_to_unique_dandiset_path:

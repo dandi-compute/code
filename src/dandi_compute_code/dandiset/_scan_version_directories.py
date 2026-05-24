@@ -11,19 +11,14 @@ def scan_version_directories(dandiset_directory: pathlib.Path, version: str) -> 
     ``version-v1.0.0+fixes+20abeb6``).  Directories not inside a
     ``dandiset-*`` subtree are ignored.
 
-    Parameters
-    ----------
-    dandiset_directory : pathlib.Path
-        Path to a local clone of the dandiset repository.
-    version : str
-        The base version string to search for (e.g. ``"v1.0.0"``).
+    :param dandiset_directory: Path to a local clone of the dandiset repository.
+    :type dandiset_directory: pathlib.Path
+    :param version: The base version string to search for (e.g. ``"v1.0.0"``).
         Matches the exact directory ``version-v1.0.0`` as well as any
         hash-suffixed variant such as ``version-v1.0.0+fixes+20abeb6``.
-
-    Returns
-    -------
-    list[pathlib.Path]
-        Sorted list of matching version directory paths.
+    :type version: str
+    :returns: Sorted list of matching version directory paths.
+    :rtype: list[pathlib.Path]
     """
     derivatives = dandiset_directory / "derivatives"
     if not derivatives.is_dir():

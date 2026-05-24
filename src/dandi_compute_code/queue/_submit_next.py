@@ -1,4 +1,3 @@
-import datetime
 import logging
 import pathlib
 
@@ -29,23 +28,18 @@ def _submit_next(
     ``code/submitted`` marker are submitted, and each marker is created
     immediately after submission succeeds.
 
-    Parameters
-    ----------
-    queue_directory : pathlib.Path
-        Path to the queue root directory.
-    datalad_directory : pathlib.Path
-        Path to the DataLad-backed work tree used to resolve unsubmitted
+    :param queue_directory: Path to the queue root directory.
+    :type queue_directory: pathlib.Path
+    :param datalad_directory: Path to the DataLad-backed work tree used to resolve unsubmitted
         attempt directories.
-    dandiset_directory : pathlib.Path
-        Path to a local clone of the 001697 dandiset repository.  Used to
+    :type datalad_directory: pathlib.Path
+    :param dandiset_directory: Path to a local clone of the 001697 dandiset repository.  Used to
         write submission marker files after backend submission.
-    max_submissions : int, optional
-        Maximum number of pending jobs to submit from the ordered queue.
-
-    Returns
-    -------
-    bool
-        True if at least one job was submitted, False otherwise.
+    :type dandiset_directory: pathlib.Path
+    :param max_submissions: Maximum number of pending jobs to submit from the ordered queue.
+    :type max_submissions: int, optional
+    :returns: True if at least one job was submitted, False otherwise.
+    :rtype: bool
     """
     if max_submissions < 1:
         return False

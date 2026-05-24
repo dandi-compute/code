@@ -27,19 +27,14 @@ def _count_dandiset_failures(
     * its immediate parent is ``pipeline-*`` and the attempt directory name starts
       with ``version-{version}_`` (current flat layout).
 
-    Parameters
-    ----------
-    dandiset_directory : pathlib.Path
-        Path to the local clone of the 001697 dandiset repository.
-    version : str
-        The BIDS-encoded pipeline version string as stored in the directory name
+    :param dandiset_directory: Path to the local clone of the 001697 dandiset repository.
+    :type dandiset_directory: pathlib.Path
+    :param version: The BIDS-encoded pipeline version string as stored in the directory name
         (e.g., ``'v1.0.0+fixes+47bd492'``).
-
-    Returns
-    -------
-    int
-        Total number of failed attempt directories across all source dandisets for
+    :type version: str
+    :returns: Total number of failed attempt directories across all source dandisets for
         the given *version*.
+    :rtype: int
     """
     derivatives = dandiset_directory / "derivatives"
     if not derivatives.is_dir():

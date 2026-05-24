@@ -6,20 +6,15 @@ def order_queue(*, state_entries: list[dict], queue_config: dict, limit: int | N
     """
     Build the priority-ordered waiting list from in-memory state entries.
 
-    Parameters
-    ----------
-    state_entries : list[dict]
-        Records produced by :func:`~dandi_compute_code.dandiset.scan_dandiset_directory`
+    :param state_entries: Records produced by :func:`~dandi_compute_code.dandiset.scan_dandiset_directory`
         (or loaded from a ``state.jsonl`` file).
-    queue_config : dict
-        Parsed contents of ``queue_config.json``.
-    limit : int, optional
-        If provided, truncate output to the first *limit* entries.
-
-    Returns
-    -------
-    list[dict]
-        Ordered queue entries.
+    :type state_entries: list[dict]
+    :param queue_config: Parsed contents of ``queue_config.json``.
+    :type queue_config: dict
+    :param limit: If provided, truncate output to the first *limit* entries.
+    :type limit: int, optional
+    :returns: Ordered queue entries.
+    :rtype: list[dict]
     """
     ordered = _build_processing_order(state_entries=state_entries, queue_config=queue_config)
     if limit is not None:

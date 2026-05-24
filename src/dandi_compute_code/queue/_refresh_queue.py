@@ -10,17 +10,11 @@ def refresh_queue_state(*, queue_directory: pathlib.Path, dandiset_directory: pa
     """
     Scan *dandiset_directory* and regenerate ``state.jsonl``.
 
-    Parameters
-    ----------
-    queue_directory : pathlib.Path
-        Path to the queue root directory.
-    dandiset_directory : pathlib.Path
-        Path to a local dandiset clone used to rewrite ``state.jsonl``.
-
-    Raises
-    ------
-    FileNotFoundError
-        If ``queue_config.json`` is not found in *queue_directory*.
+    :param queue_directory: Path to the queue root directory.
+    :type queue_directory: pathlib.Path
+    :param dandiset_directory: Path to a local dandiset clone used to rewrite ``state.jsonl``.
+    :type dandiset_directory: pathlib.Path
+    :raises FileNotFoundError: If ``queue_config.json`` is not found in *queue_directory*.
     """
     assert (
         "DANDI_API_KEY" in os.environ and os.environ["DANDI_API_KEY"]

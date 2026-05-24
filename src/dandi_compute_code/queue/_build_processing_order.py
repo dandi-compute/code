@@ -20,13 +20,10 @@ def _build_processing_order(
     parameterizations of a dandiset for a given version are queued before
     moving on to the next dandiset or version.
 
-    Parameters
-    ----------
-    state_entries : list[dict]
-        Records produced by :func:`~dandi_compute_code.dandiset.scan_dandiset_directory`
+    :param state_entries: Records produced by :func:`~dandi_compute_code.dandiset.scan_dandiset_directory`
         (or loaded from a ``state.jsonl`` file).
-    queue_config : dict
-        Parsed contents of ``queue_config.json``.  Expected shape::
+    :type state_entries: list[dict]
+    :param queue_config: Parsed contents of ``queue_config.json``.  Expected shape::
 
             {
                 "pipelines": {
@@ -36,11 +33,9 @@ def _build_processing_order(
                     }
                 }
             }
-
-    Returns
-    -------
-    list[dict]
-        Ordered list of pending entries ready to be submitted.
+    :type queue_config: dict
+    :returns: Ordered list of pending entries ready to be submitted.
+    :rtype: list[dict]
     """
     pending = [e for e in state_entries if e.get("has_code") and not e.get("has_output") and not e.get("has_logs")]
 

@@ -17,17 +17,11 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
     of depth.  Each attempt directory is parsed into a flat dict containing all
     BIDS-encoded entities together with boolean state flags.
 
-    Parameters
-    ----------
-    dandiset_directory : pathlib.Path
-        Path to a local clone of the dandiset repository (e.g. the 001697
+    :param dandiset_directory: Path to a local clone of the dandiset repository (e.g. the 001697
         dandiset).  The function looks for a ``derivatives/`` subdirectory
         inside this path.
-
-    Returns
-    -------
-    list[dict]
-        A list of records, one per attempt directory, sorted by
+    :type dandiset_directory: pathlib.Path
+    :returns: A list of records, one per attempt directory, sorted by
         ``(dandiset_id, dandi_path, pipeline, version, params, config,
         attempt)``.  Each record contains:
 
@@ -49,11 +43,8 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
           stat (last metadata-change time on Unix/Linux; creation time on Windows/macOS)
         * ``job_completion_time`` – ``dateModified`` ISO 8601 string from DANDI metadata for the first
           asset in the ``logs/`` subdirectory; ``null`` when no logs are present or the lookup fails
-
-    Raises
-    ------
-    AssertionError
-        If ``DANDI_API_KEY`` is not set before scanning.
+    :rtype: list[dict]
+    :raises AssertionError: If ``DANDI_API_KEY`` is not set before scanning.
     """
     assert (
         "DANDI_API_KEY" in os.environ and os.environ["DANDI_API_KEY"]

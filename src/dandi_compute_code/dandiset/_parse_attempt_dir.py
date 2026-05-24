@@ -20,16 +20,11 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
         <dandi-path>/pipeline-{pipeline}/version-{version}/
             params-{params}_config-{config}_attempt-{attempt}/
 
-    Parameters
-    ----------
-    attempt_dir : pathlib.Path
-        The attempt directory (name must match ``params-*_config-*_attempt-*``).
-
-    Returns
-    -------
-    dict or None
-        A flat dict with all entities and state flags, or ``None`` if the path
+    :param attempt_dir: The attempt directory (name must match ``params-*_config-*_attempt-*``).
+    :type attempt_dir: pathlib.Path
+    :returns: A flat dict with all entities and state flags, or ``None`` if the path
         does not match the expected structure.
+    :rtype: dict or None
     """
     attempt_name = attempt_dir.name
     attempt_match = _ATTEMPT_DIR_RE.fullmatch(attempt_name)

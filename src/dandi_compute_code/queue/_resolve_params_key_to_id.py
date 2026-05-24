@@ -18,19 +18,14 @@ def _resolve_params_key_to_id(pipeline: str, params_key: str) -> str:
     returned unchanged so that callers that already store raw hash IDs continue
     to work.
 
-    Parameters
-    ----------
-    pipeline : str
-        The pipeline name as recorded in the state entry (e.g. ``"aind+ephys"``).
-    params_key : str
-        The human-readable key from ``params_priority`` in ``queue_config.json``
+    :param pipeline: The pipeline name as recorded in the state entry (e.g. ``"aind+ephys"``).
+    :type pipeline: str
+    :param params_key: The human-readable key from ``params_priority`` in ``queue_config.json``
         (e.g. ``"default"``), or a raw hash ID.
-
-    Returns
-    -------
-    str
-        The 7-character hash ID corresponding to *params_key*, or *params_key*
+    :type params_key: str
+    :returns: The 7-character hash ID corresponding to *params_key*, or *params_key*
         itself if no mapping is found.
+    :rtype: str
     """
     if pipeline == "aind+ephys":
         entry = _AIND_EPHYS_PARAMS_REGISTRY.get(params_key)
