@@ -49,7 +49,7 @@ html_theme_options = {
     "use_edit_page_button": False,
     "show_toc_level": 2,
     "navigation_with_keys": False,
-    "header_links_before_dropdown": 6,
+    "header_links_before_dropdown": 0,
 }
 
 html_static_path = ["_static"]
