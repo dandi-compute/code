@@ -1,5 +1,15 @@
 # ruff: noqa: F821
-from . import _scan_dandiset_test_cases as _support
+import importlib.util as _importlib_util
+import pathlib as _pathlib
+
+_spec = _importlib_util.spec_from_file_location(
+    "_scan_dandiset_test_cases",
+    _pathlib.Path(__file__).with_name("_scan_dandiset_test_cases.py"),
+)
+assert _spec is not None
+assert _spec.loader is not None
+_support = _importlib_util.module_from_spec(_spec)
+_spec.loader.exec_module(_support)
 
 globals().update(
     {
