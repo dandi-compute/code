@@ -86,12 +86,6 @@ def _submit_next(
                 "Submit script not found in either location: " f"{script_file_path} or {script_file_path_in_dandiset}"
             )
             raise FileNotFoundError(message)
-        submit_job(script_file_path=script_file_to_submit)
-
-        submitted_marker = script_file_to_submit.parent / "submitted"
-        if not submitted_marker.parent.exists():
-            message = f"Creating '{submitted_marker.parent.absolute()}'"
-            _log.info(message)
-            submitted_marker.parent.mkdir(parents=True, exist_ok=True)
-        submitted_marker.write_text(datetime.datetime.now().isoformat())
+            
+        submit_job(script_file_path=script_file_path)
     return True
