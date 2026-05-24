@@ -9,6 +9,7 @@ globals().update(
     }
 )
 
+
 @pytest.mark.ai_generated
 def test_aggregate_queue_statistics_writes_queue_stats_json(tmp_path: pathlib.Path) -> None:
     """aggregate_queue_statistics writes queue_stats.json with byte and timeline aggregates."""

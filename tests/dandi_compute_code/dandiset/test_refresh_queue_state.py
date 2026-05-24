@@ -9,6 +9,7 @@ globals().update(
     }
 )
 
+
 @pytest.mark.ai_generated
 def test_refresh_queue_state_with_dandiset_directory_creates_valid_files(tmp_path: pathlib.Path) -> None:
     """refresh_queue_state writes state.jsonl when scanning dandiset_directory."""

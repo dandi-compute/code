@@ -9,6 +9,7 @@ globals().update(
     }
 )
 
+
 @pytest.mark.ai_generated
 def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> None:
     """dandicompute queue refresh --dandiset scans and writes state.jsonl."""

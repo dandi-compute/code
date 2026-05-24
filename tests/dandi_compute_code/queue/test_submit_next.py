@@ -9,6 +9,7 @@ globals().update(
     }
 )
 
+
 @pytest.mark.ai_generated
 def test_submit_next_raises_when_state_file_is_absent(tmp_path: pathlib.Path) -> None:
     """_submit_next raises when state.jsonl is absent."""

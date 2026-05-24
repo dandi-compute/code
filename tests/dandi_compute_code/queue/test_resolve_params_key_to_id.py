@@ -9,6 +9,7 @@ globals().update(
     }
 )
 
+
 @pytest.mark.ai_generated
 def test_resolve_params_key_to_id_aind_ephys_default() -> None:
     """_resolve_params_key_to_id returns the 7-char hash for a known aind+ephys key."""

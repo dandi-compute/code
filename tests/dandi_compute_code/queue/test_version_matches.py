@@ -9,6 +9,7 @@ globals().update(
     }
 )
 
+
 @pytest.mark.ai_generated
 def test_version_matches_exact() -> None:
     """_version_matches returns True for exact match."""

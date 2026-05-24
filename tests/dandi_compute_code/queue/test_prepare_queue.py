@@ -9,6 +9,7 @@ globals().update(
     }
 )
 
+
 @pytest.mark.ai_generated
 def test_prepare_queue_raises_when_queue_config_fails_linkml_validation(tmp_path: pathlib.Path) -> None:
     """prepare_queue raises when queue_config violates LinkML constraints."""

@@ -9,6 +9,7 @@ globals().update(
     }
 )
 
+
 @pytest.mark.ai_generated
 def test_order_queue_raises_when_queue_config_missing(tmp_path: pathlib.Path) -> None:
     """refresh_queue_state raises FileNotFoundError when queue_config.json is absent."""

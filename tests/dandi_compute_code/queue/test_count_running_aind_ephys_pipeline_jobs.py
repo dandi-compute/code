@@ -9,6 +9,7 @@ globals().update(
     }
 )
 
+
 @pytest.mark.ai_generated
 def test_count_running_aind_ephys_pipeline_jobs_counts_exact_name_matches() -> None:
     """Counts only exact AIND-Ephys-Pipeline job names from squeue output."""

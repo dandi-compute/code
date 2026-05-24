@@ -9,6 +9,7 @@ globals().update(
     }
 )
 
+
 @pytest.mark.ai_generated
 def test_load_queue_config_validates_issue_example_schema(tmp_path: pathlib.Path) -> None:
     """Issue-provided queue config validates against the LinkML schema."""

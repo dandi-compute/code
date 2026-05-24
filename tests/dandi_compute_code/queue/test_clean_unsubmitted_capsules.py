@@ -9,6 +9,7 @@ globals().update(
     }
 )
 
+
 @pytest.mark.ai_generated
 def test_clean_unsubmitted_capsules_raises_without_dandi_api_key(tmp_path: pathlib.Path) -> None:
     """clean_unsubmitted_capsules raises RuntimeError when DANDI_API_KEY is not set."""

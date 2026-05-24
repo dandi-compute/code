@@ -9,6 +9,7 @@ globals().update(
     }
 )
 
+
 @pytest.mark.ai_generated
 def test_scan_empty_when_no_derivatives(tmp_path: pathlib.Path) -> None:
     """Returns an empty list when there is no derivatives/ directory."""

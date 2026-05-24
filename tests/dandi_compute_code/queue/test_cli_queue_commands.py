@@ -9,6 +9,7 @@ globals().update(
     }
 )
 
+
 @pytest.mark.ai_generated
 def test_cli_prepare_test_calls_prepare_queue_with_test_content_id(tmp_path: pathlib.Path) -> None:
     """dandicompute prepare aind --test calls prepare_queue with the known test content ID."""

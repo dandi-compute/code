@@ -9,6 +9,7 @@ globals().update(
     }
 )
 
+
 @pytest.mark.ai_generated
 def test_build_processing_order_empty_state() -> None:
     """_build_processing_order returns an empty list when state_entries is empty."""
