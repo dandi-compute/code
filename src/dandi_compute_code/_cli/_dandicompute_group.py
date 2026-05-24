@@ -4,8 +4,8 @@ import pathlib
 import click
 
 from ._clean_work_directory import clean_work_directory
-from ._configure_logging import _configure_logging
 from ._styled_echo import _styled_echo
+from .._configure_logging import _configure_logging
 from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
 from ..dandiset import (
     delete_dandiset_version,
