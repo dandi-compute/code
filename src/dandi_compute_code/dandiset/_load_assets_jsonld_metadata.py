@@ -21,7 +21,7 @@ def _load_assets_jsonld_metadata() -> tuple[dict[str, dict[str, object]], dict[s
     content_id_to_asset: dict[str, dict[str, object]] = {}
     path_to_date_modified: dict[str, str] = {}
     try:
-        with urllib.request.urlopen(url=_ASSETS_JSONLD_URL) as response:
+        with urllib.request.urlopen(url=_ASSETS_JSONLD_URL, timeout=30) as response:
             for raw_line in response:
                 line = raw_line.decode("utf-8").strip()
                 if not line:
@@ -41,7 +41,7 @@ def _load_assets_jsonld_metadata() -> tuple[dict[str, dict[str, object]], dict[s
                     continue
                 content_id = next(
                     (
-                        content_url.rsplit("/", 1)[-1]
+                        content_url.rsplit("/", 1)[-1].split("?", 1)[0]
                         for content_url in content_urls
                         if isinstance(content_url, str) and "/blobs/" in content_url
                     ),

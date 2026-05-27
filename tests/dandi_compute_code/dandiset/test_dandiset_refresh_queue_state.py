@@ -73,7 +73,6 @@ def test_refresh_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathl
     """refresh_queue_state writes assets.jsonld-resolved source path in state.jsonl when lookup succeeds."""
     content_id = "0fbbca6a-0000-0000-0000-000000000001"
     asset_size_bytes = 1234
-    mapped_asset_path = "sub-mouse01/./sub-mouse01_ses-ses001_obj-raw.nwb"
     resolved_asset_path = "sub-mouse01/sub-mouse01_ses-ses001_obj-raw.nwb"
 
     _make_attempt_dir(

@@ -286,7 +286,7 @@ def test_scan_job_completion_time_is_none_with_warning_when_log_asset_not_found(
 ) -> None:
     """job_completion_time is None when no assets.jsonld entry matches the log path."""
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
-    attempt_dir = _make_attempt_dir(
+    _make_attempt_dir(
         tmp_path,
         "000001",
         "mouse01",
@@ -298,7 +298,6 @@ def test_scan_job_completion_time_is_none_with_warning_when_log_asset_not_found(
         content_id=content_id,
         with_logs=True,
     )
-    expected_log_path = (attempt_dir / "logs" / "nextflow.log").relative_to(tmp_path).as_posix()
 
     with mock.patch(
         "dandi_compute_code.dandiset._scan_dandiset_directory._load_assets_jsonld_metadata",
