@@ -13,7 +13,9 @@ def write_queue_state(*, queue_directory: pathlib.Path) -> None:
     Write ``state.jsonl`` from DANDI ``assets.jsonld`` metadata.
 
     Each state entry represents a source asset and starts in an unprepared state
-    (``has_code=False``, ``has_output=False``, ``has_logs=False``).
+    (``has_code=False``, ``has_output=False``, ``has_logs=False``). ``created_at``
+    prefers ``blobDateModified`` and falls back to ``dateModified`` when blob
+    metadata is unavailable.
     """
     state_file = queue_directory / "state.jsonl"
     content_id_to_asset, _path_to_date_modified = _load_assets_jsonld_metadata()

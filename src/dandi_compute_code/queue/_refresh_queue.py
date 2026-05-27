@@ -10,7 +10,8 @@ def refresh_queue_state(*, queue_directory: pathlib.Path, dandiset_directory: pa
 
     :param queue_directory: Path to the queue root directory.
     :type queue_directory: pathlib.Path
-    :param dandiset_directory: Unused legacy argument kept for API compatibility.
+    :param dandiset_directory: Unused legacy argument kept for API compatibility with existing
+        CLI wiring and call sites.
     :type dandiset_directory: pathlib.Path
     :raises FileNotFoundError: If ``queue_config.json`` is not found in *queue_directory*.
     """
