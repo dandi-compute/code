@@ -100,6 +100,27 @@ def _build_mapping_for_content_id(*, content_id: str, dandiset_id: str, asset_pa
     return {content_id: {dandiset_id: asset_path}}
 
 
+def _build_assets_metadata(
+    *,
+    content_id: str,
+    asset_path: str,
+    content_size: int | str | None = None,
+    blob_date_modified: str | None = None,
+    log_asset_path: str | None = None,
+    log_date_modified: str | None = None,
+) -> tuple[dict[str, dict[str, object]], dict[str, str]]:
+    """Build a minimal assets.jsonld-derived metadata payload for tests."""
+    source_asset: dict[str, object] = {"path": asset_path}
+    if content_size is not None:
+        source_asset["contentSize"] = content_size
+    if blob_date_modified is not None:
+        source_asset["blobDateModified"] = blob_date_modified
+    path_to_date_modified: dict[str, str] = {}
+    if log_asset_path is not None and log_date_modified is not None:
+        path_to_date_modified[log_asset_path] = log_date_modified
+    return {content_id: source_asset}, path_to_date_modified
+
+
 # ---------------------------------------------------------------------------
 # Tests for scan_dandiset_directory
 # ---------------------------------------------------------------------------
@@ -107,27 +128,10 @@ def _build_mapping_for_content_id(*, content_id: str, dandiset_id: str, asset_pa
 
 @pytest.fixture(autouse=True)
 def mock_dandi_api_asset_lookup() -> Iterator[None]:
-    """Prevent network calls during tests by defaulting DANDI lookup to no matches."""
-
-    class _EmptyDandiset:
-        def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
-            return iter(())
-
-    class _EmptyClient:
-        def get_dandiset(self, dandiset_id: str) -> _EmptyDandiset:
-            assert isinstance(dandiset_id, str) and dandiset_id
-            return _EmptyDandiset()
-
-    with (
-        mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
-        mock.patch(
-            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
-            return_value=_EmptyClient(),
-        ),
-        mock.patch(
-            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
-            return_value={},
-        ),
+    """Prevent network calls during tests by defaulting assets metadata lookup to no matches."""
+    with mock.patch(
+        "dandi_compute_code.dandiset._scan_dandiset_directory._load_assets_jsonld_metadata",
+        return_value=({}, {}),
     ):
         yield
 

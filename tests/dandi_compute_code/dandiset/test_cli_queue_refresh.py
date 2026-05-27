@@ -116,8 +116,8 @@ def test_cli_queue_refresh_requires_dandiset_directory(tmp_path: pathlib.Path) -
 
 @pytest.mark.ai_generated
 @pytest.mark.parametrize("dandi_api_key", [None, ""])
-def test_cli_queue_refresh_requires_dandi_api_key(tmp_path: pathlib.Path, dandi_api_key: str | None) -> None:
-    """dandicompute queue refresh fails immediately when DANDI_API_KEY is missing."""
+def test_cli_queue_refresh_does_not_require_dandi_api_key(tmp_path: pathlib.Path, dandi_api_key: str | None) -> None:
+    """dandicompute queue refresh runs when DANDI_API_KEY is missing."""
     dandiset_dir = tmp_path / "dandiset_directory"
     dandiset_dir.mkdir()
     queue_dir = tmp_path / "queue_directory"
@@ -131,8 +131,7 @@ def test_cli_queue_refresh_requires_dandi_api_key(tmp_path: pathlib.Path, dandi_
             ["queue", "refresh", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
             env={} if dandi_api_key is None else {"DANDI_API_KEY": dandi_api_key},
         )
-    assert result.exit_code != 0
-    assert "DANDI_API_KEY" in result.output
+    assert result.exit_code == 0, result.output
 
 
 @pytest.mark.ai_generated

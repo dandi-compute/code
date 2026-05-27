@@ -282,7 +282,6 @@ def _queue_refresh_command(
 ) -> None:
     """Rescan the dandiset directory and regenerate state.jsonl."""
     _configure_logging(silent=silent)
-    _require_dandi_api_key()
     try:
         refresh_queue_state(queue_directory=queue_directory, dandiset_directory=dandiset_directory)
     except FileNotFoundError as error:

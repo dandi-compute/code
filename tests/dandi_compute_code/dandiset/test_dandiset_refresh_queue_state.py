@@ -70,34 +70,11 @@ def test_refresh_queue_state_with_dandiset_directory_creates_valid_files(tmp_pat
 
 @pytest.mark.ai_generated
 def test_refresh_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state writes the API-resolved source path in state.jsonl when lookup succeeds."""
+    """refresh_queue_state writes assets.jsonld-resolved source path in state.jsonl when lookup succeeds."""
     content_id = "0fbbca6a-0000-0000-0000-000000000001"
     asset_size_bytes = 1234
     mapped_asset_path = "sub-mouse01/./sub-mouse01_ses-ses001_obj-raw.nwb"
     resolved_asset_path = "sub-mouse01/sub-mouse01_ses-ses001_obj-raw.nwb"
-
-    class _FakeAsset:
-        def __init__(self, path: str) -> None:
-            self.path = path
-
-        def get_raw_metadata(self) -> dict[str, object]:
-            return {
-                "contentUrl": [
-                    "https://api.dandiarchive.org/api/assets/download/",
-                    f"https://dandiarchive.s3.amazonaws.com/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}",
-                ],
-                "contentSize": asset_size_bytes,
-            }
-
-    class _FakeDandiset:
-        def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == mapped_asset_path
-            return iter([_FakeAsset(resolved_asset_path)])
-
-    class _FakeClient:
-        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
-            assert dandiset_id == "000001"
-            return _FakeDandiset()
 
     _make_attempt_dir(
         tmp_path,
@@ -126,19 +103,12 @@ def test_refresh_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathl
         )
     )
 
-    with (
-        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch(
-            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
-            return_value=_FakeClient(),
-        ),
-        mock.patch(
-            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
-            return_value=_build_mapping_for_content_id(
-                content_id=content_id,
-                dandiset_id="000001",
-                asset_path=mapped_asset_path,
-            ),
+    with mock.patch(
+        "dandi_compute_code.dandiset._scan_dandiset_directory._load_assets_jsonld_metadata",
+        return_value=_build_assets_metadata(
+            content_id=content_id,
+            asset_path=resolved_asset_path,
+            content_size=asset_size_bytes,
         ),
     ):
         refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
@@ -156,29 +126,6 @@ def test_refresh_queue_state_writes_resolved_dandi_path_for_root_level_asset(tmp
     asset_size_bytes = 4321
     root_asset_path = "sub-mouse01_ses-ses001_obj-raw.nwb"
 
-    class _FakeAsset:
-        def __init__(self, path: str) -> None:
-            self.path = path
-
-        def get_raw_metadata(self) -> dict[str, object]:
-            return {
-                "contentUrl": [
-                    "https://api.dandiarchive.org/api/assets/download/",
-                    f"https://dandiarchive.s3.amazonaws.com/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}",
-                ],
-                "contentSize": asset_size_bytes,
-            }
-
-    class _FakeDandiset:
-        def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == root_asset_path
-            return iter([_FakeAsset(root_asset_path)])
-
-    class _FakeClient:
-        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
-            assert dandiset_id == "000001"
-            return _FakeDandiset()
-
     _make_attempt_dir(
         tmp_path,
         "000001",
@@ -206,19 +153,12 @@ def test_refresh_queue_state_writes_resolved_dandi_path_for_root_level_asset(tmp
         )
     )
 
-    with (
-        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch(
-            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
-            return_value=_FakeClient(),
-        ),
-        mock.patch(
-            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
-            return_value=_build_mapping_for_content_id(
-                content_id=content_id,
-                dandiset_id="000001",
-                asset_path=root_asset_path,
-            ),
+    with mock.patch(
+        "dandi_compute_code.dandiset._scan_dandiset_directory._load_assets_jsonld_metadata",
+        return_value=_build_assets_metadata(
+            content_id=content_id,
+            asset_path=root_asset_path,
+            content_size=asset_size_bytes,
         ),
     ):
         refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
@@ -242,14 +182,13 @@ def test_refresh_queue_state_with_dandiset_directory_empty_when_no_attempts(tmp_
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_state_requires_dandi_api_key(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state requires DANDI_API_KEY to be set."""
+def test_refresh_queue_state_does_not_require_dandi_api_key(tmp_path: pathlib.Path) -> None:
+    """refresh_queue_state works when DANDI_API_KEY is not set."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
     with mock.patch.dict("os.environ", {}, clear=True):
-        with pytest.raises(AssertionError, match="DANDI_API_KEY"):
-            refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
 
 @pytest.mark.ai_generated

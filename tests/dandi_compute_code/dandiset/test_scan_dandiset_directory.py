@@ -28,11 +28,10 @@ def test_scan_empty_when_no_derivatives(tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.ai_generated
-def test_scan_requires_dandi_api_key(tmp_path: pathlib.Path) -> None:
-    """scan_dandiset_directory requires DANDI_API_KEY to be set."""
+def test_scan_does_not_require_dandi_api_key(tmp_path: pathlib.Path) -> None:
+    """scan_dandiset_directory works without DANDI_API_KEY."""
     with mock.patch.dict("os.environ", {}, clear=True):
-        with pytest.raises(AssertionError, match="DANDI_API_KEY"):
-            scan_dandiset_directory(dandiset_directory=tmp_path)
+        assert scan_dandiset_directory(dandiset_directory=tmp_path) == []
 
 
 @pytest.mark.ai_generated
@@ -250,7 +249,7 @@ def test_scan_job_completion_time_is_none_when_no_logs(tmp_path: pathlib.Path) -
 
 @pytest.mark.ai_generated
 def test_scan_job_completion_time_populated_from_dandi_date_modified(tmp_path: pathlib.Path) -> None:
-    """job_completion_time is taken from the dateModified field of the first DANDI log asset."""
+    """job_completion_time is taken from assets.jsonld metadata for the first log asset."""
     expected_completion_time = "2024-06-15T12:30:00+00:00"
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
     attempt_dir = _make_attempt_dir(
@@ -267,33 +266,13 @@ def test_scan_job_completion_time_populated_from_dandi_date_modified(tmp_path: p
     )
     expected_log_path = (attempt_dir / "logs" / "nextflow.log").relative_to(tmp_path).as_posix()
 
-    class _FakeLogAsset:
-        def get_raw_metadata(self) -> dict[str, Any]:
-            return {"dateModified": expected_completion_time}
-
-    class _FakeDandiset:
-        def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
-            if path == expected_log_path:
-                return iter([_FakeLogAsset()])
-            return iter(())
-
-    class _FakeClient:
-        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
-            return _FakeDandiset()
-
-    with (
-        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch(
-            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
-            return_value=_FakeClient(),
-        ),
-        mock.patch(
-            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
-            return_value=_build_mapping_for_content_id(
-                content_id=content_id,
-                dandiset_id="000001",
-                asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
-            ),
+    with mock.patch(
+        "dandi_compute_code.dandiset._scan_dandiset_directory._load_assets_jsonld_metadata",
+        return_value=_build_assets_metadata(
+            content_id=content_id,
+            asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+            log_asset_path=expected_log_path,
+            log_date_modified=expected_completion_time,
         ),
     ):
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
@@ -305,7 +284,7 @@ def test_scan_job_completion_time_populated_from_dandi_date_modified(tmp_path: p
 def test_scan_job_completion_time_is_none_with_warning_when_log_asset_not_found(
     tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """job_completion_time is None with a log warning when no DANDI asset matches the log path."""
+    """job_completion_time is None when no assets.jsonld entry matches the log path."""
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
     attempt_dir = _make_attempt_dir(
         tmp_path,
@@ -321,36 +300,24 @@ def test_scan_job_completion_time_is_none_with_warning_when_log_asset_not_found(
     )
     expected_log_path = (attempt_dir / "logs" / "nextflow.log").relative_to(tmp_path).as_posix()
 
-    class _FakeDandiset:
-        def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
-            return iter(())
-
-    class _FakeClient:
-        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
-            return _FakeDandiset()
-
-    with (
-        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch(
-            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
-            return_value=_FakeClient(),
+    with mock.patch(
+        "dandi_compute_code.dandiset._scan_dandiset_directory._load_assets_jsonld_metadata",
+        return_value=_build_assets_metadata(
+            content_id=content_id,
+            asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
         ),
-        caplog.at_level(logging.WARNING, logger="dandi_compute_code.dandiset._lookup_job_completion_time"),
     ):
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
     assert records[0]["job_completion_time"] is None
-    assert any(
-        f"Unable to resolve job_completion_time for log asset at {expected_log_path}" in record.message
-        for record in caplog.records
-    )
+    assert not caplog.records
 
 
 @pytest.mark.ai_generated
 def test_scan_job_completion_time_is_none_with_warning_when_date_modified_missing(
     tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """job_completion_time is None with a log warning when the log asset has no dateModified field."""
+    """job_completion_time is None when assets.jsonld metadata omits the log path dateModified."""
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
     attempt_dir = _make_attempt_dir(
         tmp_path,
@@ -366,35 +333,18 @@ def test_scan_job_completion_time_is_none_with_warning_when_date_modified_missin
     )
     expected_log_path = (attempt_dir / "logs" / "nextflow.log").relative_to(tmp_path).as_posix()
 
-    class _FakeLogAsset:
-        def get_raw_metadata(self) -> dict[str, Any]:
-            return {}  # No dateModified field
-
-    class _FakeDandiset:
-        def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
-            if path == expected_log_path:
-                return iter([_FakeLogAsset()])
-            return iter(())
-
-    class _FakeClient:
-        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
-            return _FakeDandiset()
-
-    with (
-        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch(
-            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
-            return_value=_FakeClient(),
+    with mock.patch(
+        "dandi_compute_code.dandiset._scan_dandiset_directory._load_assets_jsonld_metadata",
+        return_value=_build_assets_metadata(
+            content_id=content_id,
+            asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+            log_asset_path=expected_log_path,
         ),
-        caplog.at_level(logging.WARNING, logger="dandi_compute_code.dandiset._lookup_job_completion_time"),
     ):
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
     assert records[0]["job_completion_time"] is None
-    assert any(
-        f"Unable to resolve job_completion_time for log asset at {expected_log_path}" in record.message
-        for record in caplog.records
-    )
+    assert not caplog.records
 
 
 @pytest.mark.ai_generated
@@ -465,40 +415,9 @@ def test_scan_parses_content_id_from_submission_script(tmp_path: pathlib.Path) -
 
 @pytest.mark.ai_generated
 def test_scan_parses_asset_size_from_dandi_asset_lookup(tmp_path: pathlib.Path) -> None:
-    """asset_size_bytes is read from DANDI metadata after matching blob ID to content_id."""
+    """asset_size_bytes is read from assets.jsonld metadata matched by content_id."""
     asset_size_bytes = 123456789
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
-
-    class _FakeAsset:
-        path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-
-        def __init__(self, metadata: dict) -> None:
-            self._metadata = metadata
-
-        def get_raw_metadata(self) -> dict:
-            return self._metadata
-
-    class _FakeDandiset:
-        def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == "sub-mouse01/sub-mouse01_ecephys.nwb"
-            return iter(
-                [
-                    _FakeAsset(
-                        {
-                            "contentUrl": [
-                                "https://api.dandiarchive.org/api/assets/download/",
-                                f"https://dandiarchive.s3.amazonaws.com/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}",
-                            ],
-                            "contentSize": str(asset_size_bytes),
-                        }
-                    )
-                ]
-            )
-
-    class _FakeClient:
-        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
-            assert dandiset_id == "000001"
-            return _FakeDandiset()
 
     _make_attempt_dir(
         tmp_path,
@@ -511,19 +430,12 @@ def test_scan_parses_asset_size_from_dandi_asset_lookup(tmp_path: pathlib.Path) 
         1,
         content_id=content_id,
     )
-    with (
-        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch(
-            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
-            return_value=_FakeClient(),
-        ),
-        mock.patch(
-            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
-            return_value=_build_mapping_for_content_id(
-                content_id=content_id,
-                dandiset_id="000001",
-                asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
-            ),
+    with mock.patch(
+        "dandi_compute_code.dandiset._scan_dandiset_directory._load_assets_jsonld_metadata",
+        return_value=_build_assets_metadata(
+            content_id=content_id,
+            asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+            content_size=str(asset_size_bytes),
         ),
     ):
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
@@ -542,37 +454,6 @@ def test_scan_resolves_asset_size_with_session_subdirectory(tmp_path: pathlib.Pa
     asset_size_bytes = 987654321
     content_id = "004fb230-da29-45cf-8d88-33e698f82dea"
 
-    class _FakeAsset:
-        path = "sub-CGM3/sub-CGM3_ses-CGM3_ecephys.nwb"
-
-        def __init__(self, metadata: dict) -> None:
-            self._metadata = metadata
-
-        def get_raw_metadata(self) -> dict:
-            return self._metadata
-
-    class _FakeDandiset:
-        def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == "sub-CGM3/sub-CGM3_ses-CGM3_ecephys.nwb"
-            return iter(
-                [
-                    _FakeAsset(
-                        {
-                            "contentUrl": [
-                                "https://api.dandiarchive.org/api/assets/download/",
-                                f"https://dandiarchive.s3.amazonaws.com/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}",
-                            ],
-                            "contentSize": asset_size_bytes,
-                        }
-                    )
-                ]
-            )
-
-    class _FakeClient:
-        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
-            assert dandiset_id == "000001"
-            return _FakeDandiset()
-
     _make_attempt_dir(
         tmp_path,
         "000001",
@@ -585,19 +466,12 @@ def test_scan_resolves_asset_size_with_session_subdirectory(tmp_path: pathlib.Pa
         session="CGM3",
         content_id=content_id,
     )
-    with (
-        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch(
-            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
-            return_value=_FakeClient(),
-        ),
-        mock.patch(
-            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
-            return_value=_build_mapping_for_content_id(
-                content_id=content_id,
-                dandiset_id="000001",
-                asset_path="sub-CGM3/sub-CGM3_ses-CGM3_ecephys.nwb",
-            ),
+    with mock.patch(
+        "dandi_compute_code.dandiset._scan_dandiset_directory._load_assets_jsonld_metadata",
+        return_value=_build_assets_metadata(
+            content_id=content_id,
+            asset_path="sub-CGM3/sub-CGM3_ses-CGM3_ecephys.nwb",
+            content_size=asset_size_bytes,
         ),
     ):
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
@@ -626,37 +500,6 @@ def test_scan_resolves_asset_size_for_no_session_and_extra_entities(
     asset_size_bytes = 111222333
     content_id = "12345678-0000-0000-0000-000000000abc"
 
-    class _FakeAsset:
-        path = asset_filename
-
-        def __init__(self, metadata: dict) -> None:
-            self._metadata = metadata
-
-        def get_raw_metadata(self) -> dict:
-            return self._metadata
-
-    class _FakeDandiset:
-        def get_assets_with_path_prefix(self, path: str) -> Iterator[_FakeAsset]:
-            assert path == asset_filename
-            return iter(
-                [
-                    _FakeAsset(
-                        {
-                            "contentUrl": [
-                                "https://api.dandiarchive.org/api/assets/download/",
-                                f"https://dandiarchive.s3.amazonaws.com/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}",
-                            ],
-                            "contentSize": asset_size_bytes,
-                        }
-                    )
-                ]
-            )
-
-    class _FakeClient:
-        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
-            assert dandiset_id == "000001"
-            return _FakeDandiset()
-
     _make_attempt_dir(
         tmp_path,
         "000001",
@@ -669,19 +512,12 @@ def test_scan_resolves_asset_size_for_no_session_and_extra_entities(
         session=session,
         content_id=content_id,
     )
-    with (
-        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch(
-            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
-            return_value=_FakeClient(),
-        ),
-        mock.patch(
-            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
-            return_value=_build_mapping_for_content_id(
-                content_id=content_id,
-                dandiset_id="000001",
-                asset_path=asset_filename,
-            ),
+    with mock.patch(
+        "dandi_compute_code.dandiset._scan_dandiset_directory._load_assets_jsonld_metadata",
+        return_value=_build_assets_metadata(
+            content_id=content_id,
+            asset_path=asset_filename,
+            content_size=asset_size_bytes,
         ),
     ):
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
@@ -693,7 +529,7 @@ def test_scan_resolves_asset_size_for_no_session_and_extra_entities(
 def test_scan_uses_expected_dandi_api_url_for_dandiset(
     tmp_path: pathlib.Path,
 ) -> None:
-    """scan_dandiset_directory uses the live API with token for standard dandisets."""
+    """scan_dandiset_directory does not call DANDI API clients when assets metadata is available."""
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
     attempt_dir = _make_attempt_dir(
         tmp_path,
@@ -709,50 +545,27 @@ def test_scan_uses_expected_dandi_api_url_for_dandiset(
     )
     expected_log_path = (attempt_dir / "logs" / "nextflow.log").relative_to(tmp_path).as_posix()
 
-    class _FakeAsset:
-        path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-
-        def get_raw_metadata(self) -> dict[str, Any]:
-            return {
-                "contentUrl": [
-                    "https://api.dandiarchive.org/api/assets/download/",
-                    f"https://dandiarchive.s3.amazonaws.com/blobs/{content_id[0:3]}/{content_id[3:6]}/{content_id}",
-                ],
-                "contentSize": 123,
-                "dateModified": "2024-06-15T12:30:00+00:00",
-            }
-
-    class _FakeDandiset:
-        def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
-            if path in {"sub-mouse01/sub-mouse01_ecephys.nwb", expected_log_path}:
-                return iter([_FakeAsset()])
-            return iter(())
-
-    class _FakeClient:
-        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
-            return _FakeDandiset()
-
     with (
-        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
         mock.patch(
             "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
-            return_value=_FakeClient(),
+            autospec=True,
         ) as mock_client_ctor,
         mock.patch(
-            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
-            return_value=_build_mapping_for_content_id(
+            "dandi_compute_code.dandiset._scan_dandiset_directory._load_assets_jsonld_metadata",
+            return_value=_build_assets_metadata(
                 content_id=content_id,
-                dandiset_id="000001",
                 asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+                content_size=123,
+                log_asset_path=expected_log_path,
+                log_date_modified="2024-06-15T12:30:00+00:00",
             ),
         ),
     ):
-        scan_dandiset_directory(dandiset_directory=tmp_path)
+        records = scan_dandiset_directory(dandiset_directory=tmp_path)
 
-    assert mock_client_ctor.call_count >= 2
-    for call in mock_client_ctor.call_args_list:
-        assert call.kwargs["token"] == "live-token"
-        assert "api_url" not in call.kwargs
+    assert records[0]["asset_size_bytes"] == 123
+    assert records[0]["job_completion_time"] == "2024-06-15T12:30:00+00:00"
+    mock_client_ctor.assert_not_called()
 
 
 @pytest.mark.ai_generated
@@ -828,18 +641,8 @@ def test_scan_asset_size_lookup_falls_back_to_none_when_mapped_asset_path_has_no
     tmp_path: pathlib.Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """asset_size_bytes falls back to None when the mapped unique asset path has no API match."""
+    """asset_size_bytes is None when assets.jsonld has no source metadata for the content_id."""
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
-
-    class _FakeDandiset:
-        def get_assets_with_path_prefix(self, path: str) -> Iterator[Any]:
-            assert path == "sub-mouse01/sub-mouse01_ecephys.nwb"
-            return iter(())
-
-    class _FakeClient:
-        def get_dandiset(self, dandiset_id: str) -> _FakeDandiset:
-            assert dandiset_id == "000001"
-            return _FakeDandiset()
 
     _make_attempt_dir(
         tmp_path,
@@ -852,23 +655,11 @@ def test_scan_asset_size_lookup_falls_back_to_none_when_mapped_asset_path_has_no
         1,
         content_id=content_id,
     )
-    with (
-        mock.patch.dict("os.environ", {"DANDI_API_KEY": "live-token"}),
-        mock.patch(
-            "dandi_compute_code.dandiset._create_dandi_api_client.dandi.dandiapi.DandiAPIClient",
-            return_value=_FakeClient(),
-        ),
-        mock.patch(
-            "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
-            return_value=_build_mapping_for_content_id(
-                content_id=content_id,
-                dandiset_id="000001",
-                asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
-            ),
-        ),
-        caplog.at_level(logging.WARNING, logger="dandi_compute_code.dandiset._lookup_asset_size_bytes"),
+    with mock.patch(
+        "dandi_compute_code.dandiset._scan_dandiset_directory._load_assets_jsonld_metadata",
+        return_value=({}, {}),
     ):
         records = scan_dandiset_directory(dandiset_directory=tmp_path)
     assert len(records) == 1
     assert records[0]["asset_size_bytes"] is None
-    assert any("but found 0" in record.message for record in caplog.records)
+    assert not caplog.records

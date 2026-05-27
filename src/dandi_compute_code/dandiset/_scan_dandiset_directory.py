@@ -1,9 +1,7 @@
-import os
 import pathlib
 
 from ._globals import _ATTEMPT_SUFFIX_RE, _SANDBOX_DANDISET_ID
-from ._lookup_asset_size_bytes import _lookup_asset_size_bytes
-from ._lookup_job_completion_time import _lookup_job_completion_time
+from ._load_assets_jsonld_metadata import _load_assets_jsonld_metadata
 from ._parse_attempt_dir import _parse_attempt_dir
 
 
@@ -26,11 +24,11 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         attempt)``.  Each record contains:
 
         * ``dandiset_id`` – value of the ``dandiset-`` BIDS entity
-        * ``dandi_path`` – resolved source asset path from DANDI API lookup when uniquely matched;
+        * ``dandi_path`` – source asset path from ``assets.jsonld`` when present;
           otherwise the scanned path segment under ``dandiset-{id}/`` preceding ``pipeline-*``
         * ``content_id``  – input content identifier parsed from ``code/submit.sh``
-        * ``asset_size_bytes`` – source asset size in bytes from DANDI API lookup at the
-          mapped unique asset path; ``null`` when mapping/path lookup fails or size is missing
+        * ``asset_size_bytes`` – source asset size in bytes from ``assets.jsonld``;
+          ``null`` when missing
         * ``pipeline``    – value of the ``pipeline-`` BIDS entity
         * ``version``     – value of the ``version-`` BIDS entity
         * ``params``      – params portion of the attempt directory name
@@ -39,25 +37,19 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
         * ``has_code``           – ``True`` if a ``code/`` subdirectory is present
         * ``has_output``         – ``True`` if a ``derivatives/`` subdirectory is present
         * ``has_logs``           – ``True`` if a ``logs/`` subdirectory is present and non-empty
-        * ``created_at``         – ISO 8601 UTC timestamp derived from the attempt directory's ``st_ctime``
-          stat (last metadata-change time on Unix/Linux; creation time on Windows/macOS)
-        * ``job_completion_time`` – ``dateModified`` ISO 8601 string from DANDI metadata for the first
-          asset in the ``logs/`` subdirectory; ``null`` when no logs are present or the lookup fails
+        * ``created_at``         – source ``blobDateModified`` ISO 8601 timestamp from ``assets.jsonld``
+          for the ``content_id`` when available; otherwise the attempt directory ``st_ctime`` timestamp
+        * ``job_completion_time`` – ``dateModified`` ISO 8601 string from ``assets.jsonld`` for the first
+          asset in the ``logs/`` subdirectory; ``null`` when no logs are present or metadata is missing
     :rtype: list[dict]
-    :raises AssertionError: If ``DANDI_API_KEY`` is not set before scanning.
     """
-    assert (
-        "DANDI_API_KEY" in os.environ and os.environ["DANDI_API_KEY"]
-    ), "`DANDI_API_KEY` environment variable must be set before scanning dandiset directory."
-    api_token = os.environ["DANDI_API_KEY"]
-
     derivatives = dandiset_directory / "derivatives"
     if not derivatives.is_dir():
         return []
 
     attempt_re = _ATTEMPT_SUFFIX_RE
     records: list[dict] = []
-    size_lookup_cache: dict[tuple[str, str, str], tuple[int | None, str | None]] = {}
+    content_id_to_asset, path_to_date_modified = _load_assets_jsonld_metadata()
 
     for dandiset_path in sorted(derivatives.iterdir()):
         if not dandiset_path.is_dir() or not dandiset_path.name.startswith("dandiset-"):
@@ -71,21 +63,23 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
                 continue
             record = _parse_attempt_dir(attempt_dir)
             if record is not None:
-                size_lookup_key = (
-                    record["dandiset_id"],
-                    record["dandi_path"],
-                    record["content_id"],
-                )
-                if size_lookup_key not in size_lookup_cache:
-                    size_lookup_cache[size_lookup_key] = _lookup_asset_size_bytes(
-                        api_token=api_token,
-                        dandiset_id=record["dandiset_id"],
-                        dandi_path=record["dandi_path"],
-                        content_id=record["content_id"],
-                    )
-                record["asset_size_bytes"], resolved_dandi_path = size_lookup_cache[size_lookup_key]
-                if resolved_dandi_path is not None:
-                    record["dandi_path"] = resolved_dandi_path
+                source_asset_metadata = content_id_to_asset.get(record["content_id"])
+                if source_asset_metadata is not None:
+                    content_size = source_asset_metadata.get("contentSize")
+                    if isinstance(content_size, int):
+                        record["asset_size_bytes"] = content_size
+                    elif isinstance(content_size, str) and content_size.isdigit():
+                        record["asset_size_bytes"] = int(content_size)
+                    else:
+                        record["asset_size_bytes"] = None
+                    resolved_dandi_path = source_asset_metadata.get("path")
+                    if isinstance(resolved_dandi_path, str):
+                        record["dandi_path"] = resolved_dandi_path
+                    blob_date_modified = source_asset_metadata.get("blobDateModified")
+                    if isinstance(blob_date_modified, str):
+                        record["created_at"] = blob_date_modified
+                else:
+                    record["asset_size_bytes"] = None
 
                 if record["has_logs"]:
                     logs_dir = attempt_dir / "logs"
@@ -96,11 +90,7 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
                     )
                     if first_log_file is not None:
                         log_asset_path = first_log_file.relative_to(dandiset_directory).as_posix()
-                        record["job_completion_time"] = _lookup_job_completion_time(
-                            api_token=api_token,
-                            dandiset_id=record["dandiset_id"],
-                            log_asset_path=log_asset_path,
-                        )
+                        record["job_completion_time"] = path_to_date_modified.get(log_asset_path)
                     else:
                         record["job_completion_time"] = None
                 else:
