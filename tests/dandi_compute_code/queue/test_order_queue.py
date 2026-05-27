@@ -32,7 +32,7 @@ def test_order_queue_raises_when_queue_config_missing(tmp_path: pathlib.Path) ->
 
 @pytest.mark.ai_generated
 def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state writes scanned entries to state.jsonl."""
+    """refresh_queue_state writes state entries emitted by write_queue_state."""
     queue_dir = _make_queue_dir(tmp_path)
 
     entries = [
@@ -40,7 +40,14 @@ def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.P
         # Already has output (kept in state.jsonl for authoritative tracking)
         _make_state_entry(dandiset_id="000002", has_code=True, has_output=True, has_logs=False),
     ]
-    with mock.patch("dandi_compute_code.queue._refresh_queue.scan_dandiset_directory", return_value=entries):
+
+    def _write_state(*, queue_directory: pathlib.Path) -> None:
+        state_file = queue_directory / "state.jsonl"
+        with state_file.open("w") as file_stream:
+            for entry in entries:
+                file_stream.write(json.dumps(entry) + "\n")
+
+    with mock.patch("dandi_compute_code.queue._refresh_queue.write_queue_state", side_effect=_write_state):
         refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     state_file = queue_dir / "state.jsonl"

@@ -7,6 +7,7 @@ from ._prepare_queue import prepare_queue
 from ._process_queue import process_queue
 from ._refresh_queue import refresh_queue_state
 from ._summarize_issues import summarize_issues
+from ._write_queue_state import write_queue_state
 
 __all__ = [
     "TEST_QUEUE_CONTENT_ID",
@@ -18,4 +19,5 @@ __all__ = [
     "process_queue",
     "refresh_queue_state",
     "summarize_issues",
+    "write_queue_state",
 ]

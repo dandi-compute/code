@@ -22,7 +22,7 @@ globals().update(
 
 @pytest.mark.ai_generated
 def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh --dandiset scans and writes state.jsonl."""
+    """dandicompute queue refresh --dandiset writes state.jsonl from assets metadata."""
     dandiset_dir = tmp_path / "dandiset"
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
@@ -40,24 +40,14 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
         )
     )
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
-    _make_attempt_dir(
-        dandiset_dir,
-        "000001",
-        "mouse01",
-        "aind+ephys",
-        "v1.0",
-        "abc1234",
-        "def5678",
-        1,
-        content_id=content_id,
-    )
+    dandiset_dir.mkdir()
     runner = CliRunner()
     with mock.patch(
-        "dandi_compute_code.dandiset._lookup_asset_size_bytes._load_content_id_to_unique_dandiset_path",
-        return_value=_build_mapping_for_content_id(
+        "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
+        return_value=_build_assets_metadata(
             content_id=content_id,
-            dandiset_id="000001",
             asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+            content_size=1234,
         ),
     ):
         result = runner.invoke(
@@ -69,7 +59,7 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
     assert (queue_dir / "state.jsonl").exists()
     state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
     assert len(state_records) == 1
-    assert state_records[0]["dandiset_id"] == "000001"
+    assert state_records[0]["dandiset_id"] == "001697"
     assert state_records[0]["content_id"] == content_id
 
 
