@@ -21,6 +21,7 @@ import pytest
 from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
+from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.queue import write_queue_state
 from dandi_compute_code.queue._aggregate_queue_statistics import aggregate_queue_statistics
 from dandi_compute_code.queue._attempt_dir_candidates import _attempt_dir_candidates
@@ -137,6 +138,27 @@ def _mock_urlopen_response(payload: object) -> mock.MagicMock:
     mock_response.__enter__.return_value = mock_response
     mock_response.__exit__.return_value = False
     return mock_response
+
+
+def _build_assets_metadata(*, content_id: str, asset_path: str, content_size: int) -> AssetsJsonldMetadata:
+    """Build minimal assets metadata containing one source NWB asset."""
+    return AssetsJsonldMetadata(
+        content_id_to_asset={
+            content_id: {
+                "path": asset_path,
+                "contentSize": content_size,
+                "blobDateModified": "2025-01-01T00:00:00+00:00",
+            }
+        },
+        path_to_asset_metadata={
+            asset_path: AssetMetadata(
+                path=asset_path,
+                date_modified="2025-01-01T00:00:00+00:00",
+                content_size=content_size,
+                content_id=content_id,
+            )
+        },
+    )
 
 
 def _make_state_entry(

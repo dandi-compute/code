@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from unittest import mock
 
 import pytest
-from _process_queue_test_cases import _make_queue_dir, _read_jsonl
+from _process_queue_test_cases import _build_assets_metadata, _make_queue_dir, _read_jsonl
 
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.queue import write_queue_state
@@ -177,7 +177,24 @@ def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_
             ),
         },
     )
-    with mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata):
+    upstream_metadata = AssetsJsonldMetadata(
+        content_id_to_asset={},
+        path_to_asset_metadata={
+            source_path: AssetMetadata(
+                path=source_path,
+                date_modified="2026-05-24T10:00:00+00:00",
+                content_size=1234,
+                content_id="source-content-id",
+            )
+        },
+    )
+    with (
+        mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata),
+        mock.patch(
+            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            return_value=upstream_metadata,
+        ),
+    ):
         write_queue_state(queue_directory=queue_dir)
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
