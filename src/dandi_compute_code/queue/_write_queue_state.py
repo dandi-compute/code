@@ -7,7 +7,6 @@ import urllib.request
 from dataclasses import dataclass
 
 from ._load_queue_config import _load_queue_config
-from ..dandiset._globals import _ASSETS_JSONLD_URL
 from ..dandiset._load_assets_jsonld_metadata import (
     AssetMetadata,
     AssetsJsonldMetadata,
@@ -22,8 +21,9 @@ _FLAT_ATTEMPT_RE = re.compile(
     r"(?:_.+?)?"
     r"_attempt-(?P<attempt>\d+)$"
 )
-_NESTED_ATTEMPT_RE = re.compile(r"^params-(?P<params>[^_]+)_config-(?P<config>[^_]+)_attempt-(?P<attempt>\d+)$")
-_DANDISET_ID_RE = re.compile(r"/dandisets/(?P<dandiset_id>\d+)/")
+_NESTED_ATTEMPT_RE = re.compile(
+    r"^params-(?P<params>[^_]+)_config-(?P<config>[^_]+)_attempt-(?P<attempt>\d+)$"
+)
 _UPSTREAM_JSONLD_URL_TEMPLATE = "https://dandiarchive.s3.amazonaws.com/dandisets/{dandiset_id}/draft/assets.jsonld"
 
 _log = logging.getLogger(__name__)
@@ -181,16 +181,6 @@ class _UpstreamMetadataCache:
         return self._cache[dandiset_id]
 
 
-def _resolve_blob_date_modified(assets_metadata: AssetsJsonldMetadata, content_id: str) -> str | None:
-    """Return ``blobDateModified`` from the raw asset entry, if present and a string."""
-    asset_entry = assets_metadata.content_id_to_asset.get(content_id)
-    if isinstance(asset_entry, dict):
-        blob_date = asset_entry.get("blobDateModified")
-        if isinstance(blob_date, str):
-            return blob_date
-    return None
-
-
 # --- record construction ---------------------------------------------------
 
 
@@ -206,32 +196,6 @@ def _new_attempt_record(job: JobInfo) -> dict[str, object]:
         "has_code": False,
         "has_output": False,
         "has_logs": False,
-    }
-
-
-def _new_source_only_record(
-    *,
-    dandiset_id: str,
-    dandi_path: str,
-    content_id: str,
-    content_size: int,
-    created_at: str | None,
-) -> dict[str, object]:
-    return {
-        "dandiset_id": dandiset_id,
-        "dandi_path": dandi_path,
-        "content_id": content_id,
-        "asset_size_bytes": content_size,
-        "pipeline": "",
-        "version": "",
-        "params": "",
-        "config": "",
-        "attempt": 0,
-        "has_code": False,
-        "has_output": False,
-        "has_logs": False,
-        "created_at": created_at,
-        "job_completion_time": None,
     }
 
 
@@ -329,37 +293,6 @@ def _finalize_attempt_records(
     return finalized
 
 
-def _build_source_only_records(
-    *,
-    local_metadata: AssetsJsonldMetadata,
-    default_dandiset_id: str,
-    dandi_paths_with_attempts: set[str],
-) -> list[dict[str, object]]:
-    """Build records for local non-derivative assets that don't appear as a source for any attempt."""
-    records: list[dict[str, object]] = []
-    for source_dandi_path, source_metadata in local_metadata.path_to_asset_metadata.items():
-        if source_dandi_path.startswith("derivatives/"):
-            continue
-        if source_dandi_path in dandi_paths_with_attempts:
-            continue
-        blob_date = _resolve_blob_date_modified(local_metadata, source_metadata.content_id)
-        records.append(
-            _new_source_only_record(
-                dandiset_id=default_dandiset_id,
-                dandi_path=source_dandi_path,
-                content_id=source_metadata.content_id,
-                content_size=source_metadata.content_size,
-                created_at=blob_date if blob_date is not None else source_metadata.date_modified,
-            )
-        )
-    return records
-
-
-def _default_dandiset_id() -> str:
-    match = _DANDISET_ID_RE.search(_ASSETS_JSONLD_URL)
-    return match.group("dandiset_id") if match is not None else ""
-
-
 def _sort_key(record: dict[str, object]) -> tuple[str, str, str]:
     # content_id may be None for attempts whose upstream source wasn't resolvable;
     # coerce to "" so sorting stays total.
@@ -395,17 +328,10 @@ def write_queue_state(*, queue_directory: pathlib.Path) -> None:
 
     collection = _collect_attempts(local_metadata)
     upstream_cache = _UpstreamMetadataCache()
-    attempt_records = _finalize_attempt_records(
+    records = _finalize_attempt_records(
         collection=collection,
         upstream_cache=upstream_cache,
     )
-    source_only_records = _build_source_only_records(
-        local_metadata=local_metadata,
-        default_dandiset_id=_default_dandiset_id(),
-        dandi_paths_with_attempts={job.dandi_path for job in collection.records_by_attempt},
-    )
-
-    records = attempt_records + source_only_records
     records.sort(key=_sort_key)
 
     state_file = queue_directory / "state.jsonl"
