@@ -75,7 +75,6 @@ def load_assets_jsonld_metadata() -> AssetsJsonldMetadata:
                 if isinstance(path, str):
                     all_paths.add(path)
                 content_urls = asset.get("contentUrl")
-                content_id: str | None = None
                 if not isinstance(content_urls, list):
                     content_urls = []
                 content_id = next(
