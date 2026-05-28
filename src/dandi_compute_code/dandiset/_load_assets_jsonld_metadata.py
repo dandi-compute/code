@@ -90,18 +90,20 @@ def load_assets_jsonld_metadata() -> AssetsJsonldMetadata:
                     content_id_to_asset[content_id] = asset
                 if isinstance(path, str):
                     existing_path_metadata = path_to_asset_metadata.get(path)
+                    resolved_date_modified = (
+                        date_modified
+                        if isinstance(date_modified, str)
+                        else (existing_path_metadata.date_modified if existing_path_metadata is not None else None)
+                    )
+                    resolved_content_id = (
+                        content_id
+                        if isinstance(content_id, str) and content_id
+                        else (existing_path_metadata.content_id if existing_path_metadata is not None else None)
+                    )
                     path_to_asset_metadata[path] = AssetMetadata(
                         path=path,
-                        date_modified=(
-                            date_modified
-                            if isinstance(date_modified, str)
-                            else (existing_path_metadata.date_modified if existing_path_metadata is not None else None)
-                        ),
-                        content_id=(
-                            content_id
-                            if isinstance(content_id, str) and content_id
-                            else (existing_path_metadata.content_id if existing_path_metadata is not None else None)
-                        ),
+                        date_modified=resolved_date_modified,
+                        content_id=resolved_content_id,
                     )
     except Exception as exception:
         _log.warning("Unable to load metadata from %s: %s", _ASSETS_JSONLD_URL, exception)
