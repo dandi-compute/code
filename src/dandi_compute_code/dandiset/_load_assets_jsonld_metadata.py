@@ -2,24 +2,36 @@ import functools
 import json
 import logging
 import urllib.request
+from dataclasses import dataclass
 
 from ._globals import _ASSETS_JSONLD_URL
 
 _log = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class AssetsJsonldMetadata:
+    """Indexed metadata loaded from DANDI ``assets.jsonld``."""
+
+    content_id_to_asset: dict[str, dict[str, object]]
+    path_to_date_modified: dict[str, str]
+    path_to_content_id: dict[str, str]
+    all_paths: frozenset[str]
+
+
 @functools.lru_cache(maxsize=1)
-def _load_assets_jsonld_metadata() -> tuple[dict[str, dict[str, object]], dict[str, str]]:
+def load_assets_jsonld_metadata() -> AssetsJsonldMetadata:
     """
     Load content-id and path metadata from the DANDI 001697 draft ``assets.jsonld`` stream.
 
-    Returns
-    -------
-    tuple[dict[str, dict[str, object]], dict[str, str]]
-        ``(content_id_to_asset, path_to_date_modified)`` dictionaries.
+    :returns:
+        Indexed assets metadata.
+    :rtype: AssetsJsonldMetadata
     """
     content_id_to_asset: dict[str, dict[str, object]] = {}
     path_to_date_modified: dict[str, str] = {}
+    path_to_content_id: dict[str, str] = {}
+    all_paths: set[str] = set()
     try:
         with urllib.request.urlopen(url=_ASSETS_JSONLD_URL, timeout=30) as response:
             for raw_line in response:
@@ -37,8 +49,10 @@ def _load_assets_jsonld_metadata() -> tuple[dict[str, dict[str, object]], dict[s
                     asset["contentSize"] = int(content_size)
                 path = asset.get("path")
                 date_modified = asset.get("dateModified")
-                if isinstance(path, str) and isinstance(date_modified, str):
-                    path_to_date_modified[path] = date_modified
+                if isinstance(path, str):
+                    all_paths.add(path)
+                    if isinstance(date_modified, str):
+                        path_to_date_modified[path] = date_modified
                 content_urls = asset.get("contentUrl")
                 if not isinstance(content_urls, list):
                     continue
@@ -52,6 +66,18 @@ def _load_assets_jsonld_metadata() -> tuple[dict[str, dict[str, object]], dict[s
                 )
                 if isinstance(content_id, str) and content_id:
                     content_id_to_asset[content_id] = asset
+                    if isinstance(path, str):
+                        path_to_content_id[path] = content_id
     except Exception as exception:
         _log.warning("Unable to load metadata from %s: %s", _ASSETS_JSONLD_URL, exception)
-    return content_id_to_asset, path_to_date_modified
+    return AssetsJsonldMetadata(
+        content_id_to_asset=content_id_to_asset,
+        path_to_date_modified=path_to_date_modified,
+        path_to_content_id=path_to_content_id,
+        all_paths=frozenset(all_paths),
+    )
+
+
+def _load_assets_jsonld_metadata() -> AssetsJsonldMetadata:
+    """Backward-compatible alias for :func:`load_assets_jsonld_metadata`."""
+    return load_assets_jsonld_metadata()

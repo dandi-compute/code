@@ -97,3 +97,57 @@ def test_refresh_queue_state_excludes_entries_with_submitted_markers(tmp_path: p
         refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
+
+
+@pytest.mark.ai_generated
+def test_refresh_queue_state_parses_attempt_fields_and_presence_flags_from_assets_paths(tmp_path: pathlib.Path) -> None:
+    """refresh_queue_state parses attempt metadata from derivatives asset paths."""
+    queue_dir = _make_queue_dir(tmp_path)
+    source_path = "sub-test/sourcedata/aind-sample.nwb"
+    attempt_prefix = (
+        "derivatives/dandiset-001849/sub-test/sourcedata/aind-sample/pipeline-aind+ephys/"
+        "version-v1.1.1+b268fd2+2372f8e_params-4af6a25_config-0d4bf36_date-2026+05+24_attempt-1"
+    )
+    metadata = (
+        {
+            "source-content-id": {
+                "path": source_path,
+                "contentSize": 1234,
+                "blobDateModified": "2026-05-24T10:00:00+00:00",
+            },
+            "code-content-id": {
+                "path": f"{attempt_prefix}/code/submit.sh",
+                "contentSize": 1,
+                "dateModified": "2026-05-24T10:10:00+00:00",
+            },
+            "output-content-id": {
+                "path": f"{attempt_prefix}/derivatives/output.nwb",
+                "contentSize": 2,
+                "dateModified": "2026-05-24T10:20:00+00:00",
+            },
+            "log-content-id": {
+                "path": f"{attempt_prefix}/logs/stdout.txt",
+                "contentSize": 3,
+                "dateModified": "2026-05-24T10:30:00+00:00",
+            },
+        },
+        {f"{attempt_prefix}/logs/stdout.txt": "2026-05-24T10:30:00+00:00"},
+    )
+    with mock.patch("dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata", return_value=metadata):
+        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+
+    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    assert len(state_entries) == 1
+    assert state_entries[0]["dandiset_id"] == "001849"
+    assert state_entries[0]["dandi_path"] == source_path
+    assert state_entries[0]["pipeline"] == "aind+ephys"
+    assert state_entries[0]["version"] == "v1.1.1+b268fd2+2372f8e"
+    assert state_entries[0]["params"] == "4af6a25"
+    assert state_entries[0]["config"] == "0d4bf36"
+    assert state_entries[0]["attempt"] == 1
+    assert state_entries[0]["content_id"] == "source-content-id"
+    assert state_entries[0]["asset_size_bytes"] == 1234
+    assert state_entries[0]["has_code"] is True
+    assert state_entries[0]["has_output"] is True
+    assert state_entries[0]["has_logs"] is True
+    assert state_entries[0]["job_completion_time"] == "2026-05-24T10:30:00+00:00"

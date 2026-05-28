@@ -1,8 +1,10 @@
 import pathlib
 
 from ._globals import _ATTEMPT_SUFFIX_RE, _SANDBOX_DANDISET_ID
-from ._load_assets_jsonld_metadata import _load_assets_jsonld_metadata
+from ._load_assets_jsonld_metadata import load_assets_jsonld_metadata
 from ._parse_attempt_dir import _parse_attempt_dir
+
+_load_assets_jsonld_metadata = load_assets_jsonld_metadata
 
 
 # TODO: create formal JobState LinkML model/schema that and rename this function to relate to that
@@ -49,7 +51,12 @@ def scan_dandiset_directory(dandiset_directory: pathlib.Path) -> list[dict]:
 
     attempt_re = _ATTEMPT_SUFFIX_RE
     records: list[dict] = []
-    content_id_to_asset, path_to_date_modified = _load_assets_jsonld_metadata()
+    assets_jsonld_metadata = _load_assets_jsonld_metadata()
+    if isinstance(assets_jsonld_metadata, tuple):
+        content_id_to_asset, path_to_date_modified = assets_jsonld_metadata
+    else:
+        content_id_to_asset = assets_jsonld_metadata.content_id_to_asset
+        path_to_date_modified = assets_jsonld_metadata.path_to_date_modified
 
     for dandiset_path in sorted(derivatives.iterdir()):
         if not dandiset_path.is_dir() or not dandiset_path.name.startswith("dandiset-"):
