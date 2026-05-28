@@ -20,6 +20,14 @@ globals().update(
 )
 
 
+def _write_state_entries(queue_dir: pathlib.Path, entries: list[dict]) -> None:
+    state_file = queue_dir / "state.jsonl"
+    if entries:
+        _write_jsonl(state_file, entries)
+    else:
+        state_file.write_text("")
+
+
 @pytest.mark.ai_generated
 def test_clean_unsubmitted_capsules_raises_without_dandi_api_key(tmp_path: pathlib.Path) -> None:
     """clean_unsubmitted_capsules raises RuntimeError when DANDI_API_KEY is not set."""
@@ -38,6 +46,20 @@ def test_clean_unsubmitted_capsules_removes_queued_directories(tmp_path: pathlib
 
     queued_dir = _make_full_attempt_dir(
         dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
+    )
+    _write_state_entries(
+        queue_dir,
+        [
+            _make_state_entry(
+                pipeline="aind+ephys",
+                version="v1.0",
+                params="abc1234",
+                config="def5678",
+                has_code=True,
+                has_output=False,
+                has_logs=False,
+            )
+        ],
     )
 
     with mock.patch("subprocess.run") as mock_run, mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
@@ -71,6 +93,20 @@ def test_clean_unsubmitted_capsules_skips_entries_with_output(tmp_path: pathlib.
         with_code=True,
         with_output=True,
     )
+    _write_state_entries(
+        queue_dir,
+        [
+            _make_state_entry(
+                pipeline="aind+ephys",
+                version="v1.0",
+                params="abc1234",
+                config="def5678",
+                has_code=True,
+                has_output=True,
+                has_logs=False,
+            )
+        ],
+    )
 
     with mock.patch("subprocess.run") as mock_run, mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
@@ -98,6 +134,20 @@ def test_clean_unsubmitted_capsules_skips_entries_with_logs(tmp_path: pathlib.Pa
         1,
         with_code=True,
         with_logs=True,
+    )
+    _write_state_entries(
+        queue_dir,
+        [
+            _make_state_entry(
+                pipeline="aind+ephys",
+                version="v1.0",
+                params="abc1234",
+                config="def5678",
+                has_code=True,
+                has_output=False,
+                has_logs=True,
+            )
+        ],
     )
 
     with mock.patch("subprocess.run") as mock_run, mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
@@ -129,6 +179,20 @@ def test_clean_unsubmitted_capsules_ignores_dataset_description_in_logs(
     logs_dir = queued_dir / "logs"
     logs_dir.mkdir()
     (logs_dir / "dataset_description.json").write_text("{}\n")
+    _write_state_entries(
+        queue_dir,
+        [
+            _make_state_entry(
+                pipeline="aind+ephys",
+                version="v1.0",
+                params="abc1234",
+                config="def5678",
+                has_code=True,
+                has_output=False,
+                has_logs=False,
+            )
+        ],
+    )
 
     with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
@@ -147,6 +211,20 @@ def test_clean_unsubmitted_capsules_skips_entries_with_submitted_marker(tmp_path
     queued_dir = _make_full_attempt_dir(
         dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
     )
+    _write_state_entries(
+        queue_dir,
+        [
+            _make_state_entry(
+                pipeline="aind+ephys",
+                version="v1.0",
+                params="abc1234",
+                config="def5678",
+                has_code=True,
+                has_output=False,
+                has_logs=False,
+            )
+        ],
+    )
 
     (queued_dir / "code" / "submitted").touch()
 
@@ -164,6 +242,7 @@ def test_clean_unsubmitted_capsules_returns_empty_list_when_nothing_queued(tmp_p
     dandiset_dir = tmp_path / "dandiset"
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
+    _write_state_entries(queue_dir, [])
 
     with mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
@@ -189,6 +268,21 @@ def test_clean_unsubmitted_capsules_handles_session_in_path(tmp_path: pathlib.Pa
         1,
         session="ses001",
         with_code=True,
+    )
+    _write_state_entries(
+        queue_dir,
+        [
+            _make_state_entry(
+                pipeline="aind+ephys",
+                version="v1.0",
+                params="abc1234",
+                config="def5678",
+                session="ses001",
+                has_code=True,
+                has_output=False,
+                has_logs=False,
+            )
+        ],
     )
 
     with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
@@ -219,6 +313,22 @@ def test_clean_unsubmitted_capsules_removes_empty_parent_directories(tmp_path: p
     )
     version_dir = queued_dir.parent
     pipeline_dir = version_dir.parent
+    _write_state_entries(
+        queue_dir,
+        [
+            _make_state_entry(
+                dandiset_id="001371",
+                dandi_path="sub-S25/ses-S25-210913",
+                pipeline="aind+ephys",
+                version="v1.1.1+b268fd2",
+                params="abc1234",
+                config="def5678",
+                has_code=True,
+                has_output=False,
+                has_logs=False,
+            )
+        ],
+    )
 
     with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
@@ -252,6 +362,31 @@ def test_clean_unsubmitted_capsules_keeps_non_empty_parent_directories(tmp_path:
     )
     version_dir = queued_dir.parent
     pipeline_dir = version_dir.parent
+    _write_state_entries(
+        queue_dir,
+        [
+            _make_state_entry(
+                pipeline="aind+ephys",
+                version="v1.0",
+                params="abc1234",
+                config="def5678",
+                attempt=1,
+                has_code=True,
+                has_output=False,
+                has_logs=False,
+            ),
+            _make_state_entry(
+                pipeline="aind+ephys",
+                version="v1.0",
+                params="abc1234",
+                config="def5678",
+                attempt=2,
+                has_code=True,
+                has_output=True,
+                has_logs=False,
+            ),
+        ],
+    )
 
     with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
@@ -283,6 +418,22 @@ def test_clean_unsubmitted_capsules_removes_legacy_nested_layout(tmp_path: pathl
     )
     version_dir = queued_dir.parent
     pipeline_dir = version_dir.parent
+    _write_state_entries(
+        queue_dir,
+        [
+            _make_state_entry(
+                dandiset_id="001371",
+                dandi_path="sub-S25/ses-S25-210913",
+                pipeline="aind+ephys",
+                version="v1.1.1+b268fd2",
+                params="abc1234",
+                config="def5678",
+                has_code=True,
+                has_output=False,
+                has_logs=False,
+            )
+        ],
+    )
 
     with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
@@ -309,6 +460,33 @@ def test_clean_unsubmitted_capsules_removes_only_queued_not_submitted(tmp_path: 
         dandiset_dir, "000002", "mouse02", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
     )
     (submitted_dir / "code" / "submitted").touch()
+    _write_state_entries(
+        queue_dir,
+        [
+            _make_state_entry(
+                dandiset_id="000001",
+                subject="mouse01",
+                pipeline="aind+ephys",
+                version="v1.0",
+                params="abc1234",
+                config="def5678",
+                has_code=True,
+                has_output=False,
+                has_logs=False,
+            ),
+            _make_state_entry(
+                dandiset_id="000002",
+                subject="mouse02",
+                pipeline="aind+ephys",
+                version="v1.0",
+                params="abc1234",
+                config="def5678",
+                has_code=True,
+                has_output=False,
+                has_logs=False,
+            ),
+        ],
+    )
 
     with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
@@ -346,10 +524,8 @@ def test_clean_unsubmitted_capsules_removed_entry_via_fallback_attempt_resolutio
         has_output=False,
     )
 
+    _write_state_entries(queue_dir, [state_entry])
     with (
-        mock.patch(
-            "dandi_compute_code.queue._clean_unsubmitted_capsules.scan_dandiset_directory", return_value=[state_entry]
-        ),
         mock.patch("subprocess.run") as mock_run,
         mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}),
     ):

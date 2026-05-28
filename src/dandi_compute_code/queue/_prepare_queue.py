@@ -37,7 +37,7 @@ def prepare_queue(
     is enforced by reading the existing ``state.jsonl`` file inside
     *queue_directory*.  Entries with ``has_code=True``, ``has_logs=True``, and
     ``has_output=False`` are counted as failures for the relevant pipeline,
-    version, and source Dandiset.  Run :func:`refresh_queue_state` beforehand to
+    version, and source Dandiset.  Run :func:`write_queue_state` beforehand to
     ensure ``state.jsonl`` is up to date.
 
     :param queue_directory: Path to the queue root directory.

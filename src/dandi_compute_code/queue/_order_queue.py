@@ -6,8 +6,7 @@ def order_queue(*, state_entries: list[dict], queue_config: dict, limit: int | N
     """
     Build the priority-ordered waiting list from in-memory state entries.
 
-    :param state_entries: Records produced by :func:`~dandi_compute_code.dandiset.scan_dandiset_directory`
-        (or loaded from a ``state.jsonl`` file).
+    :param state_entries: Records loaded from ``state.jsonl``.
     :type state_entries: list[dict]
     :param queue_config: Parsed contents of ``queue_config.json``.
     :type queue_config: dict

@@ -20,8 +20,7 @@ def _build_processing_order(
     parameterizations of a dandiset for a given version are queued before
     moving on to the next dandiset or version.
 
-    :param state_entries: Records produced by :func:`~dandi_compute_code.dandiset.scan_dandiset_directory`
-        (or loaded from a ``state.jsonl`` file).
+    :param state_entries: Records loaded from ``state.jsonl``.
     :type state_entries: list[dict]
     :param queue_config: Parsed contents of ``queue_config.json``.  Expected shape::
 

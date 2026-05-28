@@ -22,32 +22,75 @@ globals().update(
 
 @pytest.mark.ai_generated
 def test_order_queue_raises_when_queue_config_missing(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state raises FileNotFoundError when queue_config.json is absent."""
+    """write_queue_state raises FileNotFoundError when queue_config.json is absent."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
 
     with pytest.raises(FileNotFoundError, match="queue_config.json"):
-        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        write_queue_state(queue_directory=queue_dir)
 
 
 @pytest.mark.ai_generated
 def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state writes scanned entries to state.jsonl."""
+    """write_queue_state writes state entries emitted by write_queue_state."""
     queue_dir = _make_queue_dir(tmp_path)
+    expected_dandiset_id = "001697"
+    source_path_1 = "sub-01/sub-01_ecephys.nwb"
+    source_path_2 = "sub-02/sub-02_ecephys.nwb"
 
-    entries = [
-        _make_state_entry(dandiset_id="000001", has_code=True, has_output=False, has_logs=False),
-        # Already has output (kept in state.jsonl for authoritative tracking)
-        _make_state_entry(dandiset_id="000002", has_code=True, has_output=True, has_logs=False),
-    ]
-    with mock.patch("dandi_compute_code.queue._refresh_queue.scan_dandiset_directory", return_value=entries):
-        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+    with (
+        mock.patch(
+            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+            return_value=AssetsJsonldMetadata(
+                content_id_to_asset={},
+                path_to_asset_metadata={
+                    "derivatives/dandiset-001697/sub-01/sub-01_ecephys/pipeline-test/"
+                    "version-v1.0_params-default_config-aaa1111_attempt-1/code/submit.sh": AssetMetadata(
+                        path="derivatives/dandiset-001697/sub-01/sub-01_ecephys/pipeline-test/"
+                        "version-v1.0_params-default_config-aaa1111_attempt-1/code/submit.sh",
+                        date_modified="2024-01-01T00:00:00+00:00",
+                        content_size=1,
+                        content_id="attempt-1",
+                    ),
+                    "derivatives/dandiset-001697/sub-02/sub-02_ecephys/pipeline-test/"
+                    "version-v1.0_params-default_config-bbb2222_attempt-1/code/submit.sh": AssetMetadata(
+                        path="derivatives/dandiset-001697/sub-02/sub-02_ecephys/pipeline-test/"
+                        "version-v1.0_params-default_config-bbb2222_attempt-1/code/submit.sh",
+                        date_modified="2024-01-02T00:00:00+00:00",
+                        content_size=2,
+                        content_id="attempt-2",
+                    ),
+                },
+            ),
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            return_value=AssetsJsonldMetadata(
+                content_id_to_asset={},
+                path_to_asset_metadata={
+                    source_path_1: AssetMetadata(
+                        path=source_path_1,
+                        date_modified="2024-01-01T00:00:00+00:00",
+                        content_size=1,
+                        content_id="id-1",
+                    ),
+                    source_path_2: AssetMetadata(
+                        path=source_path_2,
+                        date_modified="2024-01-02T00:00:00+00:00",
+                        content_size=2,
+                        content_id="id-2",
+                    ),
+                },
+            ),
+        ),
+    ):
+        write_queue_state(queue_directory=queue_dir)
 
     state_file = queue_dir / "state.jsonl"
     assert state_file.exists()
     state_entries = _read_jsonl(state_file)
     assert len(state_entries) == 2
-    assert {entry["dandiset_id"] for entry in state_entries} == {"000001", "000002"}
+    assert all(entry["dandiset_id"] == expected_dandiset_id for entry in state_entries)
 
 
 @pytest.mark.ai_generated
