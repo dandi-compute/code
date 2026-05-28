@@ -3,10 +3,10 @@ import pathlib
 from unittest import mock
 
 import pytest
-from _process_queue_test_cases import _build_assets_metadata
 from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
+from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 
 
 @pytest.mark.ai_generated
@@ -28,13 +28,40 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
         )
     )
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+    source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
+    attempt_prefix = (
+        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
+        "pipeline-aind+ephys/version-v1.0+abc1234+def5678_params-default_config-0d4bf36_attempt-1"
+    )
     runner = CliRunner()
-    with mock.patch(
-        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
-        return_value=_build_assets_metadata(
-            content_id=content_id,
-            asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
-            content_size=1234,
+    with (
+        mock.patch(
+            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+            return_value=AssetsJsonldMetadata(
+                content_id_to_asset={},
+                path_to_asset_metadata={
+                    f"{attempt_prefix}/code/submit.sh": AssetMetadata(
+                        path=f"{attempt_prefix}/code/submit.sh",
+                        date_modified="2025-01-01T00:00:00+00:00",
+                        content_size=1,
+                        content_id="attempt-code-id",
+                    )
+                },
+            ),
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            return_value=AssetsJsonldMetadata(
+                content_id_to_asset={},
+                path_to_asset_metadata={
+                    source_path: AssetMetadata(
+                        path=source_path,
+                        date_modified="2025-01-01T00:00:00+00:00",
+                        content_size=1234,
+                        content_id=content_id,
+                    )
+                },
+            ),
         ),
     ):
         result = runner.invoke(

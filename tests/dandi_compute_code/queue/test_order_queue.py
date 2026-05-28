@@ -34,44 +34,54 @@ def test_order_queue_raises_when_queue_config_missing(tmp_path: pathlib.Path) ->
 def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.Path) -> None:
     """write_queue_state writes state entries emitted by write_queue_state."""
     queue_dir = _make_queue_dir(tmp_path)
-    expected_dandiset_id = "123456"
+    expected_dandiset_id = "001697"
+    source_path_1 = "sub-01/sub-01_ecephys.nwb"
+    source_path_2 = "sub-02/sub-02_ecephys.nwb"
 
-    content_id_to_asset = {
-        "id-1": {
-            "path": "sub-01/sub-01_ecephys.nwb",
-            "contentSize": 1,
-            "blobDateModified": "2024-01-01T00:00:00+00:00",
-        },
-        "id-2": {
-            "path": "sub-02/sub-02_ecephys.nwb",
-            "contentSize": 2,
-            "blobDateModified": "2024-01-02T00:00:00+00:00",
-        },
-    }
     with (
         mock.patch(
             "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
-                content_id_to_asset=content_id_to_asset,
+                content_id_to_asset={},
                 path_to_asset_metadata={
-                    "sub-01/sub-01_ecephys.nwb": AssetMetadata(
-                        path="sub-01/sub-01_ecephys.nwb",
+                    "derivatives/dandiset-001697/sub-01/sub-01_ecephys/pipeline-test/"
+                    "version-v1.0_params-default_config-aaa1111_attempt-1/code/submit.sh": AssetMetadata(
+                        path="derivatives/dandiset-001697/sub-01/sub-01_ecephys/pipeline-test/"
+                        "version-v1.0_params-default_config-aaa1111_attempt-1/code/submit.sh",
+                        date_modified="2024-01-01T00:00:00+00:00",
+                        content_size=1,
+                        content_id="attempt-1",
+                    ),
+                    "derivatives/dandiset-001697/sub-02/sub-02_ecephys/pipeline-test/"
+                    "version-v1.0_params-default_config-bbb2222_attempt-1/code/submit.sh": AssetMetadata(
+                        path="derivatives/dandiset-001697/sub-02/sub-02_ecephys/pipeline-test/"
+                        "version-v1.0_params-default_config-bbb2222_attempt-1/code/submit.sh",
+                        date_modified="2024-01-02T00:00:00+00:00",
+                        content_size=2,
+                        content_id="attempt-2",
+                    ),
+                },
+            ),
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            return_value=AssetsJsonldMetadata(
+                content_id_to_asset={},
+                path_to_asset_metadata={
+                    source_path_1: AssetMetadata(
+                        path=source_path_1,
                         date_modified="2024-01-01T00:00:00+00:00",
                         content_size=1,
                         content_id="id-1",
                     ),
-                    "sub-02/sub-02_ecephys.nwb": AssetMetadata(
-                        path="sub-02/sub-02_ecephys.nwb",
+                    source_path_2: AssetMetadata(
+                        path=source_path_2,
                         date_modified="2024-01-02T00:00:00+00:00",
                         content_size=2,
                         content_id="id-2",
                     ),
                 },
             ),
-        ),
-        mock.patch(
-            "dandi_compute_code.queue._write_queue_state._ASSETS_JSONLD_URL",
-            f"https://example.test/dandisets/{expected_dandiset_id}/draft/assets.jsonld",
         ),
     ):
         write_queue_state(queue_directory=queue_dir)
