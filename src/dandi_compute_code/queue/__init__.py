@@ -1,5 +1,3 @@
-import pathlib
-
 from ._aggregate_queue_statistics import aggregate_queue_statistics
 from ._clean_unsubmitted_capsules import clean_unsubmitted_capsules
 from ._dump_issues import dump_issues
@@ -10,12 +8,6 @@ from ._process_queue import process_queue
 from ._summarize_issues import summarize_issues
 from ._write_queue_state import write_queue_state
 
-
-def refresh_queue_state(*, queue_directory: pathlib.Path, dandiset_directory: pathlib.Path | None = None) -> None:
-    """Compatibility wrapper around write_queue_state; dandiset_directory is ignored."""
-    write_queue_state(queue_directory=queue_directory)
-
-
 __all__ = [
     "TEST_QUEUE_CONTENT_ID",
     "aggregate_queue_statistics",
@@ -24,7 +16,6 @@ __all__ = [
     "order_queue",
     "prepare_queue",
     "process_queue",
-    "refresh_queue_state",
     "summarize_issues",
     "write_queue_state",
 ]

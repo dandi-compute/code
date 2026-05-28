@@ -8,7 +8,7 @@ import pytest
 from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
-from dandi_compute_code.queue import refresh_queue_state
+from dandi_compute_code.queue import write_queue_state
 
 _SHARED_TEST_SYMBOLS = {
     "CliRunner": CliRunner,
@@ -18,7 +18,7 @@ _SHARED_TEST_SYMBOLS = {
     "mock": mock,
     "pathlib": pathlib,
     "pytest": pytest,
-    "refresh_queue_state": refresh_queue_state,
+    "write_queue_state": write_queue_state,
 }
 
 

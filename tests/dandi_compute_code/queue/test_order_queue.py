@@ -22,17 +22,17 @@ globals().update(
 
 @pytest.mark.ai_generated
 def test_order_queue_raises_when_queue_config_missing(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state raises FileNotFoundError when queue_config.json is absent."""
+    """write_queue_state raises FileNotFoundError when queue_config.json is absent."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
 
     with pytest.raises(FileNotFoundError, match="queue_config.json"):
-        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        write_queue_state(queue_directory=queue_dir)
 
 
 @pytest.mark.ai_generated
 def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state writes state entries emitted by write_queue_state."""
+    """write_queue_state writes state entries emitted by write_queue_state."""
     queue_dir = _make_queue_dir(tmp_path)
     expected_dandiset_id = "123456"
 
@@ -58,7 +58,7 @@ def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.P
             f"https://example.test/dandisets/{expected_dandiset_id}/draft/assets.jsonld",
         ),
     ):
-        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        write_queue_state(queue_directory=queue_dir)
 
     state_file = queue_dir / "state.jsonl"
     assert state_file.exists()

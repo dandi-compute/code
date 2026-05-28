@@ -21,7 +21,7 @@ import pytest
 from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
-from dandi_compute_code.queue import refresh_queue_state
+from dandi_compute_code.queue import write_queue_state
 from dandi_compute_code.queue._aggregate_queue_statistics import aggregate_queue_statistics
 from dandi_compute_code.queue._attempt_dir_candidates import _attempt_dir_candidates
 from dandi_compute_code.queue._build_processing_order import _build_processing_order
@@ -552,7 +552,7 @@ def test_submit_next_raises_when_state_file_is_absent(tmp_path: pathlib.Path) ->
     queue_dir = _make_queue_dir(tmp_path)
 
     with pytest.raises(FileNotFoundError, match="State file not found"):
-        _submit_next(queue_directory=queue_dir, datalad_directory=tmp_path, dandiset_directory=tmp_path)
+        _submit_next(queue_directory=queue_dir, datalad_directory=tmp_path)
 
 
 @pytest.mark.ai_generated
@@ -577,7 +577,7 @@ def test_submit_next_logs_and_returns_false_when_state_file_is_empty(
     (queue_dir / "state.jsonl").write_text("")
 
     with caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._submit_next"):
-        result = _submit_next(queue_directory=queue_dir, datalad_directory=tmp_path, dandiset_directory=tmp_path)
+        result = _submit_next(queue_directory=queue_dir, datalad_directory=tmp_path)
 
     assert result is False
     assert any("No pending entries in" in record.message for record in caplog.records)
@@ -1264,18 +1264,18 @@ def test_process_queue_passes_datalad_directory_to_submit_next(tmp_path: pathlib
 
 
 # ---------------------------------------------------------------------------
-# Tests for order_queue and refresh_queue_state
+# Tests for order_queue and write_queue_state
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.ai_generated
 def test_order_queue_raises_when_queue_config_missing(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state raises FileNotFoundError when queue_config.json is absent."""
+    """write_queue_state raises FileNotFoundError when queue_config.json is absent."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
 
     with pytest.raises(FileNotFoundError, match="queue_config.json"):
-        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        write_queue_state(queue_directory=queue_dir)
 
 
 @pytest.mark.ai_generated
@@ -1291,8 +1291,8 @@ def test_load_queue_config_validates_issue_example_schema(tmp_path: pathlib.Path
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_state_raises_when_queue_config_fails_linkml_validation(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state raises when queue_config violates LinkML constraints."""
+def test_write_queue_state_raises_when_queue_config_fails_linkml_validation(tmp_path: pathlib.Path) -> None:
+    """write_queue_state raises when queue_config violates LinkML constraints."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     invalid_queue_config = {
@@ -1307,7 +1307,7 @@ def test_refresh_queue_state_raises_when_queue_config_fails_linkml_validation(tm
         mock.patch("dandi_compute_code.queue._refresh_queue.scan_dandiset_directory", return_value=[]),
         pytest.raises(ValueError, match="LinkML validation failed"),
     ):
-        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        write_queue_state(queue_directory=queue_dir)
 
 
 @pytest.mark.ai_generated
@@ -1328,19 +1328,18 @@ def test_prepare_queue_raises_when_queue_config_fails_linkml_validation(tmp_path
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_state_writes_empty_files_for_missing_dandiset_directory(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state writes an empty state file when dandiset directory does not exist."""
+def test_write_queue_state_writes_empty_files_for_missing_dandiset_directory(tmp_path: pathlib.Path) -> None:
+    """write_queue_state writes an empty state file when dandiset directory does not exist."""
     queue_dir = _make_queue_dir(tmp_path)
-    missing_dandiset_dir = tmp_path / "missing_dandiset"
 
-    refresh_queue_state(queue_directory=queue_dir, dandiset_directory=missing_dandiset_dir)
+    write_queue_state(queue_directory=queue_dir)
 
     assert (queue_dir / "state.jsonl").read_text() == ""
 
 
 @pytest.mark.ai_generated
 def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state writes scanned entries to state.jsonl."""
+    """write_queue_state writes scanned entries to state.jsonl."""
     queue_dir = _make_queue_dir(tmp_path)
 
     entries = [
@@ -1349,7 +1348,7 @@ def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.P
         _make_state_entry(dandiset_id="000002", has_code=True, has_output=True, has_logs=False),
     ]
     with mock.patch("dandi_compute_code.queue._refresh_queue.scan_dandiset_directory", return_value=entries):
-        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        write_queue_state(queue_directory=queue_dir)
 
     state_file = queue_dir / "state.jsonl"
     assert state_file.exists()
@@ -1359,23 +1358,23 @@ def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.P
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state writes all scanned entries to state.jsonl."""
+def test_write_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.Path) -> None:
+    """write_queue_state writes all scanned entries to state.jsonl."""
     queue_dir = _make_queue_dir(tmp_path)
 
     entries = [
         _make_state_entry(dandiset_id=f"00000{i}", has_code=True, has_output=False, has_logs=False) for i in range(1, 6)
     ]
     with mock.patch("dandi_compute_code.queue._refresh_queue.scan_dandiset_directory", return_value=entries):
-        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        write_queue_state(queue_directory=queue_dir)
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 5
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_state_excludes_entries_with_submitted_markers(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state writes submitted-marker entries into state.jsonl unchanged."""
+def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pathlib.Path) -> None:
+    """write_queue_state writes submitted-marker entries into state.jsonl unchanged."""
     queue_dir = _make_queue_dir(tmp_path)
 
     pending_entry = _make_state_entry(dandiset_id="000001", has_code=True, has_output=False, has_logs=False)
@@ -1396,7 +1395,7 @@ def test_refresh_queue_state_excludes_entries_with_submitted_markers(tmp_path: p
         "dandi_compute_code.queue._refresh_queue.scan_dandiset_directory",
         return_value=[pending_entry, submitted_entry],
     ):
-        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        write_queue_state(queue_directory=queue_dir)
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 2

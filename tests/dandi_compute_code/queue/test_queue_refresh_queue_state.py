@@ -21,8 +21,8 @@ globals().update(
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_state_raises_when_queue_config_fails_linkml_validation(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state raises when queue_config violates LinkML constraints."""
+def test_write_queue_state_raises_when_queue_config_fails_linkml_validation(tmp_path: pathlib.Path) -> None:
+    """write_queue_state raises when queue_config violates LinkML constraints."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     invalid_queue_config = {
@@ -34,14 +34,13 @@ def test_refresh_queue_state_raises_when_queue_config_fails_linkml_validation(tm
     (queue_dir / "queue_config.json").write_text(json.dumps(invalid_queue_config))
 
     with pytest.raises(ValueError, match="LinkML validation failed"):
-        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        write_queue_state(queue_directory=queue_dir)
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_state_writes_empty_files_for_missing_dandiset_directory(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state does not require local dandiset scan."""
+def test_write_queue_state_writes_empty_files_for_missing_dandiset_directory(tmp_path: pathlib.Path) -> None:
+    """write_queue_state does not require local dandiset scan."""
     queue_dir = _make_queue_dir(tmp_path)
-    missing_dandiset_dir = tmp_path / "missing_dandiset"
 
     content_id_to_asset: dict[str, dict[str, object]] = {}
     path_to_date_modified: dict[str, str] = {}
@@ -49,14 +48,14 @@ def test_refresh_queue_state_writes_empty_files_for_missing_dandiset_directory(t
         "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
         return_value=(content_id_to_asset, path_to_date_modified),
     ):
-        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=missing_dandiset_dir)
+        write_queue_state(queue_directory=queue_dir)
     assert (queue_dir / "state.jsonl").exists()
     assert (queue_dir / "state.jsonl").read_text() == ""
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state writes ordered pending entries from metadata."""
+def test_write_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.Path) -> None:
+    """write_queue_state writes ordered pending entries from metadata."""
     queue_dir = _make_queue_dir(tmp_path)
     content_id_to_asset = {
         f"id-{i}": {
@@ -70,7 +69,7 @@ def test_refresh_queue_state_writes_all_ordered_pending_entries(tmp_path: pathli
         "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
         return_value=(content_id_to_asset, {}),
     ):
-        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        write_queue_state(queue_directory=queue_dir)
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 5
@@ -78,8 +77,8 @@ def test_refresh_queue_state_writes_all_ordered_pending_entries(tmp_path: pathli
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_state_excludes_entries_with_submitted_markers(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state no longer depends on local submitted marker files."""
+def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pathlib.Path) -> None:
+    """write_queue_state no longer depends on local submitted marker files."""
     queue_dir = _make_queue_dir(tmp_path)
     (tmp_path / "sub-mouse01" / "code").mkdir(parents=True)
     (tmp_path / "sub-mouse01" / "code" / "submitted").write_text("")
@@ -94,14 +93,14 @@ def test_refresh_queue_state_excludes_entries_with_submitted_markers(tmp_path: p
         "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
         return_value=(content_id_to_asset, {}),
     ):
-        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        write_queue_state(queue_directory=queue_dir)
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
 
 
 @pytest.mark.ai_generated
-def test_refresh_queue_state_parses_attempt_fields_and_presence_flags_from_assets_paths(tmp_path: pathlib.Path) -> None:
-    """refresh_queue_state parses attempt metadata from derivatives asset paths."""
+def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_paths(tmp_path: pathlib.Path) -> None:
+    """write_queue_state parses attempt metadata from derivatives asset paths."""
     queue_dir = _make_queue_dir(tmp_path)
     source_path = "sub-test/sourcedata/aind-sample.nwb"
     attempt_prefix = (
@@ -134,7 +133,7 @@ def test_refresh_queue_state_parses_attempt_fields_and_presence_flags_from_asset
         {f"{attempt_prefix}/logs/stdout.txt": "2026-05-24T10:30:00+00:00"},
     )
     with mock.patch("dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata", return_value=metadata):
-        refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
+        write_queue_state(queue_directory=queue_dir)
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
