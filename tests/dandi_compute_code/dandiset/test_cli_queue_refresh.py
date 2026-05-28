@@ -4,7 +4,7 @@ import pathlib as _pathlib
 
 _spec = _importlib_util.spec_from_file_location(
     "_write_queue_state_test_cases",
-    _pathlib.Path(__file__).with_name("_write_queue_state_test_cases.py"),
+    _pathlib.Path(__file__).parents[1] / "queue" / "test_write_queue_state.py",
 )
 assert _spec is not None
 assert _spec.loader is not None

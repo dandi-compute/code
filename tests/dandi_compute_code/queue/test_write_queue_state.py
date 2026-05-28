@@ -20,6 +20,37 @@ globals().update(
 )
 
 
+def _build_assets_metadata(
+    *,
+    content_id: str,
+    asset_path: str,
+    content_size: int | str | None = None,
+    blob_date_modified: str | None = None,
+    log_asset_path: str | None = None,
+    log_date_modified: str | None = None,
+) -> tuple[dict[str, dict[str, object]], dict[str, str]]:
+    """Build source-asset and log-path timestamp indexes from one synthetic asset."""
+    source_asset: dict[str, object] = {"path": asset_path}
+    if content_size is not None:
+        source_asset["contentSize"] = content_size
+    if blob_date_modified is not None:
+        source_asset["blobDateModified"] = blob_date_modified
+    path_to_date_modified: dict[str, str] = {}
+    if log_asset_path is not None and log_date_modified is not None:
+        path_to_date_modified[log_asset_path] = log_date_modified
+    return {content_id: source_asset}, path_to_date_modified
+
+
+@pytest.fixture(autouse=True)
+def _mock_dandi_api_asset_lookup() -> Iterator[None]:
+    """Prevent network calls by defaulting metadata loader to empty tuple indexes."""
+    with mock.patch(
+        "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
+        return_value=({}, {}),
+    ):
+        yield
+
+
 @pytest.mark.ai_generated
 def test_write_queue_state_raises_when_queue_config_fails_linkml_validation(tmp_path: pathlib.Path) -> None:
     """write_queue_state raises when queue_config violates LinkML constraints."""
