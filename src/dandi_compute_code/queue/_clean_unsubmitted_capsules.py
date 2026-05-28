@@ -3,9 +3,10 @@ import pathlib
 import shutil
 import subprocess
 
+from ._read_state_entries import _read_state_entries
 from ._remove_empty_parents import _remove_empty_parents
 from ._resolve_unsubmitted_attempt_dir import _resolve_unsubmitted_attempt_dir
-from ..dandiset import scan_dandiset_directory
+from ._write_queue_state import write_queue_state
 
 
 # TODO: review if the return value here is needed at all
@@ -22,17 +23,16 @@ def clean_unsubmitted_capsules(
     ``logs/`` subdirectory nor a ``derivatives/`` subdirectory, and the attempt
     directory does not contain a ``code/submitted`` marker.
 
-    The function scans *dandiset_directory* for all attempt directories using
-    the local filesystem as the ground truth, filters to the queued subset,
-    then deletes each matching attempt directory tree from the DANDI archive
-    (via ``dandi delete``) and from the local filesystem.
+    The function refreshes ``state.jsonl`` in *queue_directory* from DANDI
+    ``assets.jsonld`` metadata, filters to the queued subset, then deletes each
+    matching attempt directory tree from the DANDI archive (via ``dandi
+    delete``) and from the local filesystem.
 
     Parameters
     ----------
     dandiset_directory : pathlib.Path
-        Path to a local clone of the dandiset repository.  The function scans
-        ``{dandiset_directory}/derivatives/dandiset-*/`` to locate attempt
-        directories.
+        Path to a local clone of the dandiset repository used to resolve and
+        delete matching attempt directories.
     queue_directory : pathlib.Path
         Path to the queue root directory.
 
@@ -56,7 +56,8 @@ def clean_unsubmitted_capsules(
         message = "`DANDI_API_KEY` environment variable is not set or is blank."
         raise RuntimeError(message)
 
-    state_entries = scan_dandiset_directory(dandiset_directory=dandiset_directory)
+    write_queue_state(queue_directory=queue_directory)
+    state_entries = _read_state_entries(queue_directory / "state.jsonl")
 
     cleanable_attempt_dirs = [
         attempt_dir

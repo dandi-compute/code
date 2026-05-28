@@ -7,7 +7,7 @@ def _resolve_params_key_to_id(pipeline: str, params_key: str) -> str:
 
     ``queue_config.json`` stores parameters references as human-readable key
     names (e.g. ``"default"``), but the on-disk directory names — and therefore
-    the ``params`` field recorded by :func:`scan_dandiset_directory` — use the
+    the ``params`` field recorded in queue state entries — use the
     first seven hex characters of the MD5 checksum of the parameters file (e.g.
     ``"98fd947"``).  This function bridges that gap by looking up the registered
     MD5 for a known key.
