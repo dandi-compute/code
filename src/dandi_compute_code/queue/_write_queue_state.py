@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from ._load_queue_config import _load_queue_config
 from ..dandiset._globals import _ASSETS_JSONLD_URL
-from ..dandiset._load_assets_jsonld_metadata import AssetMetadata, AssetsJsonldMetadata, load_assets_jsonld_metadata
+from ..dandiset._load_assets_jsonld_metadata import load_assets_jsonld_metadata
 
 _FLAT_ATTEMPT_RE = re.compile(
     r"^version-(?P<version>.+?)_params-(?P<params>[^_]+)_config-(?P<config>[^_]+)(?:_.+?)?_attempt-(?P<attempt>\d+)$"
