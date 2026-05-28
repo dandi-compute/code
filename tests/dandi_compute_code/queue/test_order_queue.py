@@ -19,6 +19,8 @@ globals().update(
     }
 )
 
+from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
+
 
 @pytest.mark.ai_generated
 def test_order_queue_raises_when_queue_config_missing(tmp_path: pathlib.Path) -> None:
@@ -50,8 +52,24 @@ def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.P
     }
     with (
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
-            return_value=(content_id_to_asset, {}),
+            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+            return_value=AssetsJsonldMetadata(
+                content_id_to_asset=content_id_to_asset,
+                path_to_asset_metadata={
+                    "sub-01/sub-01_ecephys.nwb": AssetMetadata(
+                        path="sub-01/sub-01_ecephys.nwb",
+                        date_modified="2024-01-01T00:00:00+00:00",
+                        content_size=1,
+                        content_id="id-1",
+                    ),
+                    "sub-02/sub-02_ecephys.nwb": AssetMetadata(
+                        path="sub-02/sub-02_ecephys.nwb",
+                        date_modified="2024-01-02T00:00:00+00:00",
+                        content_size=2,
+                        content_id="id-2",
+                    ),
+                },
+            ),
         ),
         mock.patch(
             "dandi_compute_code.queue._write_queue_state._ASSETS_JSONLD_URL",

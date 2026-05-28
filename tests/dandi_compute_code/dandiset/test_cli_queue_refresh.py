@@ -41,7 +41,7 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
     content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
     runner = CliRunner()
     with mock.patch(
-        "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
         return_value=_build_assets_metadata(
             content_id=content_id,
             asset_path="sub-mouse01/sub-mouse01_ecephys.nwb",

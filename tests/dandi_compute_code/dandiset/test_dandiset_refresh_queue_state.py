@@ -40,7 +40,7 @@ def test_write_queue_state_with_dandiset_directory_creates_valid_files(tmp_path:
         )
     )
     with mock.patch(
-        "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
         return_value=_build_assets_metadata(
             content_id=content_id,
             asset_path=resolved_asset_path,
@@ -82,7 +82,7 @@ def test_write_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathlib
     )
 
     with mock.patch(
-        "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
         return_value=_build_assets_metadata(
             content_id=content_id,
             asset_path=resolved_asset_path,
@@ -120,7 +120,7 @@ def test_write_queue_state_writes_resolved_dandi_path_for_root_level_asset(tmp_p
     )
 
     with mock.patch(
-        "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
         return_value=_build_assets_metadata(
             content_id=content_id,
             asset_path=root_asset_path,
@@ -142,8 +142,8 @@ def test_write_queue_state_with_dandiset_directory_empty_when_no_attempts(tmp_pa
     queue_dir.mkdir()
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
     with mock.patch(
-        "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
-        return_value=({}, {}),
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+        return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
     ):
         write_queue_state(queue_directory=queue_dir)
     state_file = queue_dir / "state.jsonl"
@@ -160,8 +160,8 @@ def test_write_queue_state_does_not_require_dandi_api_key(tmp_path: pathlib.Path
     with (
         mock.patch.dict("os.environ", {}, clear=True),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
-            return_value=({}, {}),
+            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+            return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
         ),
     ):
         write_queue_state(queue_directory=queue_dir)
@@ -185,8 +185,8 @@ def test_write_queue_state_with_dandiset_directory_includes_only_pending_in_wait
         )
     )
 
-    metadata = (
-        {
+    metadata = AssetsJsonldMetadata(
+        content_id_to_asset={
             "0fbbca6a-0000-0000-0000-000000000001": {
                 "path": "sub-mouse01/sub-mouse01_ecephys.nwb",
                 "contentSize": 11,
@@ -200,9 +200,22 @@ def test_write_queue_state_with_dandiset_directory_includes_only_pending_in_wait
                 "dateModified": "2025-01-02T00:00:00+00:00",
             },
         },
-        {},
+        path_to_asset_metadata={
+            "sub-mouse01/sub-mouse01_ecephys.nwb": AssetMetadata(
+                path="sub-mouse01/sub-mouse01_ecephys.nwb",
+                date_modified="2025-01-01T00:00:00+00:00",
+                content_size=11,
+                content_id="0fbbca6a-0000-0000-0000-000000000001",
+            ),
+            "sub-mouse02/sub-mouse02_ecephys.nwb": AssetMetadata(
+                path="sub-mouse02/sub-mouse02_ecephys.nwb",
+                date_modified="2025-01-02T00:00:00+00:00",
+                content_size=22,
+                content_id="0fbbca6a-0000-0000-0000-000000000002",
+            ),
+        },
     )
-    with mock.patch("dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata", return_value=metadata):
+    with mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata):
         write_queue_state(queue_directory=queue_dir)
 
     state_lines = [line for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
@@ -234,9 +247,9 @@ def test_write_queue_state_with_dandiset_directory_excludes_entries_with_submitt
         )
     )
     with mock.patch(
-        "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
-        return_value=(
-            {
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+        return_value=AssetsJsonldMetadata(
+            content_id_to_asset={
                 "0fbbca6a-0000-0000-0000-000000000001": {
                     "path": "sub-mouse01/sub-mouse01_ecephys.nwb",
                     "contentSize": 11,
@@ -244,7 +257,14 @@ def test_write_queue_state_with_dandiset_directory_excludes_entries_with_submitt
                     "dateModified": "2025-01-01T00:00:00+00:00",
                 }
             },
-            {},
+            path_to_asset_metadata={
+                "sub-mouse01/sub-mouse01_ecephys.nwb": AssetMetadata(
+                    path="sub-mouse01/sub-mouse01_ecephys.nwb",
+                    date_modified="2025-01-01T00:00:00+00:00",
+                    content_size=11,
+                    content_id="0fbbca6a-0000-0000-0000-000000000001",
+                )
+            },
         ),
     ):
         write_queue_state(queue_directory=queue_dir)

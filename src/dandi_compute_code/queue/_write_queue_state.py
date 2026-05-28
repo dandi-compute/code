@@ -14,7 +14,6 @@ _FLAT_ATTEMPT_RE = re.compile(
 _NESTED_ATTEMPT_RE = re.compile(r"^params-(?P<params>[^_]+)_config-(?P<config>[^_]+)_attempt-(?P<attempt>\d+)$")
 _DANDISET_ID_RE = re.compile(r"/dandisets/(?P<dandiset_id>\d+)/")
 _log = logging.getLogger(__name__)
-_load_assets_jsonld_metadata = load_assets_jsonld_metadata
 
 
 @dataclass(frozen=True)
@@ -26,29 +25,6 @@ class JobInfo:
     params: str
     config: str
     attempt: int
-
-
-def _coerce_assets_jsonld_metadata(
-    assets_jsonld_metadata: AssetsJsonldMetadata | tuple[dict[str, dict[str, object]], dict[str, str]],
-) -> AssetsJsonldMetadata:
-    if isinstance(assets_jsonld_metadata, AssetsJsonldMetadata):
-        return assets_jsonld_metadata
-
-    content_id_to_asset, path_to_date_modified = assets_jsonld_metadata
-    path_to_asset_metadata: dict[str, AssetMetadata] = {
-        path: AssetMetadata(path=path, date_modified=date_modified, content_id=None)
-        for path, date_modified in path_to_date_modified.items()
-    }
-    for content_id, asset in content_id_to_asset.items():
-        path = asset.get("path")
-        if isinstance(path, str):
-            date_modified = path_to_date_modified.get(path)
-            path_to_asset_metadata[path] = AssetMetadata(path=path, date_modified=date_modified, content_id=content_id)
-
-    return AssetsJsonldMetadata(
-        content_id_to_asset=content_id_to_asset,
-        path_to_asset_metadata=path_to_asset_metadata,
-    )
 
 
 def _parse_attempt_identity(asset_path: str) -> tuple[JobInfo, str] | None:
@@ -144,7 +120,7 @@ def write_queue_state(
     """
     _load_queue_config(queue_directory=queue_directory)
     state_file = queue_directory / "state.jsonl"
-    assets_jsonld_metadata = _coerce_assets_jsonld_metadata(_load_assets_jsonld_metadata())
+    assets_jsonld_metadata = load_assets_jsonld_metadata()
 
     records_by_attempt: dict[JobInfo, dict[str, object]] = {}
     log_timestamps_by_attempt: dict[JobInfo, list[str]] = {}
@@ -177,9 +153,8 @@ def write_queue_state(
             if log_relative_path and log_relative_path != "dataset_description.json":
                 record["has_logs"] = True
                 log_metadata = assets_jsonld_metadata.path_to_asset_metadata.get(asset_path)
-                if log_metadata is not None and isinstance(log_metadata.date_modified, str):
-                    log_timestamp = log_metadata.date_modified
-                    log_timestamps_by_attempt.setdefault(attempt_identity, []).append(log_timestamp)
+                if log_metadata is not None:
+                    log_timestamps_by_attempt.setdefault(attempt_identity, []).append(log_metadata.date_modified)
 
     records: list[dict[str, object]] = []
     for attempt_identity, record in records_by_attempt.items():
@@ -192,25 +167,12 @@ def write_queue_state(
                 attempt_identity.dandi_path,
             )
             continue
+        content_size = source_metadata.content_size
+
         source_asset_metadata = assets_jsonld_metadata.content_id_to_asset.get(source_content_id)
-        if source_asset_metadata is None:
-            _log.debug("Skipping attempt for content_id=%s because source metadata is unavailable", source_content_id)
-            continue
-
-        content_size = source_asset_metadata.get("contentSize")
-        if not isinstance(content_size, int):
-            _log.debug(
-                "Skipping attempt for content_id=%s because contentSize is not an int (value=%r)",
-                source_content_id,
-                content_size,
-            )
-            continue
-
-        created_at = source_asset_metadata.get("blobDateModified")
+        created_at = source_asset_metadata.get("blobDateModified") if isinstance(source_asset_metadata, dict) else None
         if not isinstance(created_at, str):
-            created_at = source_asset_metadata.get("dateModified")
-        if not isinstance(created_at, str):
-            created_at = ""
+            created_at = source_metadata.date_modified
 
         completion_times = log_timestamps_by_attempt.get(attempt_identity, [])
         record.update(
@@ -226,27 +188,17 @@ def write_queue_state(
     dandiset_id_match = _DANDISET_ID_RE.search(_ASSETS_JSONLD_URL)
     default_dandiset_id = dandiset_id_match.group("dandiset_id") if dandiset_id_match is not None else ""
     dandi_paths_with_attempts = {attempt_identity.dandi_path for attempt_identity in records_by_attempt}
-    for content_id, source_asset_metadata in assets_jsonld_metadata.content_id_to_asset.items():
-        source_dandi_path = source_asset_metadata.get("path")
-        if not isinstance(source_dandi_path, str):
-            continue
+    for source_dandi_path, source_metadata in assets_jsonld_metadata.path_to_asset_metadata.items():
         if source_dandi_path.startswith("derivatives/"):
             continue
         if source_dandi_path in dandi_paths_with_attempts:
             continue
-        content_size = source_asset_metadata.get("contentSize")
-        if not isinstance(content_size, int):
-            _log.debug(
-                "Skipping asset for content_id=%s because contentSize is not an int (value=%r)",
-                content_id,
-                content_size,
-            )
-            continue
-        created_at = source_asset_metadata.get("blobDateModified")
+        content_id = source_metadata.content_id
+        content_size = source_metadata.content_size
+        source_asset_metadata = assets_jsonld_metadata.content_id_to_asset.get(content_id)
+        created_at = source_asset_metadata.get("blobDateModified") if isinstance(source_asset_metadata, dict) else None
         if not isinstance(created_at, str):
-            created_at = source_asset_metadata.get("dateModified")
-        if not isinstance(created_at, str):
-            created_at = ""
+            created_at = source_metadata.date_modified
         records.append(
             {
                 "dandiset_id": default_dandiset_id,

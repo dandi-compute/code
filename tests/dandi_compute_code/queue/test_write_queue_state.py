@@ -19,6 +19,8 @@ globals().update(
     }
 )
 
+from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
+
 
 def _build_assets_metadata(
     *,
@@ -28,29 +30,45 @@ def _build_assets_metadata(
     blob_date_modified: str | None = None,
     log_asset_path: str | None = None,
     log_date_modified: str | None = None,
-) -> tuple[dict[str, dict[str, object]], dict[str, str]]:
-    """Build source-asset and log-path timestamp indexes from one synthetic asset.
-
-    Returns a tuple of ``(content_id_to_asset, path_to_date_modified)`` where
-    ``path_to_date_modified`` includes only synthetic log-path timestamps.
-    """
+) -> AssetsJsonldMetadata:
+    """Build indexed synthetic assets metadata for tests."""
     source_asset: dict[str, object] = {"path": asset_path}
     if content_size is not None:
         source_asset["contentSize"] = content_size
     if blob_date_modified is not None:
         source_asset["blobDateModified"] = blob_date_modified
-    path_to_date_modified: dict[str, str] = {}
+    date_modified = blob_date_modified or "2024-01-01T00:00:00+00:00"
+    path_to_asset_metadata: dict[str, AssetMetadata] = {
+        asset_path: AssetMetadata(
+            path=asset_path,
+            date_modified=date_modified,
+            content_size=content_size if isinstance(content_size, int) else 1,
+            content_id=content_id,
+        )
+    }
+    content_id_to_asset = {content_id: source_asset}
     if log_asset_path is not None and log_date_modified is not None:
-        path_to_date_modified[log_asset_path] = log_date_modified
-    return {content_id: source_asset}, path_to_date_modified
+        log_content_id = f"{content_id}-log"
+        path_to_asset_metadata[log_asset_path] = AssetMetadata(
+            path=log_asset_path,
+            date_modified=log_date_modified,
+            content_size=1,
+            content_id=log_content_id,
+        )
+        content_id_to_asset[log_content_id] = {
+            "path": log_asset_path,
+            "contentSize": 1,
+            "dateModified": log_date_modified,
+        }
+    return AssetsJsonldMetadata(content_id_to_asset=content_id_to_asset, path_to_asset_metadata=path_to_asset_metadata)
 
 
 @pytest.fixture(autouse=True)
 def _mock_dandi_api_asset_lookup() -> Iterator[None]:
-    """Prevent network calls by defaulting metadata loader to empty tuple indexes."""
+    """Prevent network calls by defaulting metadata loader to empty indexes."""
     with mock.patch(
-        "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
-        return_value=({}, {}),
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+        return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
     ):
         yield
 
@@ -78,10 +96,9 @@ def test_write_queue_state_writes_empty_files_for_missing_dandiset_directory(tmp
     queue_dir = _make_queue_dir(tmp_path)
 
     content_id_to_asset: dict[str, dict[str, object]] = {}
-    path_to_date_modified: dict[str, str] = {}
     with mock.patch(
-        "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
-        return_value=(content_id_to_asset, path_to_date_modified),
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+        return_value=AssetsJsonldMetadata(content_id_to_asset=content_id_to_asset, path_to_asset_metadata={}),
     ):
         write_queue_state(queue_directory=queue_dir)
     assert (queue_dir / "state.jsonl").exists()
@@ -101,8 +118,19 @@ def test_write_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.
         for i in range(1, 6)
     }
     with mock.patch(
-        "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
-        return_value=(content_id_to_asset, {}),
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+        return_value=AssetsJsonldMetadata(
+            content_id_to_asset=content_id_to_asset,
+            path_to_asset_metadata={
+                asset["path"]: AssetMetadata(
+                    path=asset["path"],
+                    date_modified="2024-01-01T00:00:00+00:00",
+                    content_size=asset["contentSize"],
+                    content_id=content_id,
+                )
+                for content_id, asset in content_id_to_asset.items()
+            },
+        ),
     ):
         write_queue_state(queue_directory=queue_dir)
 
@@ -125,8 +153,18 @@ def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pat
         }
     }
     with mock.patch(
-        "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
-        return_value=(content_id_to_asset, {}),
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+        return_value=AssetsJsonldMetadata(
+            content_id_to_asset=content_id_to_asset,
+            path_to_asset_metadata={
+                "sub-mouse01/sub-mouse01_ecephys.nwb": AssetMetadata(
+                    path="sub-mouse01/sub-mouse01_ecephys.nwb",
+                    date_modified="2024-01-01T00:00:00+00:00",
+                    content_size=1234,
+                    content_id="id-1",
+                )
+            },
+        ),
     ):
         write_queue_state(queue_directory=queue_dir)
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
@@ -142,8 +180,8 @@ def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_
         "derivatives/dandiset-001849/sub-test/sourcedata/aind-sample/pipeline-aind+ephys/"
         "version-v1.1.1+b268fd2+2372f8e_params-4af6a25_config-0d4bf36_date-2026+05+24_attempt-1"
     )
-    metadata = (
-        {
+    metadata = AssetsJsonldMetadata(
+        content_id_to_asset={
             "source-content-id": {
                 "path": source_path,
                 "contentSize": 1234,
@@ -165,9 +203,34 @@ def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_
                 "dateModified": "2026-05-24T10:30:00+00:00",
             },
         },
-        {f"{attempt_prefix}/logs/stdout.txt": "2026-05-24T10:30:00+00:00"},
+        path_to_asset_metadata={
+            source_path: AssetMetadata(
+                path=source_path,
+                date_modified="2026-05-24T10:00:00+00:00",
+                content_size=1234,
+                content_id="source-content-id",
+            ),
+            f"{attempt_prefix}/code/submit.sh": AssetMetadata(
+                path=f"{attempt_prefix}/code/submit.sh",
+                date_modified="2026-05-24T10:10:00+00:00",
+                content_size=1,
+                content_id="code-content-id",
+            ),
+            f"{attempt_prefix}/derivatives/output.nwb": AssetMetadata(
+                path=f"{attempt_prefix}/derivatives/output.nwb",
+                date_modified="2026-05-24T10:20:00+00:00",
+                content_size=2,
+                content_id="output-content-id",
+            ),
+            f"{attempt_prefix}/logs/stdout.txt": AssetMetadata(
+                path=f"{attempt_prefix}/logs/stdout.txt",
+                date_modified="2026-05-24T10:30:00+00:00",
+                content_size=3,
+                content_id="log-content-id",
+            ),
+        },
     )
-    with mock.patch("dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata", return_value=metadata):
+    with mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata):
         write_queue_state(queue_directory=queue_dir)
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")

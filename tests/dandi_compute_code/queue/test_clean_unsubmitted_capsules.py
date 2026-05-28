@@ -20,12 +20,6 @@ globals().update(
 )
 
 
-@pytest.fixture(autouse=True)
-def _mock_write_queue_state_autouse() -> Iterator[None]:
-    with mock.patch("dandi_compute_code.queue._clean_unsubmitted_capsules.write_queue_state"):
-        yield
-
-
 def _write_state_entries(queue_dir: pathlib.Path, entries: list[dict]) -> None:
     state_file = queue_dir / "state.jsonl"
     if entries:
