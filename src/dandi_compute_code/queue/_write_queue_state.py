@@ -39,18 +39,15 @@ def _coerce_assets_jsonld_metadata(
         path: AssetMetadata(path=path, date_modified=date_modified, content_id=None)
         for path, date_modified in path_to_date_modified.items()
     }
-    all_paths: set[str] = set(path_to_asset_metadata)
     for content_id, asset in content_id_to_asset.items():
         path = asset.get("path")
         if isinstance(path, str):
-            all_paths.add(path)
             date_modified = path_to_date_modified.get(path)
             path_to_asset_metadata[path] = AssetMetadata(path=path, date_modified=date_modified, content_id=content_id)
 
     return AssetsJsonldMetadata(
         content_id_to_asset=content_id_to_asset,
         path_to_asset_metadata=path_to_asset_metadata,
-        all_paths=frozenset(all_paths),
     )
 
 
@@ -151,7 +148,7 @@ def write_queue_state(
 
     records_by_attempt: dict[_AttemptIdentity, dict[str, object]] = {}
     log_timestamps_by_attempt: dict[_AttemptIdentity, list[str]] = {}
-    for asset_path in assets_jsonld_metadata.all_paths:
+    for asset_path in assets_jsonld_metadata.path_to_asset_metadata:
         parsed_attempt_identity = _parse_attempt_identity(asset_path)
         if parsed_attempt_identity is None:
             continue

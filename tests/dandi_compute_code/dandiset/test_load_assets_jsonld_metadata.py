@@ -45,7 +45,6 @@ def test_load_assets_jsonld_metadata_returns_indexed_model() -> None:
         date_modified="2026-01-01T00:00:00+00:00",
         content_id="content-id-123",
     )
-    assert "sub-test/sub-test_ecephys.nwb" in metadata.all_paths
     assert metadata.path_to_content_id["sub-test/sub-test_ecephys.nwb"] == "content-id-123"
     assert metadata.path_to_date_modified["sub-test/sub-test_ecephys.nwb"] == "2026-01-01T00:00:00+00:00"
     assert metadata.content_id_to_asset["content-id-123"]["contentSize"] == 123
@@ -77,7 +76,6 @@ def test_assets_jsonld_metadata_compatibility_indexes_filter_missing_values() ->
                 content_id=None,
             ),
         },
-        all_paths=frozenset({"has-all-values.nwb", "missing-date-modified.nwb", "missing-content-id.nwb"}),
     )
 
     assert metadata.path_to_date_modified == {

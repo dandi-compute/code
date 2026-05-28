@@ -24,7 +24,6 @@ class AssetsJsonldMetadata:
 
     content_id_to_asset: dict[str, dict[str, object]]
     path_to_asset_metadata: dict[str, AssetMetadata]
-    all_paths: frozenset[str]
 
     @property
     def path_to_date_modified(self) -> dict[str, str]:
@@ -54,7 +53,6 @@ def load_assets_jsonld_metadata() -> AssetsJsonldMetadata:
     """
     content_id_to_asset: dict[str, dict[str, object]] = {}
     path_to_asset_metadata: dict[str, AssetMetadata] = {}
-    all_paths: set[str] = set()
     try:
         with urllib.request.urlopen(url=_ASSETS_JSONLD_URL, timeout=30) as response:
             for raw_line in response:
@@ -72,8 +70,6 @@ def load_assets_jsonld_metadata() -> AssetsJsonldMetadata:
                     asset["contentSize"] = int(content_size)
                 path = asset.get("path")
                 date_modified = asset.get("dateModified")
-                if isinstance(path, str):
-                    all_paths.add(path)
                 content_urls = asset.get("contentUrl")
                 content_id = next(
                     (
@@ -107,7 +103,6 @@ def load_assets_jsonld_metadata() -> AssetsJsonldMetadata:
     return AssetsJsonldMetadata(
         content_id_to_asset=content_id_to_asset,
         path_to_asset_metadata=path_to_asset_metadata,
-        all_paths=frozenset(all_paths),
     )
 
 
