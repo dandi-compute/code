@@ -56,7 +56,7 @@ def test_write_queue_state_writes_empty_files_for_missing_dandiset_directory(tmp
 def test_write_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.Path) -> None:
     """write_queue_state writes ordered pending entries from metadata."""
     queue_dir = _make_queue_dir(tmp_path)
-    local_paths = {
+    attempt_metadata_by_path = {
         f"derivatives/dandiset-001697/sub-{i:02d}/sub-{i:02d}_ecephys/pipeline-test/"
         f"version-v1.0_params-default_config-{i:07d}_attempt-1/code/submit.sh": AssetMetadata(
             path=(
@@ -69,7 +69,7 @@ def test_write_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.
         )
         for i in range(1, 6)
     }
-    upstream_paths = {
+    source_metadata_by_path = {
         f"sub-{i:02d}/sub-{i:02d}_ecephys.nwb": AssetMetadata(
             path=f"sub-{i:02d}/sub-{i:02d}_ecephys.nwb",
             date_modified="2024-01-01T00:00:00+00:00",
@@ -81,11 +81,11 @@ def test_write_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.
     with (
         mock.patch(
             "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
-            return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata=local_paths),
+            return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata=attempt_metadata_by_path),
         ),
         mock.patch(
             "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
-            return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata=upstream_paths),
+            return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata=source_metadata_by_path),
         ),
     ):
         write_queue_state(queue_directory=queue_dir)
