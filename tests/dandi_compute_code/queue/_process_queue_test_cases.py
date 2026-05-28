@@ -21,6 +21,7 @@ import pytest
 from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
+from dandi_compute_code.queue import refresh_queue_state
 from dandi_compute_code.queue._aggregate_queue_statistics import aggregate_queue_statistics
 from dandi_compute_code.queue._attempt_dir_candidates import _attempt_dir_candidates
 from dandi_compute_code.queue._build_processing_order import _build_processing_order
@@ -32,7 +33,6 @@ from dandi_compute_code.queue._load_queue_config import _load_queue_config
 from dandi_compute_code.queue._order_queue import order_queue
 from dandi_compute_code.queue._prepare_queue import prepare_queue
 from dandi_compute_code.queue._process_queue import process_queue
-from dandi_compute_code.queue._refresh_queue import refresh_queue_state
 from dandi_compute_code.queue._resolve_params_key_to_id import _resolve_params_key_to_id
 from dandi_compute_code.queue._submit_next import _submit_next
 from dandi_compute_code.queue._version_matches import _version_matches

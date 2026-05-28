@@ -1,4 +1,5 @@
 import json
+import logging
 import pathlib
 import re
 
@@ -7,12 +8,12 @@ from ..dandiset._globals import _ASSETS_JSONLD_URL
 from ..dandiset._load_assets_jsonld_metadata import _load_assets_jsonld_metadata
 
 _DANDISET_ID_RE = re.compile(r"/dandisets/(?P<dandiset_id>\d+)/")
+_log = logging.getLogger(__name__)
 
 
 def write_queue_state(
     *,
     queue_directory: pathlib.Path,
-    dandiset_directory: pathlib.Path | None = None,
 ) -> None:
     """
     Write ``state.jsonl`` from DANDI ``assets.jsonld`` metadata.
@@ -24,9 +25,6 @@ def write_queue_state(
 
     :param queue_directory: Path to the queue root directory.
     :type queue_directory: pathlib.Path
-    :param dandiset_directory: Unused parameter retained for backward compatibility with existing
-        callers; this value is ignored.
-    :type dandiset_directory: pathlib.Path | None
     """
     _load_queue_config(queue_directory=queue_directory)
     state_file = queue_directory / "state.jsonl"
@@ -42,10 +40,13 @@ def write_queue_state(
         content_size = source_asset_metadata.get("contentSize")
         if isinstance(content_size, int):
             asset_size_bytes = content_size
-        elif isinstance(content_size, str) and content_size.isdigit():
-            asset_size_bytes = int(content_size)
         else:
-            asset_size_bytes = None
+            _log.debug(
+                "Skipping asset for content_id=%s because contentSize is not an int (value=%r)",
+                content_id,
+                content_size,
+            )
+            continue
         created_at = source_asset_metadata.get("blobDateModified")
         if not isinstance(created_at, str):
             created_at = source_asset_metadata.get("dateModified")

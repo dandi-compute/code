@@ -32,6 +32,9 @@ def _load_assets_jsonld_metadata() -> tuple[dict[str, dict[str, object]], dict[s
                     continue
                 if not isinstance(asset, dict):
                     continue
+                content_size = asset.get("contentSize")
+                if isinstance(content_size, str) and content_size.isdigit():
+                    asset["contentSize"] = int(content_size)
                 path = asset.get("path")
                 date_modified = asset.get("dateModified")
                 if isinstance(path, str) and isinstance(date_modified, str):
