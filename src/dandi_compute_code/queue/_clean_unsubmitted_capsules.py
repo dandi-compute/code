@@ -6,7 +6,6 @@ import subprocess
 from ._read_state_entries import _read_state_entries
 from ._remove_empty_parents import _remove_empty_parents
 from ._resolve_unsubmitted_attempt_dir import _resolve_unsubmitted_attempt_dir
-from ._write_queue_state import write_queue_state
 
 
 # TODO: review if the return value here is needed at all
