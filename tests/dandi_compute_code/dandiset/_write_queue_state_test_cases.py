@@ -34,8 +34,7 @@ def _build_assets_metadata(
     """Build source-asset and log-path timestamp indexes from one synthetic asset.
 
     Returns a tuple of ``(content_id_to_asset, path_to_date_modified)`` where
-    ``path_to_date_modified`` includes only synthetic log-path timestamps, matching
-    the compatibility input consumed by queue state writer tests.
+    ``path_to_date_modified`` includes only synthetic log-path timestamps.
     """
     source_asset: dict[str, object] = {"path": asset_path}
     if content_size is not None:
@@ -50,7 +49,7 @@ def _build_assets_metadata(
 
 @pytest.fixture(autouse=True)
 def _mock_dandi_api_asset_lookup() -> Iterator[None]:
-    """Prevent network calls by defaulting assets metadata loading to empty indexes."""
+    """Prevent network calls by defaulting metadata loader to empty tuple indexes."""
     with mock.patch(
         "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
         return_value=({}, {}),
