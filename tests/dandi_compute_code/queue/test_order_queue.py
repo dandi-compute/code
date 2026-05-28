@@ -19,8 +19,6 @@ globals().update(
     }
 )
 
-from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
-
 
 @pytest.mark.ai_generated
 def test_order_queue_raises_when_queue_config_missing(tmp_path: pathlib.Path) -> None:

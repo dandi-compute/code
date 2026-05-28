@@ -4,51 +4,10 @@ from collections.abc import Iterator
 from unittest import mock
 
 import pytest
-from _process_queue_test_cases import _make_queue_dir, _read_jsonl
+from _process_queue_test_cases import _build_assets_metadata, _make_queue_dir, _read_jsonl
 
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.queue import write_queue_state
-
-
-def _build_assets_metadata(
-    *,
-    content_id: str,
-    asset_path: str,
-    content_size: int | str | None = None,
-    blob_date_modified: str | None = None,
-    log_asset_path: str | None = None,
-    log_date_modified: str | None = None,
-) -> AssetsJsonldMetadata:
-    """Build indexed synthetic assets metadata for tests."""
-    source_asset: dict[str, object] = {"path": asset_path}
-    if content_size is not None:
-        source_asset["contentSize"] = content_size
-    if blob_date_modified is not None:
-        source_asset["blobDateModified"] = blob_date_modified
-    date_modified = blob_date_modified or "2024-01-01T00:00:00+00:00"
-    path_to_asset_metadata: dict[str, AssetMetadata] = {
-        asset_path: AssetMetadata(
-            path=asset_path,
-            date_modified=date_modified,
-            content_size=content_size if isinstance(content_size, int) else 1,
-            content_id=content_id,
-        )
-    }
-    content_id_to_asset = {content_id: source_asset}
-    if log_asset_path is not None and log_date_modified is not None:
-        log_content_id = f"{content_id}-log"
-        path_to_asset_metadata[log_asset_path] = AssetMetadata(
-            path=log_asset_path,
-            date_modified=log_date_modified,
-            content_size=1,
-            content_id=log_content_id,
-        )
-        content_id_to_asset[log_content_id] = {
-            "path": log_asset_path,
-            "contentSize": 1,
-            "dateModified": log_date_modified,
-        }
-    return AssetsJsonldMetadata(content_id_to_asset=content_id_to_asset, path_to_asset_metadata=path_to_asset_metadata)
 
 
 @pytest.fixture(autouse=True)
@@ -236,3 +195,258 @@ def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_
     assert state_entries[0]["has_output"] is True
     assert state_entries[0]["has_logs"] is True
     assert state_entries[0]["job_completion_time"] == "2026-05-24T10:30:00+00:00"
+
+
+@pytest.mark.ai_generated
+def test_write_queue_state_with_dandiset_directory_creates_valid_files(tmp_path: pathlib.Path) -> None:
+    """write_queue_state writes state.jsonl from assets.jsonld metadata."""
+    content_id = "0fbbca6a-0000-0000-0000-000000000001"
+    resolved_asset_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(
+        json.dumps(
+            {
+                "pipelines": {
+                    "aind+ephys": {
+                        "version_priority": ["v1.0"],
+                        "params_priority": ["abc1234"],
+                    }
+                }
+            }
+        )
+    )
+    with mock.patch(
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+        return_value=_build_assets_metadata(
+            content_id=content_id,
+            asset_path=resolved_asset_path,
+            content_size=1234,
+        ),
+    ):
+        write_queue_state(queue_directory=queue_dir)
+    state_file = queue_dir / "state.jsonl"
+    assert state_file.exists()
+    lines = [line for line in state_file.read_text().splitlines() if line.strip()]
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["dandiset_id"] == "001697"
+    assert record["content_id"] == content_id
+    assert record["dandi_path"] == resolved_asset_path
+    assert record["asset_size_bytes"] == 1234
+    assert record["has_code"] is False
+
+
+@pytest.mark.ai_generated
+def test_write_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Path) -> None:
+    """write_queue_state writes assets.jsonld-resolved source path in state.jsonl."""
+    content_id = "0fbbca6a-0000-0000-0000-000000000001"
+    asset_size_bytes = 1234
+    resolved_asset_path = "sub-mouse01/sub-mouse01_ses-ses001_obj-raw.nwb"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(
+        json.dumps(
+            {
+                "pipelines": {
+                    "aind+ephys": {
+                        "version_priority": ["v1.0"],
+                        "params_priority": ["abc1234"],
+                    }
+                }
+            }
+        )
+    )
+
+    with mock.patch(
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+        return_value=_build_assets_metadata(
+            content_id=content_id,
+            asset_path=resolved_asset_path,
+            content_size=asset_size_bytes,
+        ),
+    ):
+        write_queue_state(queue_directory=queue_dir)
+
+    state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
+    assert len(state_records) == 1
+    assert state_records[0]["asset_size_bytes"] == asset_size_bytes
+    assert state_records[0]["dandi_path"] == resolved_asset_path
+
+
+@pytest.mark.ai_generated
+def test_write_queue_state_writes_resolved_dandi_path_for_root_level_asset(tmp_path: pathlib.Path) -> None:
+    """write_queue_state writes resolved dandi_path even when matched asset path is at dandiset root."""
+    content_id = "0fbbca6a-0000-0000-0000-000000000002"
+    asset_size_bytes = 4321
+    root_asset_path = "sub-mouse01_ses-ses001_obj-raw.nwb"
+
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(
+        json.dumps(
+            {
+                "pipelines": {
+                    "aind+ephys": {
+                        "version_priority": ["v1.0"],
+                        "params_priority": ["abc1234"],
+                    }
+                }
+            }
+        )
+    )
+
+    with mock.patch(
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+        return_value=_build_assets_metadata(
+            content_id=content_id,
+            asset_path=root_asset_path,
+            content_size=asset_size_bytes,
+        ),
+    ):
+        write_queue_state(queue_directory=queue_dir)
+
+    state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
+    assert len(state_records) == 1
+    assert state_records[0]["asset_size_bytes"] == asset_size_bytes
+    assert state_records[0]["dandi_path"] == root_asset_path
+
+
+@pytest.mark.ai_generated
+def test_write_queue_state_with_dandiset_directory_empty_when_no_attempts(tmp_path: pathlib.Path) -> None:
+    """write_queue_state writes an empty state file with no assets metadata."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
+    with mock.patch(
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+        return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
+    ):
+        write_queue_state(queue_directory=queue_dir)
+    state_file = queue_dir / "state.jsonl"
+    assert state_file.exists()
+    assert state_file.read_text() == ""
+
+
+@pytest.mark.ai_generated
+def test_write_queue_state_does_not_require_dandi_api_key(tmp_path: pathlib.Path) -> None:
+    """write_queue_state works when DANDI_API_KEY is not set."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
+    with (
+        mock.patch.dict("os.environ", {}, clear=True),
+        mock.patch(
+            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+            return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
+        ),
+    ):
+        write_queue_state(queue_directory=queue_dir)
+
+
+@pytest.mark.ai_generated
+def test_write_queue_state_with_dandiset_directory_includes_only_pending_in_waiting(tmp_path: pathlib.Path) -> None:
+    """state.jsonl contains all entries derived from assets metadata."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(
+        json.dumps(
+            {
+                "pipelines": {
+                    "test-pipeline": {
+                        "version_priority": ["v1.0"],
+                        "params_priority": ["abc1234"],
+                    }
+                }
+            }
+        )
+    )
+
+    metadata = AssetsJsonldMetadata(
+        content_id_to_asset={
+            "0fbbca6a-0000-0000-0000-000000000001": {
+                "path": "sub-mouse01/sub-mouse01_ecephys.nwb",
+                "contentSize": 11,
+                "blobDateModified": "2025-01-01T00:00:00+00:00",
+                "dateModified": "2025-01-01T00:00:00+00:00",
+            },
+            "0fbbca6a-0000-0000-0000-000000000002": {
+                "path": "sub-mouse02/sub-mouse02_ecephys.nwb",
+                "contentSize": 22,
+                "blobDateModified": "2025-01-02T00:00:00+00:00",
+                "dateModified": "2025-01-02T00:00:00+00:00",
+            },
+        },
+        path_to_asset_metadata={
+            "sub-mouse01/sub-mouse01_ecephys.nwb": AssetMetadata(
+                path="sub-mouse01/sub-mouse01_ecephys.nwb",
+                date_modified="2025-01-01T00:00:00+00:00",
+                content_size=11,
+                content_id="0fbbca6a-0000-0000-0000-000000000001",
+            ),
+            "sub-mouse02/sub-mouse02_ecephys.nwb": AssetMetadata(
+                path="sub-mouse02/sub-mouse02_ecephys.nwb",
+                date_modified="2025-01-02T00:00:00+00:00",
+                content_size=22,
+                content_id="0fbbca6a-0000-0000-0000-000000000002",
+            ),
+        },
+    )
+    with mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata):
+        write_queue_state(queue_directory=queue_dir)
+
+    state_lines = [line for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
+    assert len(state_lines) == 2
+    state_records = [json.loads(line) for line in state_lines]
+    assert {record["dandi_path"] for record in state_records} == {
+        "sub-mouse01/sub-mouse01_ecephys.nwb",
+        "sub-mouse02/sub-mouse02_ecephys.nwb",
+    }
+
+
+@pytest.mark.ai_generated
+def test_write_queue_state_with_dandiset_directory_excludes_entries_with_submitted_markers(
+    tmp_path: pathlib.Path,
+) -> None:
+    """write_queue_state output is independent of local submitted marker files."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(
+        json.dumps(
+            {
+                "pipelines": {
+                    "test-pipeline": {
+                        "version_priority": ["v1.0"],
+                        "params_priority": ["abc1234"],
+                    }
+                }
+            }
+        )
+    )
+    with mock.patch(
+        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+        return_value=AssetsJsonldMetadata(
+            content_id_to_asset={
+                "0fbbca6a-0000-0000-0000-000000000001": {
+                    "path": "sub-mouse01/sub-mouse01_ecephys.nwb",
+                    "contentSize": 11,
+                    "blobDateModified": "2025-01-01T00:00:00+00:00",
+                    "dateModified": "2025-01-01T00:00:00+00:00",
+                }
+            },
+            path_to_asset_metadata={
+                "sub-mouse01/sub-mouse01_ecephys.nwb": AssetMetadata(
+                    path="sub-mouse01/sub-mouse01_ecephys.nwb",
+                    date_modified="2025-01-01T00:00:00+00:00",
+                    content_size=11,
+                    content_id="0fbbca6a-0000-0000-0000-000000000001",
+                )
+            },
+        ),
+    ):
+        write_queue_state(queue_directory=queue_dir)
+
+    state_lines = [line for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
+    assert len(state_lines) == 1
+    state_records = [json.loads(line) for line in state_lines]
+    assert state_records[0]["dandi_path"] == "sub-mouse01/sub-mouse01_ecephys.nwb"
