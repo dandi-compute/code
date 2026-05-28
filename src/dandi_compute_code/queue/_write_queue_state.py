@@ -22,9 +22,7 @@ _FLAT_ATTEMPT_RE = re.compile(
     r"(?:_.+?)?"
     r"_attempt-(?P<attempt>\d+)$"
 )
-_NESTED_ATTEMPT_RE = re.compile(
-    r"^params-(?P<params>[^_]+)_config-(?P<config>[^_]+)_attempt-(?P<attempt>\d+)$"
-)
+_NESTED_ATTEMPT_RE = re.compile(r"^params-(?P<params>[^_]+)_config-(?P<config>[^_]+)_attempt-(?P<attempt>\d+)$")
 _DANDISET_ID_RE = re.compile(r"/dandisets/(?P<dandiset_id>\d+)/")
 _UPSTREAM_JSONLD_URL_TEMPLATE = "https://dandiarchive.s3.amazonaws.com/dandisets/{dandiset_id}/draft/assets.jsonld"
 

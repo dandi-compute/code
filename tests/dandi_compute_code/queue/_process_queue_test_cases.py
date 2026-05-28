@@ -106,7 +106,6 @@ def _get_default_params_id() -> str:
     return json.loads(params_registry_path.read_text())["default"]["md5"][:7]
 
 
-
 def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
     """
     Build a minimal but realistic queue directory under *tmp_path*.
