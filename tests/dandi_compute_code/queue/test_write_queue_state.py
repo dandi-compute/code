@@ -1,25 +1,13 @@
-# ruff: noqa: F821
-import importlib.util as _importlib_util
-import pathlib as _pathlib
+import json
+import pathlib
+from collections.abc import Iterator
+from unittest import mock
 
-_spec = _importlib_util.spec_from_file_location(
-    "_process_queue_test_cases",
-    _pathlib.Path(__file__).with_name("_process_queue_test_cases.py"),
-)
-assert _spec is not None
-assert _spec.loader is not None
-_support = _importlib_util.module_from_spec(_spec)
-_spec.loader.exec_module(_support)
-
-globals().update(
-    {
-        name: value
-        for name, value in vars(_support).items()
-        if not name.startswith("__") and not name.startswith("test_")
-    }
-)
+import pytest
+from _process_queue_test_cases import _make_queue_dir, _read_jsonl
 
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
+from dandi_compute_code.queue import write_queue_state
 
 
 def _build_assets_metadata(
