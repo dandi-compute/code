@@ -18,7 +18,7 @@ _load_assets_jsonld_metadata = load_assets_jsonld_metadata
 
 
 @dataclass(frozen=True)
-class _AttemptIdentity:
+class JobInfo:
     dandiset_id: str
     dandi_path: str
     pipeline: str
@@ -51,7 +51,7 @@ def _coerce_assets_jsonld_metadata(
     )
 
 
-def _parse_attempt_identity(asset_path: str) -> tuple[_AttemptIdentity, str] | None:
+def _parse_attempt_identity(asset_path: str) -> tuple[JobInfo, str] | None:
     asset_path_parts = pathlib.PurePosixPath(asset_path).parts
     dandiset_index = next(
         (index for index, part in enumerate(asset_path_parts) if part.startswith("dandiset-")),
@@ -111,7 +111,7 @@ def _parse_attempt_identity(asset_path: str) -> tuple[_AttemptIdentity, str] | N
 
     subpath = pathlib.PurePosixPath(*asset_path_parts[attempt_directory_index + 1 :]).as_posix()
     return (
-        _AttemptIdentity(
+        JobInfo(
             dandiset_id=asset_path_parts[dandiset_index][len("dandiset-") :],
             dandi_path=dandi_path,
             pipeline=pipeline,
@@ -146,8 +146,8 @@ def write_queue_state(
     state_file = queue_directory / "state.jsonl"
     assets_jsonld_metadata = _coerce_assets_jsonld_metadata(_load_assets_jsonld_metadata())
 
-    records_by_attempt: dict[_AttemptIdentity, dict[str, object]] = {}
-    log_timestamps_by_attempt: dict[_AttemptIdentity, list[str]] = {}
+    records_by_attempt: dict[JobInfo, dict[str, object]] = {}
+    log_timestamps_by_attempt: dict[JobInfo, list[str]] = {}
     for asset_path in assets_jsonld_metadata.path_to_asset_metadata:
         parsed_attempt_identity = _parse_attempt_identity(asset_path)
         if parsed_attempt_identity is None:

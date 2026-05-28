@@ -25,22 +25,6 @@ class AssetsJsonldMetadata:
     content_id_to_asset: dict[str, dict[str, object]]
     path_to_asset_metadata: dict[str, AssetMetadata]
 
-    @property
-    def path_to_date_modified(self) -> dict[str, str]:
-        return {
-            path: asset_metadata.date_modified
-            for path, asset_metadata in self.path_to_asset_metadata.items()
-            if isinstance(asset_metadata.date_modified, str)
-        }
-
-    @property
-    def path_to_content_id(self) -> dict[str, str]:
-        return {
-            path: asset_metadata.content_id
-            for path, asset_metadata in self.path_to_asset_metadata.items()
-            if isinstance(asset_metadata.content_id, str)
-        }
-
 
 @functools.lru_cache(maxsize=1)
 def load_assets_jsonld_metadata() -> AssetsJsonldMetadata:

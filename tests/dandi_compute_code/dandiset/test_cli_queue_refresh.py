@@ -3,8 +3,8 @@ import importlib.util as _importlib_util
 import pathlib as _pathlib
 
 _spec = _importlib_util.spec_from_file_location(
-    "_scan_dandiset_test_cases",
-    _pathlib.Path(__file__).with_name("_scan_dandiset_test_cases.py"),
+    "_write_queue_state_test_cases",
+    _pathlib.Path(__file__).with_name("_write_queue_state_test_cases.py"),
 )
 assert _spec is not None
 assert _spec.loader is not None

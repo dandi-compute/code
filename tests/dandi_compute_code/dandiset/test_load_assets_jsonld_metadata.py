@@ -45,8 +45,6 @@ def test_load_assets_jsonld_metadata_returns_indexed_model() -> None:
         date_modified="2026-01-01T00:00:00+00:00",
         content_id="content-id-123",
     )
-    assert metadata.path_to_content_id["sub-test/sub-test_ecephys.nwb"] == "content-id-123"
-    assert metadata.path_to_date_modified["sub-test/sub-test_ecephys.nwb"] == "2026-01-01T00:00:00+00:00"
     assert metadata.content_id_to_asset["content-id-123"]["contentSize"] == 123
 
 
@@ -56,7 +54,7 @@ def test_load_assets_jsonld_metadata_is_publicly_exported() -> None:
     assert dandiset.AssetsJsonldMetadata is AssetsJsonldMetadata
 
 
-def test_assets_jsonld_metadata_compatibility_indexes_filter_missing_values() -> None:
+def test_assets_jsonld_metadata_path_index_contains_missing_values_as_none() -> None:
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={},
         path_to_asset_metadata={
@@ -78,11 +76,18 @@ def test_assets_jsonld_metadata_compatibility_indexes_filter_missing_values() ->
         },
     )
 
-    assert metadata.path_to_date_modified == {
-        "has-all-values.nwb": "2026-01-01T00:00:00+00:00",
-        "missing-content-id.nwb": "2026-01-02T00:00:00+00:00",
-    }
-    assert metadata.path_to_content_id == {
-        "has-all-values.nwb": "content-id-1",
-        "missing-date-modified.nwb": "content-id-2",
-    }
+    assert metadata.path_to_asset_metadata["has-all-values.nwb"] == AssetMetadata(
+        path="has-all-values.nwb",
+        date_modified="2026-01-01T00:00:00+00:00",
+        content_id="content-id-1",
+    )
+    assert metadata.path_to_asset_metadata["missing-date-modified.nwb"] == AssetMetadata(
+        path="missing-date-modified.nwb",
+        date_modified=None,
+        content_id="content-id-2",
+    )
+    assert metadata.path_to_asset_metadata["missing-content-id.nwb"] == AssetMetadata(
+        path="missing-content-id.nwb",
+        date_modified="2026-01-02T00:00:00+00:00",
+        content_id=None,
+    )
