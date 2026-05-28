@@ -9,6 +9,7 @@ from ._resolve_unsubmitted_attempt_dir import _resolve_unsubmitted_attempt_dir
 
 
 # TODO: review if the return value here is needed at all
+# TODO: make more efficient in terms of --preserve-tree
 def clean_unsubmitted_capsules(
     *,
     dandiset_directory: pathlib.Path,
