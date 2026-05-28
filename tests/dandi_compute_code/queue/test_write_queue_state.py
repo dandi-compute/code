@@ -29,7 +29,11 @@ def _build_assets_metadata(
     log_asset_path: str | None = None,
     log_date_modified: str | None = None,
 ) -> tuple[dict[str, dict[str, object]], dict[str, str]]:
-    """Build source-asset and log-path timestamp indexes from one synthetic asset."""
+    """Build source-asset and log-path timestamp indexes from one synthetic asset.
+
+    Returns a tuple of ``(content_id_to_asset, path_to_date_modified)`` where
+    ``path_to_date_modified`` includes only synthetic log-path timestamps.
+    """
     source_asset: dict[str, object] = {"path": asset_path}
     if content_size is not None:
         source_asset["contentSize"] = content_size
