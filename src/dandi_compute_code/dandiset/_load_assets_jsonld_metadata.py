@@ -1,10 +1,10 @@
+import dataclasses
 import functools
 import json
 import logging
 import urllib.request
-import dataclasses
 
-#from ._globals import _ASSETS_JSONLD_URL
+# from ._globals import _ASSETS_JSONLD_URL
 
 _log = logging.getLogger(__name__)
 
