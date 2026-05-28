@@ -2,17 +2,32 @@ import json
 import logging
 import pathlib
 import re
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 
 from ._load_queue_config import _load_queue_config
 from ..dandiset._globals import _ASSETS_JSONLD_URL
-from ..dandiset._load_assets_jsonld_metadata import load_assets_jsonld_metadata
+from ..dandiset._load_assets_jsonld_metadata import (
+    AssetMetadata,
+    AssetsJsonldMetadata,
+    _build_asset_metadata,
+    load_assets_jsonld_metadata,
+)
 
 _FLAT_ATTEMPT_RE = re.compile(
-    r"^version-(?P<version>.+?)_params-(?P<params>[^_]+)_config-(?P<config>[^_]+)(?:_.+?)?_attempt-(?P<attempt>\d+)$"
+    r"^version-(?P<version>.+?)"
+    r"_params-(?P<params>[^_]+)"
+    r"_config-(?P<config>[^_]+)"
+    r"(?:_.+?)?"
+    r"_attempt-(?P<attempt>\d+)$"
 )
-_NESTED_ATTEMPT_RE = re.compile(r"^params-(?P<params>[^_]+)_config-(?P<config>[^_]+)_attempt-(?P<attempt>\d+)$")
+_NESTED_ATTEMPT_RE = re.compile(
+    r"^params-(?P<params>[^_]+)_config-(?P<config>[^_]+)_attempt-(?P<attempt>\d+)$"
+)
 _DANDISET_ID_RE = re.compile(r"/dandisets/(?P<dandiset_id>\d+)/")
+_UPSTREAM_JSONLD_URL_TEMPLATE = "https://dandiarchive.s3.amazonaws.com/dandisets/{dandiset_id}/draft/assets.jsonld"
+
 _log = logging.getLogger(__name__)
 
 
@@ -27,205 +42,375 @@ class JobInfo:
     attempt: int
 
 
+# --- path parsing -----------------------------------------------------------
+
+
+def _find_segment_index(parts: tuple[str, ...], prefix: str, start: int = 0) -> int | None:
+    """Return the index of the first part starting with ``prefix`` at or after ``start``."""
+    for index in range(start, len(parts)):
+        if parts[index].startswith(prefix):
+            return index
+    return None
+
+
+def _parse_flat_attempt(parts: tuple[str, ...], index: int) -> tuple[dict[str, str], int] | None:
+    """Parse a single-segment ``version-..._params-..._config-..._attempt-N`` directory."""
+    match = _FLAT_ATTEMPT_RE.fullmatch(parts[index])
+    if match is None:
+        return None
+    return match.groupdict(), index
+
+
+def _parse_nested_attempt(parts: tuple[str, ...], index: int) -> tuple[dict[str, str], int] | None:
+    """Parse a ``version-X / params-..._config-..._attempt-N`` directory pair."""
+    if not parts[index].startswith("version-") or index + 1 >= len(parts):
+        return None
+    match = _NESTED_ATTEMPT_RE.fullmatch(parts[index + 1])
+    if match is None:
+        return None
+    fields = match.groupdict()
+    fields["version"] = parts[index][len("version-") :]
+    return fields, index + 1
+
+
 def _parse_attempt_identity(asset_path: str) -> tuple[JobInfo, str] | None:
-    asset_path_parts = pathlib.PurePosixPath(asset_path).parts
-    dandiset_index = next(
-        (index for index, part in enumerate(asset_path_parts) if part.startswith("dandiset-")),
-        None,
-    )
+    """
+    Parse an asset path of the form
+    ``derivatives/dandiset-XXX/.../pipeline-NAME/<attempt-dir>/<subpath>``
+    into a :class:`JobInfo` and the subpath beneath the attempt directory.
+    Returns ``None`` if the path does not match either supported layout.
+    """
+    parts = pathlib.PurePosixPath(asset_path).parts
+
+    dandiset_index = _find_segment_index(parts, "dandiset-")
     if dandiset_index is None:
         return None
-    pipeline_index = next(
-        (
-            index
-            for index in range(dandiset_index + 1, len(asset_path_parts))
-            if asset_path_parts[index].startswith("pipeline-")
-        ),
-        None,
-    )
+
+    pipeline_index = _find_segment_index(parts, "pipeline-", start=dandiset_index + 1)
     if pipeline_index is None or pipeline_index <= dandiset_index + 1:
         return None
 
-    pipeline_part = asset_path_parts[pipeline_index]
-    pipeline = pipeline_part[len("pipeline-") :]
+    pipeline = parts[pipeline_index][len("pipeline-") :]
     if not pipeline:
         return None
 
-    dandi_path_prefix = pathlib.PurePosixPath(*asset_path_parts[dandiset_index + 1 : pipeline_index]).as_posix()
-    dandi_path = f"{dandi_path_prefix}.nwb"
-
-    first_after_pipeline_index = pipeline_index + 1
-    if first_after_pipeline_index >= len(asset_path_parts):
+    attempt_dir_index = pipeline_index + 1
+    if attempt_dir_index >= len(parts):
         return None
 
-    version: str | None = None
-    params: str | None = None
-    config: str | None = None
-    attempt: int | None = None
-    attempt_directory_index: int | None = None
-
-    flat_attempt_match = _FLAT_ATTEMPT_RE.fullmatch(asset_path_parts[first_after_pipeline_index])
-    if flat_attempt_match is not None:
-        version = flat_attempt_match.group("version")
-        params = flat_attempt_match.group("params")
-        config = flat_attempt_match.group("config")
-        attempt = int(flat_attempt_match.group("attempt"))
-        attempt_directory_index = first_after_pipeline_index
-    elif asset_path_parts[first_after_pipeline_index].startswith("version-") and first_after_pipeline_index + 1 < len(
-        asset_path_parts
-    ):
-        version = asset_path_parts[first_after_pipeline_index][len("version-") :]
-        nested_attempt_match = _NESTED_ATTEMPT_RE.fullmatch(asset_path_parts[first_after_pipeline_index + 1])
-        if nested_attempt_match is not None:
-            params = nested_attempt_match.group("params")
-            config = nested_attempt_match.group("config")
-            attempt = int(nested_attempt_match.group("attempt"))
-            attempt_directory_index = first_after_pipeline_index + 1
-
-    if version is None or params is None or config is None or attempt is None or attempt_directory_index is None:
+    parsed = _parse_flat_attempt(parts, attempt_dir_index) or _parse_nested_attempt(parts, attempt_dir_index)
+    if parsed is None:
         return None
+    fields, attempt_directory_index = parsed
 
-    subpath = pathlib.PurePosixPath(*asset_path_parts[attempt_directory_index + 1 :]).as_posix()
-    return (
-        JobInfo(
-            dandiset_id=asset_path_parts[dandiset_index][len("dandiset-") :],
-            dandi_path=dandi_path,
-            pipeline=pipeline,
-            version=version,
-            params=params,
-            config=config,
-            attempt=attempt,
-        ),
-        subpath,
+    dandi_path = "/".join(parts[dandiset_index + 1 : pipeline_index]) + ".nwb"
+    subpath = "/".join(parts[attempt_directory_index + 1 :])
+
+    job_info = JobInfo(
+        dandiset_id=parts[dandiset_index][len("dandiset-") :],
+        dandi_path=dandi_path,
+        pipeline=pipeline,
+        version=fields["version"],
+        params=fields["params"],
+        config=fields["config"],
+        attempt=int(fields["attempt"]),
+    )
+    return job_info, subpath
+
+
+def _subpath_is_under(subpath: str, directory: str) -> bool:
+    """True if ``subpath`` equals ``directory`` or lives inside it."""
+    return subpath == directory or subpath.startswith(f"{directory}/")
+
+
+# --- upstream metadata lookup ----------------------------------------------
+
+
+def _load_upstream_assets_jsonld_metadata(dandiset_id: str) -> AssetsJsonldMetadata:
+    """
+    Fetch and index ``assets.jsonld`` for another dandiset by id.
+
+    Mirrors :func:`load_assets_jsonld_metadata` but parameterized by URL so
+    derivatives in a meta-analysis dandiset can resolve their source assets.
+    """
+    url = _UPSTREAM_JSONLD_URL_TEMPLATE.format(dandiset_id=dandiset_id)
+    content_id_to_asset: dict[str, dict[str, object]] = {}
+    path_to_asset_metadata: dict[str, AssetMetadata] = {}
+
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:
+            assets = json.load(response)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exception:
+        _log.warning("Unable to load upstream metadata from %s: %s", url, exception)
+        return AssetsJsonldMetadata(
+            content_id_to_asset=content_id_to_asset,
+            path_to_asset_metadata=path_to_asset_metadata,
+        )
+
+    if not isinstance(assets, list):
+        _log.warning("Expected a JSON array from %s, got %s", url, type(assets).__name__)
+        return AssetsJsonldMetadata(
+            content_id_to_asset=content_id_to_asset,
+            path_to_asset_metadata=path_to_asset_metadata,
+        )
+
+    for asset in assets:
+        if not isinstance(asset, dict):
+            continue
+        try:
+            content_id, metadata = _build_asset_metadata(asset)
+        except ValueError as exception:
+            _log.debug("Skipping malformed upstream asset in %s: %s", url, exception)
+            continue
+        content_id_to_asset[content_id] = asset
+        path_to_asset_metadata[metadata.path] = metadata
+
+    return AssetsJsonldMetadata(
+        content_id_to_asset=content_id_to_asset,
+        path_to_asset_metadata=path_to_asset_metadata,
     )
 
 
-def write_queue_state(
+class _UpstreamMetadataCache:
+    """Per-call cache of upstream ``assets.jsonld`` lookups, keyed by dandiset id."""
+
+    def __init__(self) -> None:
+        self._cache: dict[str, AssetsJsonldMetadata] = {}
+
+    def get(self, dandiset_id: str) -> AssetsJsonldMetadata:
+        if dandiset_id not in self._cache:
+            self._cache[dandiset_id] = _load_upstream_assets_jsonld_metadata(dandiset_id)
+        return self._cache[dandiset_id]
+
+
+def _resolve_blob_date_modified(assets_metadata: AssetsJsonldMetadata, content_id: str) -> str | None:
+    """Return ``blobDateModified`` from the raw asset entry, if present and a string."""
+    asset_entry = assets_metadata.content_id_to_asset.get(content_id)
+    if isinstance(asset_entry, dict):
+        blob_date = asset_entry.get("blobDateModified")
+        if isinstance(blob_date, str):
+            return blob_date
+    return None
+
+
+# --- record construction ---------------------------------------------------
+
+
+def _new_attempt_record(job: JobInfo) -> dict[str, object]:
+    return {
+        "dandiset_id": job.dandiset_id,
+        "dandi_path": job.dandi_path,
+        "pipeline": job.pipeline,
+        "version": job.version,
+        "params": job.params,
+        "config": job.config,
+        "attempt": job.attempt,
+        "has_code": False,
+        "has_output": False,
+        "has_logs": False,
+    }
+
+
+def _new_source_only_record(
     *,
-    queue_directory: pathlib.Path,
-) -> None:
+    dandiset_id: str,
+    dandi_path: str,
+    content_id: str,
+    content_size: int,
+    created_at: str | None,
+) -> dict[str, object]:
+    return {
+        "dandiset_id": dandiset_id,
+        "dandi_path": dandi_path,
+        "content_id": content_id,
+        "asset_size_bytes": content_size,
+        "pipeline": "",
+        "version": "",
+        "params": "",
+        "config": "",
+        "attempt": 0,
+        "has_code": False,
+        "has_output": False,
+        "has_logs": False,
+        "created_at": created_at,
+        "job_completion_time": None,
+    }
+
+
+# --- attempt collection ----------------------------------------------------
+
+
+@dataclass
+class _AttemptCollection:
+    """Bookkeeping accumulated while walking ``assets.jsonld`` once."""
+
+    records_by_attempt: dict[JobInfo, dict[str, object]]
+    log_timestamps_by_attempt: dict[JobInfo, list[str]]
+    submit_sh_timestamps_by_attempt: dict[JobInfo, str]
+
+
+def _collect_attempts(local_metadata: AssetsJsonldMetadata) -> _AttemptCollection:
+    """
+    Walk every asset path, group by attempt identity, record presence flags,
+    and capture the ``code/submit.sh`` timestamp per attempt (used for
+    ``created_at``).
+    """
+    records_by_attempt: dict[JobInfo, dict[str, object]] = {}
+    log_timestamps_by_attempt: dict[JobInfo, list[str]] = {}
+    submit_sh_timestamps_by_attempt: dict[JobInfo, str] = {}
+
+    for asset_path, asset_metadata in local_metadata.path_to_asset_metadata.items():
+        parsed = _parse_attempt_identity(asset_path)
+        if parsed is None:
+            continue
+        job_info, subpath = parsed
+
+        record = records_by_attempt.setdefault(job_info, _new_attempt_record(job_info))
+
+        if _subpath_is_under(subpath, "code"):
+            record["has_code"] = True
+        if _subpath_is_under(subpath, "derivatives"):
+            record["has_output"] = True
+        if subpath.startswith("logs/"):
+            log_relative_path = subpath.removeprefix("logs/")
+            if log_relative_path and log_relative_path != "dataset_description.json":
+                record["has_logs"] = True
+                log_timestamps_by_attempt.setdefault(job_info, []).append(asset_metadata.date_modified)
+
+        if subpath == "code/submit.sh":
+            submit_sh_timestamps_by_attempt[job_info] = asset_metadata.date_modified
+
+    return _AttemptCollection(
+        records_by_attempt=records_by_attempt,
+        log_timestamps_by_attempt=log_timestamps_by_attempt,
+        submit_sh_timestamps_by_attempt=submit_sh_timestamps_by_attempt,
+    )
+
+
+def _finalize_attempt_records(
+    *,
+    collection: _AttemptCollection,
+    upstream_cache: _UpstreamMetadataCache,
+) -> list[dict[str, object]]:
+    """
+    Attach source-asset fields (``content_id``, ``asset_size_bytes``) from the
+    upstream dandiset's ``assets.jsonld``, and ``created_at`` /
+    ``job_completion_time`` from local timestamps.
+
+    Records are emitted even if the upstream lookup fails; the source fields
+    become ``None`` and a warning is logged.
+    """
+    finalized: list[dict[str, object]] = []
+    for job_info, record in collection.records_by_attempt.items():
+        upstream_metadata = upstream_cache.get(job_info.dandiset_id)
+        source_metadata = upstream_metadata.path_to_asset_metadata.get(job_info.dandi_path)
+
+        if source_metadata is None:
+            _log.warning(
+                "Source asset not found in upstream dandiset %s for dandi_path=%s; "
+                "emitting record with null content_id/asset_size_bytes",
+                job_info.dandiset_id,
+                job_info.dandi_path,
+            )
+            content_id: str | None = None
+            asset_size_bytes: int | None = None
+        else:
+            content_id = source_metadata.content_id
+            asset_size_bytes = source_metadata.content_size
+
+        completion_times = collection.log_timestamps_by_attempt.get(job_info, [])
+        record.update(
+            {
+                "content_id": content_id,
+                "asset_size_bytes": asset_size_bytes,
+                "created_at": collection.submit_sh_timestamps_by_attempt.get(job_info),
+                "job_completion_time": max(completion_times) if completion_times else None,
+            }
+        )
+        finalized.append(record)
+    return finalized
+
+
+def _build_source_only_records(
+    *,
+    local_metadata: AssetsJsonldMetadata,
+    default_dandiset_id: str,
+    dandi_paths_with_attempts: set[str],
+) -> list[dict[str, object]]:
+    """Build records for local non-derivative assets that don't appear as a source for any attempt."""
+    records: list[dict[str, object]] = []
+    for source_dandi_path, source_metadata in local_metadata.path_to_asset_metadata.items():
+        if source_dandi_path.startswith("derivatives/"):
+            continue
+        if source_dandi_path in dandi_paths_with_attempts:
+            continue
+        blob_date = _resolve_blob_date_modified(local_metadata, source_metadata.content_id)
+        records.append(
+            _new_source_only_record(
+                dandiset_id=default_dandiset_id,
+                dandi_path=source_dandi_path,
+                content_id=source_metadata.content_id,
+                content_size=source_metadata.content_size,
+                created_at=blob_date if blob_date is not None else source_metadata.date_modified,
+            )
+        )
+    return records
+
+
+def _default_dandiset_id() -> str:
+    match = _DANDISET_ID_RE.search(_ASSETS_JSONLD_URL)
+    return match.group("dandiset_id") if match is not None else ""
+
+
+def _sort_key(record: dict[str, object]) -> tuple[str, str, str]:
+    # content_id may be None for attempts whose upstream source wasn't resolvable;
+    # coerce to "" so sorting stays total.
+    return (
+        str(record["dandiset_id"]),
+        str(record["dandi_path"]),
+        str(record["content_id"]) if record["content_id"] is not None else "",
+    )
+
+
+def write_queue_state(*, queue_directory: pathlib.Path) -> None:
     """
     Write ``state.jsonl`` from DANDI ``assets.jsonld`` metadata.
 
     Each state entry represents one attempt capsule inferred from the
     ``derivatives/dandiset-*/.../pipeline-*/..._attempt-*`` path structure in
     ``assets.jsonld``. ``dandi_path`` is derived from the path segment between
-    ``dandiset-*`` and ``pipeline-*`` with ``.nwb`` appended, and
-    ``has_code``/``has_output``/``has_logs`` are inferred by checking whether
-    any assets are present in the corresponding subdirectories under each
-    attempt path.
+    ``dandiset-*`` and ``pipeline-*`` with ``.nwb`` appended.
+    ``has_code``/``has_output``/``has_logs`` are inferred from the assets
+    present under each attempt directory.
+
+    For meta-analysis dandisets, the ``content_id`` and ``asset_size_bytes``
+    of each attempt's source NWB are resolved by fetching the upstream
+    dandiset's ``assets.jsonld``. ``created_at`` comes from the local
+    ``code/submit.sh`` modification time; ``job_completion_time`` is the
+    latest modification time among log files.
 
     :param queue_directory: Path to the queue root directory.
     :type queue_directory: pathlib.Path
     """
     _load_queue_config(queue_directory=queue_directory)
-    state_file = queue_directory / "state.jsonl"
-    assets_jsonld_metadata = load_assets_jsonld_metadata()
+    local_metadata = load_assets_jsonld_metadata()
 
-    records_by_attempt: dict[JobInfo, dict[str, object]] = {}
-    log_timestamps_by_attempt: dict[JobInfo, list[str]] = {}
-    for asset_path in assets_jsonld_metadata.path_to_asset_metadata:
-        parsed_attempt_identity = _parse_attempt_identity(asset_path)
-        if parsed_attempt_identity is None:
-            continue
-        attempt_identity, subpath = parsed_attempt_identity
-        record = records_by_attempt.setdefault(
-            attempt_identity,
-            {
-                "dandiset_id": attempt_identity.dandiset_id,
-                "dandi_path": attempt_identity.dandi_path,
-                "pipeline": attempt_identity.pipeline,
-                "version": attempt_identity.version,
-                "params": attempt_identity.params,
-                "config": attempt_identity.config,
-                "attempt": attempt_identity.attempt,
-                "has_code": False,
-                "has_output": False,
-                "has_logs": False,
-            },
-        )
-        if subpath == "code" or subpath.startswith("code/"):
-            record["has_code"] = True
-        if subpath == "derivatives" or subpath.startswith("derivatives/"):
-            record["has_output"] = True
-        if subpath.startswith("logs/"):
-            log_relative_path = subpath.removeprefix("logs/")
-            if log_relative_path and log_relative_path != "dataset_description.json":
-                record["has_logs"] = True
-                log_metadata = assets_jsonld_metadata.path_to_asset_metadata.get(asset_path)
-                if log_metadata is not None:
-                    log_timestamps_by_attempt.setdefault(attempt_identity, []).append(log_metadata.date_modified)
-
-    records: list[dict[str, object]] = []
-    for attempt_identity, record in records_by_attempt.items():
-        source_metadata = assets_jsonld_metadata.path_to_asset_metadata.get(attempt_identity.dandi_path)
-        source_content_id = source_metadata.content_id if source_metadata is not None else None
-        if not isinstance(source_content_id, str):
-            _log.debug(
-                "Skipping attempt for dandiset_id=%s dandi_path=%s because source content_id could not be resolved",
-                attempt_identity.dandiset_id,
-                attempt_identity.dandi_path,
-            )
-            continue
-        content_size = source_metadata.content_size
-
-        source_asset_metadata = assets_jsonld_metadata.content_id_to_asset.get(source_content_id)
-        created_at = source_asset_metadata.get("blobDateModified") if isinstance(source_asset_metadata, dict) else None
-        if not isinstance(created_at, str):
-            created_at = source_metadata.date_modified
-
-        completion_times = log_timestamps_by_attempt.get(attempt_identity, [])
-        record.update(
-            {
-                "content_id": source_content_id,
-                "asset_size_bytes": content_size,
-                "created_at": created_at,
-                "job_completion_time": max(completion_times) if completion_times else None,
-            }
-        )
-        records.append(record)
-
-    dandiset_id_match = _DANDISET_ID_RE.search(_ASSETS_JSONLD_URL)
-    default_dandiset_id = dandiset_id_match.group("dandiset_id") if dandiset_id_match is not None else ""
-    dandi_paths_with_attempts = {attempt_identity.dandi_path for attempt_identity in records_by_attempt}
-    for source_dandi_path, source_metadata in assets_jsonld_metadata.path_to_asset_metadata.items():
-        if source_dandi_path.startswith("derivatives/"):
-            continue
-        if source_dandi_path in dandi_paths_with_attempts:
-            continue
-        content_id = source_metadata.content_id
-        content_size = source_metadata.content_size
-        source_asset_metadata = assets_jsonld_metadata.content_id_to_asset.get(content_id)
-        created_at = source_asset_metadata.get("blobDateModified") if isinstance(source_asset_metadata, dict) else None
-        if not isinstance(created_at, str):
-            created_at = source_metadata.date_modified
-        records.append(
-            {
-                "dandiset_id": default_dandiset_id,
-                "dandi_path": source_dandi_path,
-                "content_id": content_id,
-                "asset_size_bytes": content_size,
-                "pipeline": "",
-                "version": "",
-                "params": "",
-                "config": "",
-                "attempt": 0,
-                "has_code": False,
-                "has_output": False,
-                "has_logs": False,
-                "created_at": created_at,
-                "job_completion_time": None,
-            }
-        )
-
-    records.sort(
-        key=lambda record: (
-            record["dandiset_id"],
-            record["dandi_path"],
-            record["content_id"],
-        )
+    collection = _collect_attempts(local_metadata)
+    upstream_cache = _UpstreamMetadataCache()
+    attempt_records = _finalize_attempt_records(
+        collection=collection,
+        upstream_cache=upstream_cache,
+    )
+    source_only_records = _build_source_only_records(
+        local_metadata=local_metadata,
+        default_dandiset_id=_default_dandiset_id(),
+        dandi_paths_with_attempts={job.dandi_path for job in collection.records_by_attempt},
     )
 
+    records = attempt_records + source_only_records
+    records.sort(key=_sort_key)
+
+    state_file = queue_directory / "state.jsonl"
     with state_file.open(mode="w") as file_stream:
         for record in records:
             file_stream.write(json.dumps(record) + "\n")
