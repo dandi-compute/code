@@ -75,12 +75,10 @@ def load_assets_jsonld_metadata() -> AssetsJsonldMetadata:
                 if isinstance(path, str):
                     all_paths.add(path)
                 content_urls = asset.get("contentUrl")
-                if not isinstance(content_urls, list):
-                    content_urls = []
                 content_id = next(
                     (
                         content_url.rsplit("/", 1)[-1].split("?", 1)[0]
-                        for content_url in content_urls
+                        for content_url in (content_urls if isinstance(content_urls, list) else [])
                         if isinstance(content_url, str) and "/blobs/" in content_url
                     ),
                     None,
