@@ -22,10 +22,10 @@ def clean_unsubmitted_capsules(
     ``logs/`` subdirectory nor a ``derivatives/`` subdirectory, and the attempt
     directory does not contain a ``code/submitted`` marker.
 
-    The function refreshes ``state.jsonl`` in *queue_directory* from DANDI
-    ``assets.jsonld`` metadata, filters to the queued subset, then deletes each
+    The function reads the queue state, then deletes each
     matching attempt directory tree from the DANDI archive (via ``dandi
-    delete``) and from the local filesystem.
+    delete``) and from the local filesystem. This expects the local Dandiset copy to be
+    up-to-date.
 
     Parameters
     ----------
