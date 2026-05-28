@@ -4,7 +4,7 @@ import json
 import logging
 import urllib.request
 
-# from ._globals import _ASSETS_JSONLD_URL
+from ._globals import _ASSETS_JSONLD_URL
 
 _log = logging.getLogger(__name__)
 
