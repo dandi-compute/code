@@ -21,7 +21,6 @@ import pytest
 from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
-from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.queue import write_queue_state
 from dandi_compute_code.queue._aggregate_queue_statistics import aggregate_queue_statistics
 from dandi_compute_code.queue._attempt_dir_candidates import _attempt_dir_candidates
@@ -106,46 +105,6 @@ def _get_default_params_id() -> str:
     )
     return json.loads(params_registry_path.read_text())["default"]["md5"][:7]
 
-
-def _build_assets_metadata(
-    *,
-    content_id: str,
-    asset_path: str,
-    content_size: int | str | None = None,
-    blob_date_modified: str | None = None,
-    log_asset_path: str | None = None,
-    log_date_modified: str | None = None,
-) -> AssetsJsonldMetadata:
-    """Build indexed synthetic assets metadata for tests."""
-    source_asset: dict[str, object] = {"path": asset_path}
-    if content_size is not None:
-        source_asset["contentSize"] = content_size
-    if blob_date_modified is not None:
-        source_asset["blobDateModified"] = blob_date_modified
-    date_modified = blob_date_modified or "2024-01-01T00:00:00+00:00"
-    path_to_asset_metadata: dict[str, AssetMetadata] = {
-        asset_path: AssetMetadata(
-            path=asset_path,
-            date_modified=date_modified,
-            content_size=content_size if isinstance(content_size, int) else 1,
-            content_id=content_id,
-        )
-    }
-    content_id_to_asset = {content_id: source_asset}
-    if log_asset_path is not None and log_date_modified is not None:
-        log_content_id = f"{content_id}-log"
-        path_to_asset_metadata[log_asset_path] = AssetMetadata(
-            path=log_asset_path,
-            date_modified=log_date_modified,
-            content_size=1,
-            content_id=log_content_id,
-        )
-        content_id_to_asset[log_content_id] = {
-            "path": log_asset_path,
-            "contentSize": 1,
-            "dateModified": log_date_modified,
-        }
-    return AssetsJsonldMetadata(content_id_to_asset=content_id_to_asset, path_to_asset_metadata=path_to_asset_metadata)
 
 
 def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:

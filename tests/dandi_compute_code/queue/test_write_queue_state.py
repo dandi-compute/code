@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from unittest import mock
 
 import pytest
-from _process_queue_test_cases import _build_assets_metadata, _make_queue_dir, _read_jsonl
+from _process_queue_test_cases import _make_queue_dir, _read_jsonl
 
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.queue import write_queue_state
