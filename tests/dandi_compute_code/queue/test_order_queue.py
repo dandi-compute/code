@@ -35,26 +35,29 @@ def test_order_queue_writes_waiting_jsonl_from_state_entries(tmp_path: pathlib.P
     """refresh_queue_state writes state entries emitted by write_queue_state."""
     queue_dir = _make_queue_dir(tmp_path)
 
-    entries = [
-        _make_state_entry(dandiset_id="000001", has_code=True, has_output=False, has_logs=False),
-        # Already has output (kept in state.jsonl for authoritative tracking)
-        _make_state_entry(dandiset_id="000002", has_code=True, has_output=True, has_logs=False),
-    ]
-
-    def _write_state(*, queue_directory: pathlib.Path) -> None:
-        state_file = queue_directory / "state.jsonl"
-        with state_file.open("w") as file_stream:
-            for entry in entries:
-                file_stream.write(json.dumps(entry) + "\n")
-
-    with mock.patch("dandi_compute_code.queue._refresh_queue.write_queue_state", side_effect=_write_state):
+    content_id_to_asset = {
+        "id-1": {
+            "path": "sub-01/sub-01_ecephys.nwb",
+            "contentSize": 1,
+            "blobDateModified": "2024-01-01T00:00:00+00:00",
+        },
+        "id-2": {
+            "path": "sub-02/sub-02_ecephys.nwb",
+            "contentSize": 2,
+            "blobDateModified": "2024-01-02T00:00:00+00:00",
+        },
+    }
+    with mock.patch(
+        "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
+        return_value=(content_id_to_asset, {}),
+    ):
         refresh_queue_state(queue_directory=queue_dir, dandiset_directory=tmp_path)
 
     state_file = queue_dir / "state.jsonl"
     assert state_file.exists()
     state_entries = _read_jsonl(state_file)
     assert len(state_entries) == 2
-    assert {entry["dandiset_id"] for entry in state_entries} == {"000001", "000002"}
+    assert {entry["dandiset_id"] for entry in state_entries} == {"001697"}
 
 
 @pytest.mark.ai_generated

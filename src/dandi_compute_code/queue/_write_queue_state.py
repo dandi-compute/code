@@ -2,13 +2,18 @@ import json
 import pathlib
 import re
 
+from ._load_queue_config import _load_queue_config
 from ..dandiset._globals import _ASSETS_JSONLD_URL
 from ..dandiset._load_assets_jsonld_metadata import _load_assets_jsonld_metadata
 
 _DANDISET_ID_RE = re.compile(r"/dandisets/(?P<dandiset_id>\d+)/")
 
 
-def write_queue_state(*, queue_directory: pathlib.Path) -> None:
+def write_queue_state(
+    *,
+    queue_directory: pathlib.Path,
+    dandiset_directory: pathlib.Path | None = None,
+) -> None:
     """
     Write ``state.jsonl`` from DANDI ``assets.jsonld`` metadata.
 
@@ -16,7 +21,10 @@ def write_queue_state(*, queue_directory: pathlib.Path) -> None:
     (``has_code=False``, ``has_output=False``, ``has_logs=False``). ``created_at``
     prefers ``blobDateModified`` and falls back to ``dateModified`` when blob
     metadata is unavailable.
+
+    ``dandiset_directory`` is accepted for backward compatibility and ignored.
     """
+    _load_queue_config(queue_directory=queue_directory)
     state_file = queue_directory / "state.jsonl"
     content_id_to_asset, _path_to_date_modified = _load_assets_jsonld_metadata()
     dandiset_id_match = _DANDISET_ID_RE.search(_ASSETS_JSONLD_URL)
