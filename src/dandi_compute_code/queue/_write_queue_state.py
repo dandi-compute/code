@@ -50,8 +50,8 @@ def write_queue_state(
         records.append(
             {
                 "dandiset_id": dandiset_id,
-                "content_id": content_id,
                 "dandi_path": dandi_path,
+                "content_id": content_id,
                 "asset_size_bytes": asset_size_bytes,
                 "pipeline": "",
                 "version": "",
