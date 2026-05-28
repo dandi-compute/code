@@ -88,8 +88,3 @@ def load_assets_jsonld_metadata() -> AssetsJsonldMetadata:
         content_id_to_asset=content_id_to_asset,
         path_to_asset_metadata=path_to_asset_metadata,
     )
-
-
-def _load_assets_jsonld_metadata() -> AssetsJsonldMetadata:
-    """Backward-compatible alias for :func:`load_assets_jsonld_metadata`."""
-    return load_assets_jsonld_metadata()
