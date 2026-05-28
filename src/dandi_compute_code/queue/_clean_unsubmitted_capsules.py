@@ -56,7 +56,6 @@ def clean_unsubmitted_capsules(
         message = "`DANDI_API_KEY` environment variable is not set or is blank."
         raise RuntimeError(message)
 
-    write_queue_state(queue_directory=queue_directory)
     state_entries = _read_state_entries(queue_directory / "state.jsonl")
 
     cleanable_attempt_dirs = [
