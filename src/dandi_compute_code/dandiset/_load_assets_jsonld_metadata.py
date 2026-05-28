@@ -10,13 +10,37 @@ _log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class AssetMetadata:
+    """Minimal indexed metadata for one asset path."""
+
+    path: str
+    date_modified: str | None
+    content_id: str | None
+
+
+@dataclass(frozen=True)
 class AssetsJsonldMetadata:
     """Indexed metadata loaded from DANDI ``assets.jsonld``."""
 
     content_id_to_asset: dict[str, dict[str, object]]
-    path_to_date_modified: dict[str, str]
-    path_to_content_id: dict[str, str]
+    path_to_asset_metadata: dict[str, AssetMetadata]
     all_paths: frozenset[str]
+
+    @property
+    def path_to_date_modified(self) -> dict[str, str]:
+        return {
+            path: asset_metadata.date_modified
+            for path, asset_metadata in self.path_to_asset_metadata.items()
+            if isinstance(asset_metadata.date_modified, str)
+        }
+
+    @property
+    def path_to_content_id(self) -> dict[str, str]:
+        return {
+            path: asset_metadata.content_id
+            for path, asset_metadata in self.path_to_asset_metadata.items()
+            if isinstance(asset_metadata.content_id, str)
+        }
 
 
 @functools.lru_cache(maxsize=1)
@@ -29,8 +53,7 @@ def load_assets_jsonld_metadata() -> AssetsJsonldMetadata:
     :rtype: AssetsJsonldMetadata
     """
     content_id_to_asset: dict[str, dict[str, object]] = {}
-    path_to_date_modified: dict[str, str] = {}
-    path_to_content_id: dict[str, str] = {}
+    path_to_asset_metadata: dict[str, AssetMetadata] = {}
     all_paths: set[str] = set()
     try:
         with urllib.request.urlopen(url=_ASSETS_JSONLD_URL, timeout=30) as response:
@@ -51,11 +74,10 @@ def load_assets_jsonld_metadata() -> AssetsJsonldMetadata:
                 date_modified = asset.get("dateModified")
                 if isinstance(path, str):
                     all_paths.add(path)
-                    if isinstance(date_modified, str):
-                        path_to_date_modified[path] = date_modified
                 content_urls = asset.get("contentUrl")
+                content_id: str | None = None
                 if not isinstance(content_urls, list):
-                    continue
+                    content_urls = []
                 content_id = next(
                     (
                         content_url.rsplit("/", 1)[-1].split("?", 1)[0]
@@ -66,14 +88,26 @@ def load_assets_jsonld_metadata() -> AssetsJsonldMetadata:
                 )
                 if isinstance(content_id, str) and content_id:
                     content_id_to_asset[content_id] = asset
-                    if isinstance(path, str):
-                        path_to_content_id[path] = content_id
+                if isinstance(path, str):
+                    existing_path_metadata = path_to_asset_metadata.get(path)
+                    path_to_asset_metadata[path] = AssetMetadata(
+                        path=path,
+                        date_modified=(
+                            date_modified
+                            if isinstance(date_modified, str)
+                            else (existing_path_metadata.date_modified if existing_path_metadata is not None else None)
+                        ),
+                        content_id=(
+                            content_id
+                            if isinstance(content_id, str) and content_id
+                            else (existing_path_metadata.content_id if existing_path_metadata is not None else None)
+                        ),
+                    )
     except Exception as exception:
         _log.warning("Unable to load metadata from %s: %s", _ASSETS_JSONLD_URL, exception)
     return AssetsJsonldMetadata(
         content_id_to_asset=content_id_to_asset,
-        path_to_date_modified=path_to_date_modified,
-        path_to_content_id=path_to_content_id,
+        path_to_asset_metadata=path_to_asset_metadata,
         all_paths=frozenset(all_paths),
     )
 

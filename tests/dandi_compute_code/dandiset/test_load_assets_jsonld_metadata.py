@@ -2,7 +2,11 @@ import json
 from unittest import mock
 
 from dandi_compute_code import dandiset
-from dandi_compute_code.dandiset._load_assets_jsonld_metadata import AssetsJsonldMetadata, load_assets_jsonld_metadata
+from dandi_compute_code.dandiset._load_assets_jsonld_metadata import (
+    AssetMetadata,
+    AssetsJsonldMetadata,
+    load_assets_jsonld_metadata,
+)
 
 
 class _FakeResponse:
@@ -36,12 +40,18 @@ def test_load_assets_jsonld_metadata_returns_indexed_model() -> None:
         metadata = load_assets_jsonld_metadata()
 
     assert isinstance(metadata, AssetsJsonldMetadata)
+    assert metadata.path_to_asset_metadata["sub-test/sub-test_ecephys.nwb"] == AssetMetadata(
+        path="sub-test/sub-test_ecephys.nwb",
+        date_modified="2026-01-01T00:00:00+00:00",
+        content_id="content-id-123",
+    )
+    assert "sub-test/sub-test_ecephys.nwb" in metadata.all_paths
     assert metadata.path_to_content_id["sub-test/sub-test_ecephys.nwb"] == "content-id-123"
     assert metadata.path_to_date_modified["sub-test/sub-test_ecephys.nwb"] == "2026-01-01T00:00:00+00:00"
-    assert "sub-test/sub-test_ecephys.nwb" in metadata.all_paths
     assert metadata.content_id_to_asset["content-id-123"]["contentSize"] == 123
 
 
 def test_load_assets_jsonld_metadata_is_publicly_exported() -> None:
     assert dandiset.load_assets_jsonld_metadata is load_assets_jsonld_metadata
+    assert dandiset.AssetMetadata is AssetMetadata
     assert dandiset.AssetsJsonldMetadata is AssetsJsonldMetadata

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from ._load_queue_config import _load_queue_config
 from ..dandiset._globals import _ASSETS_JSONLD_URL
-from ..dandiset._load_assets_jsonld_metadata import AssetsJsonldMetadata, load_assets_jsonld_metadata
+from ..dandiset._load_assets_jsonld_metadata import AssetMetadata, AssetsJsonldMetadata, load_assets_jsonld_metadata
 
 _FLAT_ATTEMPT_RE = re.compile(
     r"^version-(?P<version>.+?)_params-(?P<params>[^_]+)_config-(?P<config>[^_]+)(?:_.+?)?_attempt-(?P<attempt>\d+)$"
@@ -35,18 +35,21 @@ def _coerce_assets_jsonld_metadata(
         return assets_jsonld_metadata
 
     content_id_to_asset, path_to_date_modified = assets_jsonld_metadata
-    path_to_content_id: dict[str, str] = {}
-    all_paths: set[str] = set(path_to_date_modified)
+    path_to_asset_metadata: dict[str, AssetMetadata] = {
+        path: AssetMetadata(path=path, date_modified=date_modified, content_id=None)
+        for path, date_modified in path_to_date_modified.items()
+    }
+    all_paths: set[str] = set(path_to_asset_metadata)
     for content_id, asset in content_id_to_asset.items():
         path = asset.get("path")
         if isinstance(path, str):
             all_paths.add(path)
-            path_to_content_id[path] = content_id
+            date_modified = path_to_date_modified.get(path)
+            path_to_asset_metadata[path] = AssetMetadata(path=path, date_modified=date_modified, content_id=content_id)
 
     return AssetsJsonldMetadata(
         content_id_to_asset=content_id_to_asset,
-        path_to_date_modified=path_to_date_modified,
-        path_to_content_id=path_to_content_id,
+        path_to_asset_metadata=path_to_asset_metadata,
         all_paths=frozenset(all_paths),
     )
 
@@ -176,13 +179,15 @@ def write_queue_state(
             log_relative_path = subpath.removeprefix("logs/")
             if log_relative_path and log_relative_path != "dataset_description.json":
                 record["has_logs"] = True
-                log_timestamp = assets_jsonld_metadata.path_to_date_modified.get(asset_path)
-                if isinstance(log_timestamp, str):
+                log_metadata = assets_jsonld_metadata.path_to_asset_metadata.get(asset_path)
+                if log_metadata is not None and isinstance(log_metadata.date_modified, str):
+                    log_timestamp = log_metadata.date_modified
                     log_timestamps_by_attempt.setdefault(attempt_identity, []).append(log_timestamp)
 
     records: list[dict[str, object]] = []
     for attempt_identity, record in records_by_attempt.items():
-        source_content_id = assets_jsonld_metadata.path_to_content_id.get(attempt_identity.dandi_path)
+        source_metadata = assets_jsonld_metadata.path_to_asset_metadata.get(attempt_identity.dandi_path)
+        source_content_id = source_metadata.content_id if source_metadata is not None else None
         if not isinstance(source_content_id, str):
             _log.debug(
                 "Skipping attempt for dandiset_id=%s dandi_path=%s because source content_id could not be resolved",
