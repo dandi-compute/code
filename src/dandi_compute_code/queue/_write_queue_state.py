@@ -22,7 +22,11 @@ def write_queue_state(
     prefers ``blobDateModified`` and falls back to ``dateModified`` when blob
     metadata is unavailable.
 
-    ``dandiset_directory`` is accepted for backward compatibility and ignored.
+    :param queue_directory: Path to the queue root directory.
+    :type queue_directory: pathlib.Path
+    :param dandiset_directory: Unused parameter retained for backward compatibility with existing
+        callers; this value is ignored.
+    :type dandiset_directory: pathlib.Path | None
     """
     _load_queue_config(queue_directory=queue_directory)
     state_file = queue_directory / "state.jsonl"

@@ -43,7 +43,12 @@ def test_refresh_queue_state_writes_empty_files_for_missing_dandiset_directory(t
     queue_dir = _make_queue_dir(tmp_path)
     missing_dandiset_dir = tmp_path / "missing_dandiset"
 
-    with mock.patch("dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata", return_value=({}, {})):
+    content_id_to_asset: dict[str, dict[str, object]] = {}
+    path_to_date_modified: dict[str, str] = {}
+    with mock.patch(
+        "dandi_compute_code.queue._write_queue_state._load_assets_jsonld_metadata",
+        return_value=(content_id_to_asset, path_to_date_modified),
+    ):
         refresh_queue_state(queue_directory=queue_dir, dandiset_directory=missing_dandiset_dir)
     assert (queue_dir / "state.jsonl").exists()
     assert (queue_dir / "state.jsonl").read_text() == ""
