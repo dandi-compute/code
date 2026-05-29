@@ -85,7 +85,7 @@ def _submit_next(
             message = f"dandi download failed for {dandi_url}"
             raise RuntimeError(message)
 
-        submit_sh_path = temp_dir / code_dir_path / "submit.sh"
+        submit_sh_path = temp_dir / "001697" / code_dir_path / "submit.sh"
         result = subprocess.run(
             ["sbatch", str(submit_sh_path.absolute())],
             capture_output=True,
