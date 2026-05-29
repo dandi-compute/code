@@ -205,7 +205,7 @@ def prepare_aind_ephys_job(
 
     # TODO: if first run for asset, skip below and add sourcedata
 
-    pipeline_directory = pipeline_directory or dandi_compute_dir / "aind-ephys-pipeline.cody"
+    pipeline_directory = pipeline_directory or dandi_compute_dir / "aind-ephys-pipeline"
     pipeline_file_path = pipeline_directory / "pipeline" / "main_multi_backend.nf"
     dandi_compute_code_source_dir = dandi_compute_dir / "code"
 
