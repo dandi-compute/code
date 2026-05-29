@@ -71,7 +71,7 @@ def _submit_next(
         # Temporary directory is intentionally left on disk when any step fails
         # so that it can be inspected for debugging.
         temp_dir = pathlib.Path(tempfile.mkdtemp(dir=processing_directory))
-       _log.info("Submitting job run for %s in %s", code_dir_path, temp_dir)
+        _log.info("Submitting job run for %s in %s", code_dir_path, temp_dir)
 
         result = subprocess.run(
             ["dandi", "download", "--download", "dandiset.yaml", "DANDI:001697"],
