@@ -399,4 +399,3 @@ def test_submit_next_skips_candidates_with_submitted_in_metadata(tmp_path: pathl
     assert mock_run.call_count == 3
     download_url = mock_run.call_args_list[0].args[0][-1]
     assert second_path in download_url
-
