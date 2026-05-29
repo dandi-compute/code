@@ -92,7 +92,7 @@ def _submit_next(
             capture_output=True,
             text=True,
         )
-        _log.info("sbatch returned code %d; stdout %s; stderr %s", result.returncode, result.stdout, result.stderr)
+        _log.info("sbatch returned code %d; stdout %s", result.returncode, result.stdout)
         _log.debug("sbatch stdout: %s\nstderr: %s", result.stdout, result.stderr)
         if result.returncode != 0:
             _log.warning("sbatch stdout: %s\nstderr: %s", result.stdout, result.stderr)
