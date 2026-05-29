@@ -72,19 +72,6 @@ def _submit_next(
         # so that it can be inspected for debugging.
         temp_dir = pathlib.Path(tempfile.mkdtemp(dir=processing_directory))
         _log.info("Submitting job run for %s in %s", code_dir_path, temp_dir)
-
-        result = subprocess.run(
-            ["dandi", "download", "--download", "dandiset.yaml", "DANDI:001697"],
-            capture_output=True,
-            text=True,
-            cwd=temp_dir,
-        )
-        _log.info("dandi download dandiset.yaml returned code %d for %s", result.returncode, dandi_url)
-        _log.debug("dandi download dandiset.yaml stdout: %s\nstderr: %s", result.stdout, result.stderr)
-        if result.returncode != 0:
-            _log.warning("dandi download dandiset.yaml stdout: %s\nstderr: %s", result.stdout, result.stderr)
-            message = f"dandi download dandiset.yaml failed for {dandi_url}"
-            raise RuntimeError(message)
        
         result = subprocess.run(
             ["dandi", "download", "--preserve-tree", dandi_url],
@@ -105,7 +92,7 @@ def _submit_next(
             capture_output=True,
             text=True,
         )
-        _log.info("sbatch returned code %d", result.returncode)
+        _log.info("sbatch returned code %d; stdout %s; stderr %s", result.returncode, result.stdout, result.stderr)
         _log.debug("sbatch stdout: %s\nstderr: %s", result.stdout, result.stderr)
         if result.returncode != 0:
             _log.warning("sbatch stdout: %s\nstderr: %s", result.stdout, result.stderr)
@@ -119,7 +106,7 @@ def _submit_next(
             ["dandi", "upload", "--validation", "skip"],
             capture_output=True,
             text=True,
-            cwd=temp_dir,
+            cwd=temp_dir / "001697",
         )
         _log.info("dandi upload returned code %d", result.returncode)
         _log.debug("dandi upload stdout: %s\nstderr: %s", result.stdout, result.stderr)
