@@ -73,7 +73,7 @@ def _submit_next(
         temp_dir = pathlib.Path(tempfile.mkdtemp(dir=processing_directory))
 
         result = subprocess.run(
-            ["dandi", "download", "--download", "dandiset.yaml"],
+            ["dandi", "download", "--download", "dandiset.yaml", "DANDI:001697"],
             capture_output=True,
             text=True,
             cwd=temp_dir,
