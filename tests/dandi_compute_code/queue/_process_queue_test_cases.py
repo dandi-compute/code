@@ -25,13 +25,10 @@ from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.queue import write_queue_state
 from dandi_compute_code.queue._aggregate_queue_statistics import aggregate_queue_statistics
 from dandi_compute_code.queue._attempt_dir_candidates import _attempt_dir_candidates
-from dandi_compute_code.queue._build_processing_order import _build_processing_order
 from dandi_compute_code.queue._clean_unsubmitted_capsules import clean_unsubmitted_capsules
-from dandi_compute_code.queue._count_dandiset_failures import _count_dandiset_failures
 from dandi_compute_code.queue._count_running_aind_ephys_pipeline_jobs import _count_running_aind_ephys_pipeline_jobs
 from dandi_compute_code.queue._globals import TEST_QUEUE_CONTENT_ID
 from dandi_compute_code.queue._load_queue_config import _load_queue_config
-from dandi_compute_code.queue._order_queue import order_queue
 from dandi_compute_code.queue._prepare_queue import prepare_queue
 from dandi_compute_code.queue._process_queue import process_queue
 from dandi_compute_code.queue._resolve_params_key_to_id import _resolve_params_key_to_id
@@ -330,165 +327,6 @@ def test_resolve_params_key_to_id_already_hash_passthrough() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests for _build_processing_order
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.ai_generated
-def test_build_processing_order_empty_state() -> None:
-    """_build_processing_order returns an empty list when state_entries is empty."""
-    result = _build_processing_order(state_entries=[], queue_config=_EXAMPLE_QUEUE_CONFIG)
-    assert result == []
-
-
-@pytest.mark.ai_generated
-def test_build_processing_order_filters_out_entries_with_output() -> None:
-    """_build_processing_order excludes entries that already have output."""
-    entries = [
-        _make_state_entry(has_code=True, has_output=True, has_logs=False),
-        _make_state_entry(has_code=True, has_output=False, has_logs=False, dandiset_id="000002"),
-    ]
-    result = _build_processing_order(state_entries=entries, queue_config=_EXAMPLE_QUEUE_CONFIG)
-    assert len(result) == 1
-    assert result[0]["dandiset_id"] == "000002"
-
-
-@pytest.mark.ai_generated
-def test_build_processing_order_filters_out_entries_with_logs() -> None:
-    """_build_processing_order excludes entries that already have logs (running or failed)."""
-    entries = [
-        _make_state_entry(has_code=True, has_output=False, has_logs=True),
-        _make_state_entry(has_code=True, has_output=False, has_logs=False, dandiset_id="000002"),
-    ]
-    result = _build_processing_order(state_entries=entries, queue_config=_EXAMPLE_QUEUE_CONFIG)
-    assert len(result) == 1
-    assert result[0]["dandiset_id"] == "000002"
-
-
-@pytest.mark.ai_generated
-def test_build_processing_order_filters_out_entries_without_code() -> None:
-    """_build_processing_order excludes entries that have no code directory yet."""
-    entries = [
-        _make_state_entry(has_code=False, has_output=False, has_logs=False),
-        _make_state_entry(has_code=True, has_output=False, has_logs=False, dandiset_id="000002"),
-    ]
-    result = _build_processing_order(state_entries=entries, queue_config=_EXAMPLE_QUEUE_CONFIG)
-    assert len(result) == 1
-    assert result[0]["dandiset_id"] == "000002"
-
-
-@pytest.mark.ai_generated
-def test_build_processing_order_respects_version_priority() -> None:
-    """_build_processing_order returns entries for higher-priority versions first."""
-    config = {
-        "pipelines": {
-            "test": {
-                "version_priority": ["v2.0", "v1.0"],
-                "params_priority": ["default"],
-            }
-        }
-    }
-    entries = [
-        _make_state_entry(version="v1.0", dandiset_id="000001"),
-        _make_state_entry(version="v2.0", dandiset_id="000001"),
-    ]
-    result = _build_processing_order(state_entries=entries, queue_config=config)
-    assert len(result) == 2
-    assert result[0]["version"] == "v2.0"
-    assert result[1]["version"] == "v1.0"
-
-
-@pytest.mark.ai_generated
-def test_build_processing_order_respects_params_priority() -> None:
-    """_build_processing_order iterates params in params_priority order for each dandiset."""
-    config = {
-        "pipelines": {
-            "test": {
-                "version_priority": ["v1.0"],
-                "params_priority": ["fast", "slow"],
-            }
-        }
-    }
-    entries = [
-        _make_state_entry(params="slow", dandiset_id="000001"),
-        _make_state_entry(params="fast", dandiset_id="000001"),
-    ]
-    result = _build_processing_order(state_entries=entries, queue_config=config)
-    assert len(result) == 2
-    assert result[0]["params"] == "fast"
-    assert result[1]["params"] == "slow"
-
-
-@pytest.mark.ai_generated
-def test_build_processing_order_sorts_dandisets_by_created_at() -> None:
-    """_build_processing_order processes dandiset instances in earliest-created-first order."""
-    entries = [
-        _make_state_entry(dandiset_id="000002", created_at="2024-01-02T00:00:00+00:00"),
-        _make_state_entry(dandiset_id="000001", created_at="2024-01-01T00:00:00+00:00"),
-    ]
-    result = _build_processing_order(state_entries=entries, queue_config=_EXAMPLE_QUEUE_CONFIG)
-    assert len(result) == 2
-    assert result[0]["dandiset_id"] == "000001"
-    assert result[1]["dandiset_id"] == "000002"
-
-
-@pytest.mark.ai_generated
-def test_build_processing_order_zipper_all_params_per_dandiset_before_next() -> None:
-    """All params for a dandiset instance appear consecutively before the next dandiset."""
-    config = {
-        "pipelines": {
-            "test": {
-                "version_priority": ["v1.0"],
-                "params_priority": ["p1", "p2"],
-            }
-        }
-    }
-    # Two dandisets, two params each
-    entries = [
-        _make_state_entry(dandiset_id="000001", params="p1", created_at="2024-01-01T00:00:00+00:00"),
-        _make_state_entry(dandiset_id="000001", params="p2", created_at="2024-01-01T00:00:00+00:00"),
-        _make_state_entry(dandiset_id="000002", params="p1", created_at="2024-01-02T00:00:00+00:00"),
-        _make_state_entry(dandiset_id="000002", params="p2", created_at="2024-01-02T00:00:00+00:00"),
-    ]
-    result = _build_processing_order(state_entries=entries, queue_config=config)
-    assert len(result) == 4
-    ids = [(e["dandiset_id"], e["params"]) for e in result]
-    # Expect: 000001/p1, 000001/p2, 000002/p1, 000002/p2
-    assert ids == [("000001", "p1"), ("000001", "p2"), ("000002", "p1"), ("000002", "p2")]
-
-
-@pytest.mark.ai_generated
-def test_build_processing_order_ignores_unknown_pipeline() -> None:
-    """_build_processing_order ignores state entries whose pipeline is not in queue_config."""
-    entries = [
-        _make_state_entry(pipeline="unknown", dandiset_id="000001"),
-        _make_state_entry(pipeline="test", dandiset_id="000002"),
-    ]
-    result = _build_processing_order(state_entries=entries, queue_config=_EXAMPLE_QUEUE_CONFIG)
-    assert len(result) == 1
-    assert result[0]["dandiset_id"] == "000002"
-
-
-@pytest.mark.ai_generated
-def test_build_processing_order_resolves_aind_ephys_params_key_to_id() -> None:
-    """_build_processing_order matches state entries whose params is a hash ID when queue_config uses the key name."""
-    config = {
-        "pipelines": {
-            "aind+ephys": {
-                "version_priority": ["v1.1.1+b268fd2"],
-                "params_priority": ["default"],
-            }
-        }
-    }
-    entry = _make_state_entry(
-        pipeline="aind+ephys",
-        version="v1.1.1+b268fd2",
-        params=_get_default_params_id(),
-        dandiset_id="000233",
-    )
-    result = _build_processing_order(state_entries=[entry], queue_config=config)
-    assert len(result) == 1
-    assert result[0]["dandiset_id"] == "000233"
 
 
 @pytest.mark.ai_generated
@@ -513,30 +351,6 @@ def test_version_matches_rejects_non_hex_suffix() -> None:
 def test_version_matches_rejects_different_version() -> None:
     """_version_matches returns False when the version base is different."""
     assert _version_matches("v1.1.0+b268fd2", "v1.1.1+b268fd2") is False
-
-
-@pytest.mark.ai_generated
-def test_build_processing_order_matches_new_style_version_with_code_hash() -> None:
-    """_build_processing_order matches state entries with a code-repo commit hash appended to the version."""
-    # Simulates state entries produced after the change that appends the first 7 chars
-    # of the dandi-compute/code repo commit hash to the version directory name.
-    config = {
-        "pipelines": {
-            "aind+ephys": {
-                "version_priority": ["v1.1.1+b268fd2"],
-                "params_priority": ["default"],
-            }
-        }
-    }
-    entry = _make_state_entry(
-        pipeline="aind+ephys",
-        version="v1.1.1+b268fd2+abcdef1",
-        params=_get_default_params_id(),
-        dandiset_id="000233",
-    )
-    result = _build_processing_order(state_entries=[entry], queue_config=config)
-    assert len(result) == 1
-    assert result[0]["dandiset_id"] == "000233"
 
 
 # ---------------------------------------------------------------------------
@@ -1425,33 +1239,6 @@ def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pat
 
 
 @pytest.mark.ai_generated
-def test_order_queue_returns_ordered_pending_entries_only() -> None:
-    """order_queue returns pending entries without writing files."""
-    state_entries = [
-        _make_state_entry(dandiset_id="000001", has_code=True, has_output=False, has_logs=False),
-        _make_state_entry(dandiset_id="000002", has_code=True, has_output=True, has_logs=False),
-    ]
-    queue_config = {"pipelines": {"test": {"version_priority": ["v1.0"], "params_priority": ["default"]}}}
-
-    ordered = order_queue(state_entries=state_entries, queue_config=queue_config)
-
-    assert len(ordered) == 1
-    assert ordered[0]["dandiset_id"] == "000001"
-
-
-@pytest.mark.ai_generated
-def test_order_queue_respects_limit_parameter() -> None:
-    """order_queue truncates ordered entries when limit is provided."""
-    state_entries = [
-        _make_state_entry(dandiset_id=f"00000{i}", has_code=True, has_output=False, has_logs=False) for i in range(1, 6)
-    ]
-    queue_config = {"pipelines": {"test": {"version_priority": ["v1.0"], "params_priority": ["default"]}}}
-
-    ordered = order_queue(state_entries=state_entries, queue_config=queue_config, limit=2)
-
-    assert len(ordered) == 2
-
-
 @pytest.mark.ai_generated
 def test_aggregate_queue_statistics_writes_queue_stats_json(tmp_path: pathlib.Path) -> None:
     """aggregate_queue_statistics writes queue_stats.json with byte and timeline aggregates."""
@@ -1570,7 +1357,7 @@ window.data = {
 
 
 # ---------------------------------------------------------------------------
-# Tests for _count_dandiset_failures
+# Helpers for _submit_next tests
 # ---------------------------------------------------------------------------
 
 
@@ -1596,8 +1383,7 @@ def _make_attempt_dir(
 
     is created.  *with_code*, *with_output*, and *with_logs* control whether the
     ``code/``, ``derivatives/``, and ``logs/`` subdirectories are created.  When
-    *with_logs* is True a sentinel file is written inside ``logs/`` so it is
-    treated as non-empty by :func:`_count_dandiset_failures`.
+    *with_logs* is True a sentinel file is written inside ``logs/``.
     """
     attempt_dir = (
         base
@@ -1617,77 +1403,6 @@ def _make_attempt_dir(
         logs_dir.mkdir()
         (logs_dir / "run.log").write_text("job output\n")
     return attempt_dir
-
-
-@pytest.mark.ai_generated
-def test_count_dandiset_failures_returns_zero_when_no_derivatives_dir(tmp_path: pathlib.Path) -> None:
-    """_count_dandiset_failures returns 0 when the derivatives directory does not exist."""
-    result = _count_dandiset_failures(
-        dandiset_directory=tmp_path,
-        version="v1.0",
-    )
-    assert result == 0
-
-
-@pytest.mark.ai_generated
-def test_count_dandiset_failures_counts_failed_attempts(tmp_path: pathlib.Path) -> None:
-    """_count_dandiset_failures counts directories with code/ + non-empty logs/ but no output/ as failures."""
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 1, with_logs=True)
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 2, with_logs=True)
-    # Successful run – must NOT be counted
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 3, with_output=True)
-    # Pending entry (no logs) – must NOT be counted
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 4)
-
-    result = _count_dandiset_failures(
-        dandiset_directory=tmp_path,
-        version="v1.0",
-    )
-    assert result == 2
-
-
-@pytest.mark.ai_generated
-def test_count_dandiset_failures_ignores_different_version(tmp_path: pathlib.Path) -> None:
-    """_count_dandiset_failures ignores attempt directories under a different version."""
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 1, with_logs=True)
-    # Different version – should NOT be counted
-    _make_attempt_dir(tmp_path, "000001", "v2.0", "abc1234", "def5678", 1, with_logs=True)
-
-    result = _count_dandiset_failures(
-        dandiset_directory=tmp_path,
-        version="v1.0",
-    )
-    assert result == 1
-
-
-@pytest.mark.ai_generated
-def test_count_dandiset_failures_counts_all_params_config_combos(tmp_path: pathlib.Path) -> None:
-    """_count_dandiset_failures counts failures across all params/config combinations for the given version."""
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 1, with_logs=True)
-    # Different params_id – also counted (no filtering by params/config)
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "zzz9999", "def5678", 1, with_logs=True)
-    # Different config_id – also counted
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "yyy8888", 1, with_logs=True)
-
-    result = _count_dandiset_failures(
-        dandiset_directory=tmp_path,
-        version="v1.0",
-    )
-    assert result == 3
-
-
-@pytest.mark.ai_generated
-def test_count_dandiset_failures_counts_across_all_dandisets(tmp_path: pathlib.Path) -> None:
-    """_count_dandiset_failures counts failures across all source dandisets for the given version."""
-    _make_attempt_dir(tmp_path, "000001", "v1.0", "abc1234", "def5678", 1, with_logs=True)
-    # Different dandiset_id – also counted (no per-dandiset filtering)
-    _make_attempt_dir(tmp_path, "000002", "v1.0", "abc1234", "def5678", 1, with_logs=True)
-
-    result = _count_dandiset_failures(
-        dandiset_directory=tmp_path,
-        version="v1.0",
-    )
-    assert result == 2
 
 
 # ---------------------------------------------------------------------------
