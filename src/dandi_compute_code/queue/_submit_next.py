@@ -73,6 +73,19 @@ def _submit_next(
         temp_dir = pathlib.Path(tempfile.mkdtemp(dir=processing_directory))
 
         result = subprocess.run(
+            ["dandi", "download", "--download", "dandiset.yaml"],
+            capture_output=True,
+            text=True,
+            cwd=temp_dir,
+        )
+        _log.info("dandi download dandiset.yaml returned code %d for %s", result.returncode, dandi_url)
+        _log.debug("dandi download dandiset.yaml stdout: %s\nstderr: %s", result.stdout, result.stderr)
+        if result.returncode != 0:
+            _log.warning("dandi download dandiset.yaml stdout: %s\nstderr: %s", result.stdout, result.stderr)
+            message = f"dandi download dandiset.yaml failed for {dandi_url}"
+            raise RuntimeError(message)
+       
+        result = subprocess.run(
             ["dandi", "download", "--preserve-tree", dandi_url],
             capture_output=True,
             text=True,
