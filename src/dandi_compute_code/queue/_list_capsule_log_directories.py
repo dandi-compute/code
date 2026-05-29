@@ -1,5 +1,6 @@
 import pathlib
 
+
 # TODO: this can be merged with the one place it is used
 def _list_capsule_log_directories(*, dandiset_directory: pathlib.Path) -> list[pathlib.Path]:
     """Return sorted logs/ directories that belong to attempt capsules."""
