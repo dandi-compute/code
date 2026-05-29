@@ -49,14 +49,14 @@ def _make_metadata_with_submitted(*code_dir_paths: str) -> AssetsJsonldMetadata:
     return AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata=path_to_asset_metadata)
 
 
-def _download_side_effect(cmd: list, **kwargs: object) -> mock.MagicMock:
+def _download_side_effect(command: list, **kwargs: object) -> mock.MagicMock:
     """subprocess.run side effect that creates submit.sh on dandi download."""
     result = mock.MagicMock()
     result.returncode = 0
     result.stdout = ""
     result.stderr = ""
-    if len(cmd) >= 4 and cmd[0] == "dandi" and cmd[1] == "download":
-        url = cmd[-1]
+    if len(command) >= 4 and command[0] == "dandi" and command[1] == "download":
+        url = command[-1]
         _, code_dir_path = url.split("/001697/", 1)
         cwd = pathlib.Path(str(kwargs.get("cwd", ".")))
         submit_sh = cwd / code_dir_path / "submit.sh"

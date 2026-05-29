@@ -68,6 +68,8 @@ def _submit_next(
 
     for code_dir_path in candidates[:max_submissions]:
         dandi_url = f"dandi://dandi/{_DANDISET_ID}/{code_dir_path}"
+        # Temporary directory is intentionally left on disk when any step fails
+        # so that it can be inspected for debugging.
         temp_dir = pathlib.Path(tempfile.mkdtemp(dir=processing_directory))
 
         result = subprocess.run(
@@ -76,11 +78,10 @@ def _submit_next(
             text=True,
             cwd=temp_dir,
         )
-        _log.info(
-            f"dandi download returned code {result.returncode}\n"
-            f"stdout: {result.stdout}\nstderr: {result.stderr}"
-        )
+        _log.info("dandi download returned code %d for %s", result.returncode, dandi_url)
+        _log.debug("dandi download stdout: %s\nstderr: %s", result.stdout, result.stderr)
         if result.returncode != 0:
+            _log.warning("dandi download stdout: %s\nstderr: %s", result.stdout, result.stderr)
             message = f"dandi download failed for {dandi_url}"
             raise RuntimeError(message)
 
@@ -90,11 +91,10 @@ def _submit_next(
             capture_output=True,
             text=True,
         )
-        _log.info(
-            f"sbatch returned code {result.returncode}\n"
-            f"stdout: {result.stdout}\nstderr: {result.stderr}"
-        )
+        _log.info("sbatch returned code %d", result.returncode)
+        _log.debug("sbatch stdout: %s\nstderr: %s", result.stdout, result.stderr)
         if result.returncode != 0:
+            _log.warning("sbatch stdout: %s\nstderr: %s", result.stdout, result.stderr)
             message = "sbatch submission failed - please check the logs to see more details."
             raise RuntimeError(message)
 
@@ -107,11 +107,10 @@ def _submit_next(
             text=True,
             cwd=temp_dir,
         )
-        _log.info(
-            f"dandi upload returned code {result.returncode}\n"
-            f"stdout: {result.stdout}\nstderr: {result.stderr}"
-        )
+        _log.info("dandi upload returned code %d", result.returncode)
+        _log.debug("dandi upload stdout: %s\nstderr: %s", result.stdout, result.stderr)
         if result.returncode != 0:
+            _log.warning("dandi upload stdout: %s\nstderr: %s", result.stdout, result.stderr)
             message = "dandi upload failed - please check the logs to see more details."
             raise RuntimeError(message)
 
