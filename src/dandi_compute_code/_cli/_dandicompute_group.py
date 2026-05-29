@@ -381,16 +381,9 @@ def _queue_stats_command(
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 @click.option(
-    "--dandiset",
-    "dandiset_directory",
-    help="Path to a local clone of the 001697 dandiset repository, used to count failures per dandiset.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
-@click.option(
-    "--datalad",
-    "datalad_directory",
-    help="Path to the DataLad-backed work tree used to resolve attempt directories.",
+    "--processing",
+    "processing_directory",
+    help="Path to the directory used for temporary working trees during job submission.",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
@@ -403,8 +396,7 @@ def _queue_stats_command(
 )
 def _queue_process_command(
     queue_directory: pathlib.Path,
-    dandiset_directory: pathlib.Path,
-    datalad_directory: pathlib.Path,
+    processing_directory: pathlib.Path,
     silent: bool = False,
 ) -> None:
     """Submit queued jobs when no active dandicompute jobs are running."""
@@ -412,8 +404,7 @@ def _queue_process_command(
     _require_dandi_api_key()
     process_queue(
         queue_directory=queue_directory,
-        dandiset_directory=dandiset_directory,
-        datalad_directory=datalad_directory,
+        processing_directory=processing_directory,
     )
 
 

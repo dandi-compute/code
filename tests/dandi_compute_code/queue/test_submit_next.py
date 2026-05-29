@@ -20,723 +20,383 @@ globals().update(
 )
 
 
-@pytest.mark.ai_generated
-def test_submit_next_raises_when_state_file_is_absent(tmp_path: pathlib.Path) -> None:
-    """_submit_next raises when state.jsonl is absent."""
-    queue_dir = _make_queue_dir(tmp_path)
+def _make_metadata_with_submit_sh(*code_dir_paths: str) -> AssetsJsonldMetadata:
+    """Return metadata containing a ``code/submit.sh`` asset for each given path."""
+    path_to_asset_metadata = {}
+    for code_dir_path in code_dir_paths:
+        asset_path = f"{code_dir_path}/submit.sh"
+        path_to_asset_metadata[asset_path] = AssetMetadata(
+            path=asset_path,
+            date_modified="2025-01-01T00:00:00+00:00",
+            content_size=100,
+            content_id="abc123",
+        )
+    return AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata=path_to_asset_metadata)
 
-    with pytest.raises(FileNotFoundError, match="State file not found"):
-        _submit_next(queue_directory=queue_dir, datalad_directory=tmp_path, dandiset_directory=tmp_path)
+
+def _make_metadata_with_submitted(*code_dir_paths: str) -> AssetsJsonldMetadata:
+    """Return metadata with both ``code/submit.sh`` and ``code/submitted`` for each path."""
+    path_to_asset_metadata = {}
+    for code_dir_path in code_dir_paths:
+        for filename in ("submit.sh", "submitted"):
+            asset_path = f"{code_dir_path}/{filename}"
+            path_to_asset_metadata[asset_path] = AssetMetadata(
+                path=asset_path,
+                date_modified="2025-01-01T00:00:00+00:00",
+                content_size=100,
+                content_id="abc123",
+            )
+    return AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata=path_to_asset_metadata)
+
+
+def _download_side_effect(cmd: list, **kwargs: object) -> mock.MagicMock:
+    """subprocess.run side effect that creates submit.sh on dandi download."""
+    result = mock.MagicMock()
+    result.returncode = 0
+    result.stdout = ""
+    result.stderr = ""
+    if len(cmd) >= 4 and cmd[0] == "dandi" and cmd[1] == "download":
+        url = cmd[-1]
+        _, code_dir_path = url.split("/001697/", 1)
+        cwd = pathlib.Path(str(kwargs.get("cwd", ".")))
+        submit_sh = cwd / code_dir_path / "submit.sh"
+        submit_sh.parent.mkdir(parents=True, exist_ok=True)
+        submit_sh.write_text("#!/bin/bash\necho test\n")
+    return result
+
+
+_EXAMPLE_CODE_DIR_PATH = (
+    "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys"
+    "/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1/code"
+)
 
 
 @pytest.mark.ai_generated
 def test_submit_next_returns_false_when_max_submissions_less_than_one(tmp_path: pathlib.Path) -> None:
-    """_submit_next returns False for invalid max_submissions before reading state.jsonl."""
-    queue_dir = _make_queue_dir(tmp_path)
-    result = _submit_next(
-        queue_directory=queue_dir,
-        datalad_directory=tmp_path,
-        dandiset_directory=tmp_path,
-        max_submissions=0,
-    )
+    """_submit_next returns False for invalid max_submissions before loading metadata."""
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+
+    result = _submit_next(processing_directory=processing_dir, max_submissions=0)
+
     assert result is False
 
 
 @pytest.mark.ai_generated
-def test_submit_next_logs_and_returns_false_when_state_file_is_empty(
+def test_submit_next_returns_false_and_logs_when_no_eligible_entries(
     tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """_submit_next logs and returns False when state.jsonl is empty."""
-    queue_dir = _make_queue_dir(tmp_path)
-    (queue_dir / "state.jsonl").write_text("")
-
-    with caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._submit_next"):
-        result = _submit_next(queue_directory=queue_dir, datalad_directory=tmp_path, dandiset_directory=tmp_path)
-
-    assert result is False
-    assert any("No pending entries in" in record.message for record in caplog.records)
-
-
-@pytest.mark.ai_generated
-def test_submit_next_returns_false_when_no_eligible_entries(
-    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    """_submit_next returns False when all ordered entries already have submitted markers."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
-
-    first_entry = _make_state_entry(dandiset_id="000001")
-    second_entry = _make_state_entry(dandiset_id="000002", subject="mouse02")
-    _write_jsonl(queue_dir / "state.jsonl", [first_entry, second_entry])
-    first_attempt_dir = _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    second_attempt_dir = _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000002",
-        subject="mouse02",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    (first_attempt_dir / "code" / "submitted").touch()
-    (second_attempt_dir / "code" / "submitted").touch()
+    """_submit_next returns False when metadata has no code/submit.sh paths."""
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
 
     with (
         caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._submit_next"),
-        mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit,
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.load_assets_jsonld_metadata",
+            return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
+        ),
     ):
-        result = _submit_next(
-            queue_directory=queue_dir, datalad_directory=dandiset_dir, dandiset_directory=dandiset_dir
-        )
+        result = _submit_next(processing_directory=processing_dir)
 
     assert result is False
-    mock_submit.assert_not_called()
-    assert any("No eligible pending entries available for submission" in record.message for record in caplog.records)
+    assert any("No eligible pending entries" in record.message for record in caplog.records)
 
 
 @pytest.mark.ai_generated
-def test_submit_next_submits_first_pending_entry_in_state_order(tmp_path: pathlib.Path) -> None:
-    """_submit_next submits the first pending entry in state.jsonl order."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
-
-    entry = _make_state_entry(
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    _write_jsonl(queue_dir / "state.jsonl", [entry])
-
-    _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
-        result = _submit_next(
-            queue_directory=queue_dir, datalad_directory=dandiset_dir, dandiset_directory=dandiset_dir
-        )
-
-    assert result is True
-    mock_submit.assert_called_once()
-    assert "submit.sh" in str(mock_submit.call_args.kwargs["script_file_path"])
-
-
-@pytest.mark.ai_generated
-def test_submit_next_raised_when_script_missing(tmp_path: pathlib.Path) -> None:
-    """_submit_next raises FileNotFoundError when the submit.sh for the first entry does not exist."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
-
-    entry = _make_state_entry(dandiset_id="000001", pipeline="test", version="v1.0", params="default")
-    _write_jsonl(queue_dir / "state.jsonl", [entry])
-    # Deliberately do NOT create the attempt directory / submit.sh
-
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
-        with pytest.raises(FileNotFoundError, match="Submit script not found in either location:"):
-            _submit_next(queue_directory=queue_dir, datalad_directory=dandiset_dir, dandiset_directory=dandiset_dir)
-
-
-@pytest.mark.ai_generated
-def test_submit_next_submits_script_from_dandiset_when_absent_in_datalad(tmp_path: pathlib.Path) -> None:
-    """_submit_next falls back to dandiset submit.sh when datalad path is absent."""
-    queue_dir = _make_queue_dir(tmp_path)
-    datalad_dir = tmp_path / "datalad"
-    datalad_dir.mkdir()
-    dandiset_dir = tmp_path / "dandiset"
-
-    entry = _make_state_entry(dandiset_id="000001", pipeline="test", version="v1.0", params="default")
-    _write_jsonl(queue_dir / "state.jsonl", [entry])
-
-    expected_attempt_dir = _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
-        result = _submit_next(
-            queue_directory=queue_dir,
-            datalad_directory=datalad_dir,
-            dandiset_directory=dandiset_dir,
-        )
-
-    assert result is True
-    mock_submit.assert_called_once_with(script_file_path=expected_attempt_dir / "code" / "submit.sh")
-    assert (expected_attempt_dir / "code" / "submitted").exists()
-
-
-@pytest.mark.ai_generated
-def test_submit_next_writes_marker_next_to_submitted_script_when_dandiset_attempt_is_missing(
-    tmp_path: pathlib.Path,
+def test_submit_next_returns_false_when_all_submit_sh_have_submitted_marker(
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """_submit_next writes code/submitted beside the script used for submission."""
-    queue_dir = _make_queue_dir(tmp_path)
-    datalad_dir = tmp_path / "datalad"
-    dandiset_dir = tmp_path / "dandiset"
-    dandiset_dir.mkdir()
+    """_submit_next returns False when every code/submit.sh has an adjacent code/submitted."""
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
 
-    entry = _make_state_entry(
-        dandiset_id="001849",
-        subject="test",
-        pipeline="aind+ephys",
-        version="v1.1.1+b268fd2+f37df9f",
-        params="4af6a25",
-        config="0d4bf36_date-2026+05+24",
-        attempt=2,
-    )
-    _write_jsonl(queue_dir / "state.jsonl", [entry])
-    datalad_attempt_dir = _make_attempt_dir_with_script(
-        datalad_dir,
-        dandiset_id="001849",
-        subject="test",
-        pipeline="aind+ephys",
-        version="v1.1.1+b268fd2+f37df9f",
-        params="4af6a25",
-        config="0d4bf36_date-2026+05+24",
-        attempt=2,
-    )
+    metadata = _make_metadata_with_submitted(_EXAMPLE_CODE_DIR_PATH)
 
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
-        submitted = _submit_next(
-            queue_directory=queue_dir,
-            datalad_directory=datalad_dir,
-            dandiset_directory=dandiset_dir,
-        )
+    with (
+        caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._submit_next"),
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.load_assets_jsonld_metadata",
+            return_value=metadata,
+        ),
+    ):
+        result = _submit_next(processing_directory=processing_dir)
 
-    marker_in_datalad = (
-        datalad_dir
-        / "derivatives"
-        / "dandiset-001849"
-        / "sub-test"
-        / "pipeline-aind+ephys"
-        / "version-v1.1.1+b268fd2+f37df9f_params-4af6a25_config-0d4bf36_date-2026+05+24_attempt-2"
-        / "code"
-        / "submitted"
-    )
-    marker_in_dandiset = (
-        dandiset_dir
-        / "derivatives"
-        / "dandiset-001849"
-        / "sub-test"
-        / "pipeline-aind+ephys"
-        / "version-v1.1.1+b268fd2+f37df9f_params-4af6a25_config-0d4bf36_date-2026+05+24_attempt-2"
-        / "code"
-        / "submitted"
-    )
-    assert submitted is True
-    mock_submit.assert_called_once_with(script_file_path=datalad_attempt_dir / "code" / "submit.sh")
-    assert marker_in_datalad.exists()
-    assert marker_in_dandiset.exists() is False
+    assert result is False
+    assert any("No eligible pending entries" in record.message for record in caplog.records)
 
 
 @pytest.mark.ai_generated
-def test_submit_next_writes_submitted_marker_using_dandi_path_without_nwb_suffix(tmp_path: pathlib.Path) -> None:
-    """_submit_next resolves marker and submit paths under dandi_path with the .nwb suffix removed."""
-    queue_dir = _make_queue_dir(tmp_path)
-    datalad_dir = tmp_path / "datalad"
-    dandiset_dir = tmp_path / "dandiset"
-    entry = _make_state_entry(
-        dandiset_id="001849",
-        dandi_path="sub-test/sourcedata/aind-sample.nwb",
-        pipeline="aind+ephys",
-        version="v1.1.1+b268fd2+f37df9f",
-        params="4af6a25",
-        config="0d4bf36_date-2026+05+24",
-        attempt=2,
-    )
-    _write_jsonl(queue_dir / "state.jsonl", [entry])
-    attempt_dir = (
-        datalad_dir
-        / "derivatives"
-        / "dandiset-001849"
-        / "sub-test"
-        / "sourcedata"
-        / "aind-sample"
-        / "pipeline-aind+ephys"
-        / "version-v1.1.1+b268fd2+f37df9f_params-4af6a25_config-0d4bf36_date-2026+05+24_attempt-2"
-    )
-    (attempt_dir / "code").mkdir(parents=True)
-    script_file_path = attempt_dir / "code" / "submit.sh"
-    script_file_path.write_text("#!/bin/bash\necho hello\n")
+def test_submit_next_calls_dandi_download_for_unsubmitted_candidate(tmp_path: pathlib.Path) -> None:
+    """_submit_next calls dandi download --preserve-tree with the correct DANDI URL."""
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    fixed_temp_dir = tmp_path / "temp_work"
+    fixed_temp_dir.mkdir()
 
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
-        submitted = _submit_next(
-            queue_directory=queue_dir,
-            datalad_directory=datalad_dir,
-            dandiset_directory=dandiset_dir,
-        )
+    metadata = _make_metadata_with_submit_sh(_EXAMPLE_CODE_DIR_PATH)
 
-    marker_dir_in_dandiset = (
-        dandiset_dir / "derivatives" / "dandiset-001849" / "sub-test" / "sourcedata" / "aind-sample"
-    )
-    assert submitted is True
-    mock_submit.assert_called_once_with(script_file_path=script_file_path)
-    assert (attempt_dir / "code" / "submitted").exists()
-    assert marker_dir_in_dandiset.exists() is False
+    with (
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.load_assets_jsonld_metadata",
+            return_value=metadata,
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            return_value=str(fixed_temp_dir),
+        ),
+        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree"),
+    ):
+        mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
+        _submit_next(processing_directory=processing_dir)
+
+    expected_url = f"dandi://dandi/001697/{_EXAMPLE_CODE_DIR_PATH}"
+    download_call = mock_run.call_args_list[0]
+    assert download_call.args[0] == ["dandi", "download", "--preserve-tree", expected_url]
+    assert download_call.kwargs.get("cwd") == fixed_temp_dir
 
 
 @pytest.mark.ai_generated
-def test_submit_next_found_flat_attempt_directory_under_scanned_dandi_path(tmp_path: pathlib.Path) -> None:
-    """_submit_next can submit from flat attempt layout even when dandi_path points to source data."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
-    entry = _make_state_entry(
-        dandiset_id="001849",
-        dandi_path="sourcedata",
-        pipeline="test",
-        version="v1.1.1+b268fd2+a66c8df",
-        params="4af6a25",
-        config="0d4bf36_date-2026+05+21",
-        attempt=1,
-    )
-    _write_jsonl(queue_dir / "state.jsonl", [entry])
-    actual_attempt_dir = (
-        dandiset_dir
-        / "derivatives"
-        / "dandiset-001849"
-        / "sub-test"
-        / "pipeline-test"
-        / "version-v1.1.1+b268fd2+a66c8df_params-4af6a25_config-0d4bf36_date-2026+05+21_attempt-1"
-    )
-    (actual_attempt_dir / "code").mkdir(parents=True)
-    script_file_path = actual_attempt_dir / "code" / "submit.sh"
-    script_file_path.write_text("#!/bin/bash\necho hello\n")
+def test_submit_next_calls_sbatch_with_submit_sh_path(tmp_path: pathlib.Path) -> None:
+    """_submit_next calls sbatch with the absolute path to submit.sh in the temp dir."""
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    fixed_temp_dir = tmp_path / "temp_work"
+    fixed_temp_dir.mkdir()
 
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
-        result = _submit_next(
-            queue_directory=queue_dir, datalad_directory=dandiset_dir, dandiset_directory=dandiset_dir
-        )
+    metadata = _make_metadata_with_submit_sh(_EXAMPLE_CODE_DIR_PATH)
+
+    with (
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.load_assets_jsonld_metadata",
+            return_value=metadata,
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            return_value=str(fixed_temp_dir),
+        ),
+        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree"),
+    ):
+        mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
+        _submit_next(processing_directory=processing_dir)
+
+    sbatch_call = mock_run.call_args_list[1]
+    expected_submit_sh = (fixed_temp_dir / _EXAMPLE_CODE_DIR_PATH / "submit.sh").absolute()
+    assert sbatch_call.args[0] == ["sbatch", str(expected_submit_sh)]
+
+
+@pytest.mark.ai_generated
+def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(tmp_path: pathlib.Path) -> None:
+    """_submit_next writes code/submitted adjacent to code/submit.sh after sbatch."""
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    fixed_temp_dir = tmp_path / "temp_work"
+    fixed_temp_dir.mkdir()
+
+    metadata = _make_metadata_with_submit_sh(_EXAMPLE_CODE_DIR_PATH)
+
+    with (
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.load_assets_jsonld_metadata",
+            return_value=metadata,
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            return_value=str(fixed_temp_dir),
+        ),
+        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree"),
+    ):
+        mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
+        result = _submit_next(processing_directory=processing_dir)
 
     assert result is True
-    mock_submit.assert_called_once_with(script_file_path=script_file_path)
+    submitted_marker = fixed_temp_dir / _EXAMPLE_CODE_DIR_PATH / "submitted"
+    assert submitted_marker.exists()
+    assert submitted_marker.read_text()  # non-empty ISO datetime
 
 
 @pytest.mark.ai_generated
-def test_submit_next_uses_session_in_path_when_present(tmp_path: pathlib.Path) -> None:
-    """_submit_next constructs the correct path when the entry has a session field."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
+def test_submit_next_calls_dandi_upload_with_validation_skip(tmp_path: pathlib.Path) -> None:
+    """_submit_next calls dandi upload --validation skip from the temp dir."""
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    fixed_temp_dir = tmp_path / "temp_work"
+    fixed_temp_dir.mkdir()
 
-    entry = _make_state_entry(
-        dandiset_id="000001",
-        subject="mouse01",
-        session="ses01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    _write_jsonl(queue_dir / "state.jsonl", [entry])
+    metadata = _make_metadata_with_submit_sh(_EXAMPLE_CODE_DIR_PATH)
 
-    _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000001",
-        subject="mouse01",
-        session="ses01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
+    with (
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.load_assets_jsonld_metadata",
+            return_value=metadata,
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            return_value=str(fixed_temp_dir),
+        ),
+        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree"),
+    ):
+        mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
+        _submit_next(processing_directory=processing_dir)
 
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
-        result = _submit_next(
-            queue_directory=queue_dir, datalad_directory=dandiset_dir, dandiset_directory=dandiset_dir
-        )
-
-    assert result is True
-    assert mock_submit.called
+    upload_call = mock_run.call_args_list[2]
+    assert upload_call.args[0] == ["dandi", "upload", "--validation", "skip"]
+    assert upload_call.kwargs.get("cwd") == fixed_temp_dir
 
 
 @pytest.mark.ai_generated
-def test_submit_next_leaves_state_jsonl_unchanged_after_submission(tmp_path: pathlib.Path) -> None:
-    """_submit_next submits without mutating state.jsonl contents."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
+def test_submit_next_cleans_up_temp_dir_on_success(tmp_path: pathlib.Path) -> None:
+    """_submit_next removes the temporary directory when all steps succeed."""
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    fixed_temp_dir = tmp_path / "temp_work"
+    fixed_temp_dir.mkdir()
 
-    entry1 = _make_state_entry(
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    entry2 = _make_state_entry(
-        dandiset_id="000002",
-        subject="mouse02",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    _write_jsonl(queue_dir / "state.jsonl", [entry1, entry2])
+    metadata = _make_metadata_with_submit_sh(_EXAMPLE_CODE_DIR_PATH)
 
-    _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000002",
-        subject="mouse02",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
+    with (
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.load_assets_jsonld_metadata",
+            return_value=metadata,
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            return_value=str(fixed_temp_dir),
+        ),
+        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree") as mock_rmtree,
+    ):
+        mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
+        _submit_next(processing_directory=processing_dir)
 
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
-        _submit_next(queue_directory=queue_dir, datalad_directory=dandiset_dir, dandiset_directory=dandiset_dir)
-
-    remaining = _read_jsonl(queue_dir / "state.jsonl")
-    assert remaining == [entry1, entry2]
+    mock_rmtree.assert_called_once_with(fixed_temp_dir)
 
 
 @pytest.mark.ai_generated
-def test_submit_next_creates_submitted_marker_file(tmp_path: pathlib.Path) -> None:
-    """_submit_next creates a submitted marker next to code/submit.sh."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
+def test_submit_next_does_not_clean_up_temp_dir_on_download_failure(tmp_path: pathlib.Path) -> None:
+    """_submit_next does not remove the temp dir when dandi download fails."""
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    fixed_temp_dir = tmp_path / "temp_work"
+    fixed_temp_dir.mkdir()
 
-    entry = _make_state_entry(
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    _write_jsonl(queue_dir / "state.jsonl", [entry])
-    attempt_dir = _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
+    metadata = _make_metadata_with_submit_sh(_EXAMPLE_CODE_DIR_PATH)
 
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
-        _submit_next(queue_directory=queue_dir, datalad_directory=dandiset_dir, dandiset_directory=dandiset_dir)
+    failed_result = mock.MagicMock()
+    failed_result.returncode = 1
+    failed_result.stdout = ""
+    failed_result.stderr = "error"
 
-    assert (attempt_dir / "code" / "submitted").exists()
+    with (
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.load_assets_jsonld_metadata",
+            return_value=metadata,
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            return_value=str(fixed_temp_dir),
+        ),
+        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run", return_value=failed_result),
+        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree") as mock_rmtree,
+    ):
+        with pytest.raises(RuntimeError, match="dandi download failed"):
+            _submit_next(processing_directory=processing_dir)
+
+    mock_rmtree.assert_not_called()
 
 
 @pytest.mark.ai_generated
-def test_submit_next_submits_top_two_eligible_entries(tmp_path: pathlib.Path) -> None:
-    """_submit_next submits the first two eligible entries by default."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
+def test_submit_next_submits_up_to_max_submissions(tmp_path: pathlib.Path) -> None:
+    """_submit_next submits at most max_submissions candidates."""
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
 
-    first_entry = _make_state_entry(
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    second_entry = _make_state_entry(
-        dandiset_id="000002",
-        subject="mouse02",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    third_entry = _make_state_entry(
-        dandiset_id="000003",
-        subject="mouse03",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    _write_jsonl(queue_dir / "state.jsonl", [first_entry, second_entry, third_entry])
-    first_attempt_dir = _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    second_attempt_dir = _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000002",
-        subject="mouse02",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    third_attempt_dir = _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000003",
-        subject="mouse03",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
-        _submit_next(queue_directory=queue_dir, datalad_directory=dandiset_dir, dandiset_directory=dandiset_dir)
-
-    assert mock_submit.call_count == 2
-    assert mock_submit.call_args_list == [
-        mock.call(script_file_path=first_attempt_dir / "code" / "submit.sh"),
-        mock.call(script_file_path=second_attempt_dir / "code" / "submit.sh"),
+    code_dir_paths = [
+        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys"
+        "/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1/code",
+        "derivatives/dandiset-001697/sub-mouse02/sub-mouse02_ecephys"
+        "/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1/code",
+        "derivatives/dandiset-001697/sub-mouse03/sub-mouse03_ecephys"
+        "/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1/code",
     ]
-    assert (first_attempt_dir / "code" / "submitted").exists()
-    assert (second_attempt_dir / "code" / "submitted").exists()
-    assert not (third_attempt_dir / "code" / "submitted").exists()
+    metadata = _make_metadata_with_submit_sh(*code_dir_paths)
 
+    temp_dirs = [tmp_path / f"temp_{i}" for i in range(3)]
+    for d in temp_dirs:
+        d.mkdir()
 
-@pytest.mark.ai_generated
-def test_submit_next_deduplicates_same_attempt_directory(tmp_path: pathlib.Path) -> None:
-    """_submit_next submits a given attempt directory only once even if state has duplicate entries."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
-    entry = _make_state_entry(dandiset_id="000001")
-    _write_jsonl(queue_dir / "state.jsonl", [entry, dict(entry)])
-    attempt_dir = _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
+    temp_dir_iter = iter([str(d) for d in temp_dirs])
 
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
-        submitted = _submit_next(
-            queue_directory=queue_dir,
-            datalad_directory=dandiset_dir,
-            dandiset_directory=dandiset_dir,
-        )
-
-    assert submitted is True
-    mock_submit.assert_called_once_with(script_file_path=attempt_dir / "code" / "submit.sh")
-    assert (attempt_dir / "code" / "submitted").exists()
-
-
-@pytest.mark.ai_generated
-def test_submit_next_submits_next_entry_when_first_has_submitted_marker(tmp_path: pathlib.Path) -> None:
-    """_submit_next skips entries with code/submitted markers and submits the next one."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
-    first_entry = _make_state_entry(dandiset_id="000001")
-    second_entry = _make_state_entry(dandiset_id="000002", subject="mouse02")
-    _write_jsonl(queue_dir / "state.jsonl", [first_entry, second_entry])
-
-    first_attempt_dir = _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    (first_attempt_dir / "code" / "submitted").touch()
-    second_attempt_dir = _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000002",
-        subject="mouse02",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
-        submitted = _submit_next(
-            queue_directory=queue_dir,
-            datalad_directory=dandiset_dir,
-            dandiset_directory=dandiset_dir,
-        )
-
-    assert submitted is True
-    mock_submit.assert_called_once_with(script_file_path=second_attempt_dir / "code" / "submit.sh")
-    remaining = _read_jsonl(queue_dir / "state.jsonl")
-    assert remaining == [first_entry, second_entry]
-
-
-@pytest.mark.ai_generated
-def test_submit_next_only_submits_entries_pending_in_state_jsonl(tmp_path: pathlib.Path) -> None:
-    """_submit_next only submits entries listed as pending in state.jsonl."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
-    _write_jsonl(
-        queue_dir / "state.jsonl",
-        [
-            _make_state_entry(dandiset_id="000001", has_code=True, has_output=True, has_logs=False),
-            _make_state_entry(dandiset_id="000002", subject="mouse02", has_code=True, has_output=False, has_logs=False),
-        ],
-    )
-    _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    eligible_attempt_dir = _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000002",
-        subject="mouse02",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job") as mock_submit:
-        submitted = _submit_next(
-            queue_directory=queue_dir,
-            datalad_directory=dandiset_dir,
-            dandiset_directory=dandiset_dir,
-        )
-
-    assert submitted is True
-    mock_submit.assert_called_once_with(script_file_path=eligible_attempt_dir / "code" / "submit.sh")
-    remaining = _read_jsonl(queue_dir / "state.jsonl")
-    assert len(remaining) == 2
-
-
-@pytest.mark.ai_generated
-def test_submit_next_submits_first_entry_directly(tmp_path: pathlib.Path) -> None:
-    """_submit_next submits the first ordered state entry directly."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "001697"
-
-    # Create 2 failure attempt dirs for the dandiset (== max_fail_per_dandiset=2)
-    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 1, with_logs=True)
-    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 2, with_logs=True)
-
-    # state.jsonl: first entry will be submitted directly.
-    _write_jsonl(
-        queue_dir / "state.jsonl",
-        [
-            _make_state_entry(dandiset_id="000001", version="v1.0"),
-            _make_state_entry(dandiset_id="000002", version="v1.0"),
-        ],
-    )
-
-    _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
-        result = _submit_next(
-            queue_directory=queue_dir,
-            datalad_directory=dandiset_dir,
-            dandiset_directory=dandiset_dir,
-            max_submissions=1,
-        )
+    with (
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.load_assets_jsonld_metadata",
+            return_value=metadata,
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            side_effect=lambda **kw: next(temp_dir_iter),
+        ),
+        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree"),
+    ):
+        mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
+        result = _submit_next(processing_directory=processing_dir, max_submissions=2)
 
     assert result is True
+    # 3 calls per submission (download, sbatch, upload) × 2 submissions = 6
+    assert mock_run.call_count == 6
 
 
 @pytest.mark.ai_generated
-def test_submit_next_submits_first_entry_with_existing_failure_dirs(tmp_path: pathlib.Path) -> None:
-    """_submit_next submits the first ordered state entry directly even if failure dirs exist."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "001697"
+def test_submit_next_skips_candidates_with_submitted_in_metadata(tmp_path: pathlib.Path) -> None:
+    """_submit_next skips code dirs where code/submitted is already in the metadata."""
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    fixed_temp_dir = tmp_path / "temp_work"
+    fixed_temp_dir.mkdir()
 
-    # Only 1 failure (< max_fail_per_dandiset=2) → entry should be submitted
-    _make_attempt_dir(dandiset_dir, "000001", "v1.0", _FAKE_PARAMS_ID, _FAKE_CONFIG_ID, 1, with_logs=True)
-
-    entry = _make_state_entry(
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
-    )
-    _write_jsonl(queue_dir / "state.jsonl", [entry])
-
-    # Create the submit script so _submit_next can proceed
-    _make_attempt_dir_with_script(
-        dandiset_dir,
-        dandiset_id="000001",
-        subject="mouse01",
-        pipeline="test",
-        version="v1.0",
-        params="default",
-        config="abc123",
-        attempt=1,
+    submitted_path = _EXAMPLE_CODE_DIR_PATH
+    second_path = (
+        "derivatives/dandiset-001697/sub-mouse02/sub-mouse02_ecephys"
+        "/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1/code"
     )
 
-    with mock.patch("dandi_compute_code.queue._submit_next.submit_job"):
-        result = _submit_next(
-            queue_directory=queue_dir, datalad_directory=dandiset_dir, dandiset_directory=dandiset_dir
+    path_to_asset_metadata = {}
+    # First candidate has submitted marker → should be skipped
+    for filename in ("submit.sh", "submitted"):
+        p = f"{submitted_path}/{filename}"
+        path_to_asset_metadata[p] = AssetMetadata(
+            path=p, date_modified="2025-01-01T00:00:00+00:00", content_size=1, content_id="x"
         )
+    # Second candidate has only submit.sh → should be submitted
+    p2 = f"{second_path}/submit.sh"
+    path_to_asset_metadata[p2] = AssetMetadata(
+        path=p2, date_modified="2025-01-01T00:00:00+00:00", content_size=1, content_id="y"
+    )
+    metadata = AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata=path_to_asset_metadata)
+
+    with (
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.load_assets_jsonld_metadata",
+            return_value=metadata,
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            return_value=str(fixed_temp_dir),
+        ),
+        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree"),
+    ):
+        mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
+        result = _submit_next(processing_directory=processing_dir, max_submissions=1)
 
     assert result is True
+    # Only one submission happened → 3 subprocess calls
+    assert mock_run.call_count == 3
+    download_url = mock_run.call_args_list[0].args[0][-1]
+    assert second_path in download_url
+

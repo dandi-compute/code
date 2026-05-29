@@ -259,17 +259,31 @@ def test_cli_issues_summarize_calls_helper(tmp_path: pathlib.Path) -> None:
     [
         "clean",
         "stats",
-        "process",
     ],
 )
 def test_cli_queue_subcommands_required_queue_directory(tmp_path: pathlib.Path, subcommand: str) -> None:
-    """Queue clean/process commands require --queue."""
+    """Queue clean/stats commands require --queue."""
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
     args = ["queue", subcommand, "--dandiset", str(dandiset_dir)]
     runner = CliRunner()
     with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
         result = runner.invoke(_dandicompute_group, args)
+    assert result.exit_code != 0
+    assert "Missing option '--queue'" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_process_required_queue_directory(tmp_path: pathlib.Path) -> None:
+    """Queue process command requires --queue."""
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    runner = CliRunner()
+    with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["queue", "process", "--processing", str(processing_dir)],
+        )
     assert result.exit_code != 0
     assert "Missing option '--queue'" in result.output
 
@@ -285,29 +299,25 @@ def test_cli_queue_prepare_required_queue_directory() -> None:
 
 
 @pytest.mark.ai_generated
-def test_cli_queue_process_requires_datalad_directory(tmp_path: pathlib.Path) -> None:
-    """Queue process command requires --datalad."""
+def test_cli_queue_process_requires_processing_directory(tmp_path: pathlib.Path) -> None:
+    """Queue process command requires --processing."""
     queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
-    dandiset_dir.mkdir()
     runner = CliRunner()
     with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
         result = runner.invoke(
             _dandicompute_group,
-            ["queue", "process", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
+            ["queue", "process", "--queue", str(queue_dir)],
         )
     assert result.exit_code != 0
-    assert "Missing option '--datalad'" in result.output
+    assert "Missing option '--processing'" in result.output
 
 
 @pytest.mark.ai_generated
-def test_cli_queue_process_passes_explicit_datalad_directory(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue process forwards --datalad to process_queue."""
+def test_cli_queue_process_passes_processing_directory(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue process forwards --processing to process_queue."""
     queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
-    dandiset_dir.mkdir()
-    datalad_dir = tmp_path / "datalad"
-    datalad_dir.mkdir()
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
     runner = CliRunner()
 
     with mock.patch("dandi_compute_code._cli._dandicompute_group.process_queue") as mock_process:
@@ -318,10 +328,8 @@ def test_cli_queue_process_passes_explicit_datalad_directory(tmp_path: pathlib.P
                 "process",
                 "--queue",
                 str(queue_dir),
-                "--dandiset",
-                str(dandiset_dir),
-                "--datalad",
-                str(datalad_dir),
+                "--processing",
+                str(processing_dir),
             ],
             env={"DANDI_API_KEY": "test-key"},
         )
@@ -329,40 +337,5 @@ def test_cli_queue_process_passes_explicit_datalad_directory(tmp_path: pathlib.P
     assert result.exit_code == 0, result.output
     mock_process.assert_called_once_with(
         queue_directory=queue_dir,
-        dandiset_directory=dandiset_dir,
-        datalad_directory=datalad_dir,
+        processing_directory=processing_dir,
     )
-
-
-@pytest.mark.ai_generated
-def test_cli_queue_process_failed_when_submit_script_missing(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue process exits non-zero when a queued submit script is missing."""
-    queue_dir = _make_queue_dir(tmp_path)
-    dandiset_dir = tmp_path / "dandiset"
-    dandiset_dir.mkdir()
-    _write_jsonl(
-        queue_dir / "state.jsonl",
-        [_make_state_entry(dandiset_id="000001", pipeline="test", version="v1.0", params="default")],
-    )
-    runner = CliRunner()
-    datalad_dir = tmp_path / "datalad"
-    datalad_dir.mkdir()
-    with mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=0):
-        result = runner.invoke(
-            _dandicompute_group,
-            [
-                "queue",
-                "process",
-                "--queue",
-                str(queue_dir),
-                "--dandiset",
-                str(dandiset_dir),
-                "--datalad",
-                str(datalad_dir),
-            ],
-            env={"DANDI_API_KEY": "test-key"},
-        )
-
-    assert result.exit_code != 0
-    assert result.exception is not None
-    assert "Submit script not found" in str(result.exception)
