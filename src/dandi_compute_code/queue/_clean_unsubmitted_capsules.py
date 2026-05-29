@@ -29,6 +29,7 @@ def _remove_empty_parents(*, start: pathlib.Path, stop: pathlib.Path) -> None:
             break
         current = current.parent
 
+
 # TODO: review if the return value here is needed at all
 # TODO: make more efficient in terms of --preserve-tree
 def clean_unsubmitted_capsules(
