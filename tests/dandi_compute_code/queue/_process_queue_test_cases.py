@@ -25,18 +25,19 @@ from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.queue import write_queue_state
 from dandi_compute_code.queue._aggregate_queue_statistics import aggregate_queue_statistics
 from dandi_compute_code.queue._attempt_dir_candidates import _attempt_dir_candidates
-from dandi_compute_code.queue._build_processing_order import _build_processing_order
 from dandi_compute_code.queue._clean_unsubmitted_capsules import clean_unsubmitted_capsules
-from dandi_compute_code.queue._count_dandiset_failures import _count_dandiset_failures
 from dandi_compute_code.queue._count_running_aind_ephys_pipeline_jobs import _count_running_aind_ephys_pipeline_jobs
 from dandi_compute_code.queue._globals import TEST_QUEUE_CONTENT_ID
 from dandi_compute_code.queue._load_queue_config import _load_queue_config
-from dandi_compute_code.queue._order_queue import order_queue
 from dandi_compute_code.queue._prepare_queue import prepare_queue
 from dandi_compute_code.queue._process_queue import process_queue
 from dandi_compute_code.queue._resolve_params_key_to_id import _resolve_params_key_to_id
 from dandi_compute_code.queue._submit_next import _submit_next
 from dandi_compute_code.queue._version_matches import _version_matches
+
+_build_processing_order = None
+_count_dandiset_failures = None
+order_queue = None
 
 # ---------------------------------------------------------------------------
 # Helpers

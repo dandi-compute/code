@@ -4,7 +4,6 @@ import shutil
 import subprocess
 
 from ._read_state_entries import _read_state_entries
-from ._remove_empty_parents import _remove_empty_parents
 from ._resolve_unsubmitted_attempt_dir import _resolve_unsubmitted_attempt_dir
 
 

@@ -2,7 +2,6 @@ from ._aggregate_queue_statistics import aggregate_queue_statistics
 from ._clean_unsubmitted_capsules import clean_unsubmitted_capsules
 from ._dump_issues import dump_issues
 from ._globals import TEST_QUEUE_CONTENT_ID
-from ._order_queue import order_queue
 from ._prepare_queue import prepare_queue
 from ._process_queue import process_queue
 from ._summarize_issues import summarize_issues
@@ -14,7 +13,6 @@ __all__ = [
     "clean_unsubmitted_capsules",
     "dump_issues",
     "JobInfo",
-    "order_queue",
     "prepare_queue",
     "process_queue",
     "summarize_issues",
