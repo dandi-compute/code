@@ -186,7 +186,7 @@ class _UpstreamMetadataCache:
 
 
 def _new_attempt_record(job: JobInfo) -> dict[str, object]:
-    record: dict[str, object] = {
+    return {
         "dandiset_id": job.dandiset_id,
         "dandi_path": job.dandi_path,
         "pipeline": job.pipeline,
@@ -197,10 +197,8 @@ def _new_attempt_record(job: JobInfo) -> dict[str, object]:
         "has_code": False,
         "has_output": False,
         "has_logs": False,
+        **({"codebase": job.codebase} if job.codebase is not None else {}),
     }
-    if job.codebase is not None:
-        record["codebase"] = job.codebase
-    return record
 
 
 # --- attempt collection ----------------------------------------------------
