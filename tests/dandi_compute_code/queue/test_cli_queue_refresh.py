@@ -19,7 +19,7 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
             {
                 "pipelines": {
                     "aind+ephys": {
-                        "version_priority": ["v1.0+abc1234+def5678"],
+                        "version_priority": ["v1.0"],
                         "params_priority": ["default"],
                         "max_fail_per_dandiset": 3,
                     }
@@ -31,7 +31,7 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_prefix = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
-        "pipeline-aind+ephys/version-v1.0+abc1234+def5678_params-default_config-0d4bf36_attempt-1"
+        "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-default_config-0d4bf36_attempt-1"
     )
     runner = CliRunner()
     with (
@@ -90,6 +90,7 @@ def test_cli_queue_refresh_does_not_require_dandiset_directory(tmp_path: pathlib
         "params": "abc1234",
         "config": "def5678",
         "attempt": 1,
+        "codebase": "v0.3.0",
         "has_code": True,
         "has_output": False,
         "has_logs": False,

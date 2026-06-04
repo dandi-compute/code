@@ -7,8 +7,6 @@ import urllib.request
 
 from ._load_queue_config import _load_queue_config
 from ._order_content_ids_for_uniform_dandiset_sampling import _order_content_ids_for_uniform_dandiset_sampling
-from ._strip_commit_hash_suffix import _strip_commit_hash_suffix
-from ._version_matches import _version_matches
 from ..aind_ephys_pipeline import prepare_aind_ephys_job
 
 _log = logging.getLogger(__name__)
@@ -108,16 +106,12 @@ def prepare_queue(
                 failure_count_by_dandiset: collections.defaultdict[str, int] = collections.defaultdict(int)
                 if max_fail is not None:
                     for entry in failure_entries:
-                        if entry.get("pipeline") != pipeline_name or not _version_matches(
-                            entry.get("version", ""), version
-                        ):
+                        if entry.get("pipeline") != pipeline_name or entry.get("version", "") != version:
                             continue
                         dandiset_id = entry.get("dandiset_id")
                         if not dandiset_id:
                             continue
                         failure_count_by_dandiset[dandiset_id] += 1
-                # Strip the trailing commit-hash suffix before passing to prepare_aind_ephys_job.
-                submission_version = _strip_commit_hash_suffix(version)
 
                 for content_id in content_ids:
                     if limit is not None and prepared_count >= limit:
@@ -146,7 +140,7 @@ def prepare_queue(
                     prepare_aind_ephys_job(
                         content_id=content_id,
                         parameters_key=params,
-                        pipeline_version=submission_version,
+                        pipeline_version=version,
                         pipeline_directory=pipeline_directory,
                         config_key=config_key,
                         silent=True,

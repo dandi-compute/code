@@ -508,7 +508,7 @@ def test_clean_unsubmitted_capsules_removed_entry_via_fallback_attempt_resolutio
         / "dandiset-001849"
         / "sub-test"
         / "pipeline-aind+ephys"
-        / "version-v1.1.1+b268fd2+a66c8df_params-4af6a25_config-0d4bf36_date-2026+05+21_attempt-1"
+        / "version-v1.1.1+b268fd2+a66c8df_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
     )
     (attempt_dir / "code").mkdir(parents=True)
     (attempt_dir / "code" / "submit.sh").write_text("#!/bin/bash\necho hello\n")
@@ -518,7 +518,7 @@ def test_clean_unsubmitted_capsules_removed_entry_via_fallback_attempt_resolutio
         pipeline="aind+ephys",
         version="v1.1.1+b268fd2+a66c8df",
         params="4af6a25",
-        config="0d4bf36_date-2026+05+21",
+        config="0d4bf36",
         has_code=True,
         has_logs=False,
         has_output=False,

@@ -33,7 +33,6 @@ from dandi_compute_code.queue._prepare_queue import prepare_queue
 from dandi_compute_code.queue._process_queue import process_queue
 from dandi_compute_code.queue._resolve_params_key_to_id import _resolve_params_key_to_id
 from dandi_compute_code.queue._submit_next import _submit_next
-from dandi_compute_code.queue._version_matches import _version_matches
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -58,7 +57,7 @@ _EXAMPLE_QUEUE_CONFIG = {
 _ISSUE_EXAMPLE_QUEUE_CONFIG = {
     "pipelines": {
         "aind+ephys": {
-            "version_priority": ["v1.1.1+b268fd2"],
+            "version_priority": ["v1.1.1"],
             "params_priority": ["default"],
             "max_attempts_per_asset": 1,
             "asset_overrides": {"048d1ee9-83b7-491f-8f02-1ca615b1d455": None},
@@ -168,6 +167,7 @@ def _make_state_entry(
     version: str = "v1.0",
     params: str = "default",
     config: str = "abc123",
+    codebase: str = "v0.3.0",
     attempt: int = 1,
     has_code: bool = True,
     has_output: bool = False,
@@ -178,19 +178,21 @@ def _make_state_entry(
     normalized_dandi_path = dandi_path or "/".join(
         filter(None, [f"sub-{subject}", f"ses-{session}" if session else None])
     )
-    return {
+    entry: dict = {
         "dandiset_id": dandiset_id,
         "dandi_path": normalized_dandi_path,
         "pipeline": pipeline,
         "version": version,
         "params": params,
         "config": config,
+        "codebase": codebase,
         "attempt": attempt,
         "has_code": has_code,
         "has_output": has_output,
         "has_logs": has_logs,
         "created_at": created_at,
     }
+    return entry
 
 
 @pytest.mark.ai_generated
@@ -219,7 +221,9 @@ def test_attempt_dir_candidates_constructs_both_layouts(
 
     flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
 
-    assert flat_path == tmp_path / relative_prefix / "version-v1.0_params-abc1234_config-def5678_attempt-2"
+    assert (
+        flat_path == tmp_path / relative_prefix / "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-2"
+    )
     assert legacy_path == tmp_path / relative_prefix / "version-v1.0/params-abc1234_config-def5678_attempt-2"
 
 
@@ -277,6 +281,7 @@ def _make_attempt_dir_with_script(
     config: str,
     attempt: int,
     *,
+    codebase: str = "v0.3.0",
     session: str | None = None,
     with_script: bool = True,
 ) -> pathlib.Path:
@@ -289,7 +294,9 @@ def _make_attempt_dir_with_script(
     if session:
         attempt_dir = attempt_dir / f"ses-{session}"
     attempt_dir = (
-        attempt_dir / f"pipeline-{pipeline}" / f"version-{version}_params-{params}_config-{config}_attempt-{attempt}"
+        attempt_dir
+        / f"pipeline-{pipeline}"
+        / f"version-{version}_codebase-{codebase}_params-{params}_config-{config}_attempt-{attempt}"
     )
     attempt_dir.mkdir(parents=True)
     code_dir = attempt_dir / "code"
@@ -327,30 +334,6 @@ def test_resolve_params_key_to_id_already_hash_passthrough() -> None:
 
 
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.ai_generated
-def test_version_matches_exact() -> None:
-    """_version_matches returns True for exact match."""
-    assert _version_matches("v1.1.1+b268fd2", "v1.1.1+b268fd2") is True
-
-
-@pytest.mark.ai_generated
-def test_version_matches_with_code_hash_suffix() -> None:
-    """_version_matches returns True when state version has an extra code-repo commit hash suffix."""
-    assert _version_matches("v1.1.1+b268fd2+abcdef1", "v1.1.1+b268fd2") is True
-
-
-@pytest.mark.ai_generated
-def test_version_matches_rejects_non_hex_suffix() -> None:
-    """_version_matches returns False when the extra suffix is not a hex hash."""
-    assert _version_matches("v1.1.1+b268fd2+notahex", "v1.1.1+b268fd2") is False
-
-
-@pytest.mark.ai_generated
-def test_version_matches_rejects_different_version() -> None:
-    """_version_matches returns False when the version base is different."""
-    assert _version_matches("v1.1.0+b268fd2", "v1.1.1+b268fd2") is False
 
 
 # ---------------------------------------------------------------------------
@@ -528,9 +511,9 @@ def test_submit_next_found_flat_attempt_directory_under_scanned_dandi_path(tmp_p
         dandiset_id="001849",
         dandi_path="sourcedata",
         pipeline="test",
-        version="v1.1.1+b268fd2+a66c8df",
+        version="v1.1.1",
         params="4af6a25",
-        config="0d4bf36_date-2026+05+21",
+        config="0d4bf36",
         attempt=1,
     )
     _write_jsonl(queue_dir / "state.jsonl", [entry])
@@ -540,7 +523,7 @@ def test_submit_next_found_flat_attempt_directory_under_scanned_dandi_path(tmp_p
         / "dandiset-001849"
         / "sub-test"
         / "pipeline-test"
-        / "version-v1.1.1+b268fd2+a66c8df_params-4af6a25_config-0d4bf36_date-2026+05+21_attempt-1"
+        / "version-v1.1.1_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
     )
     (actual_attempt_dir / "code").mkdir(parents=True)
     script_file_path = actual_attempt_dir / "code" / "submit.sh"
@@ -1323,9 +1306,9 @@ def test_aggregate_queue_statistics_found_timeline_via_fallback_attempt_resoluti
         dandiset_id="001849",
         dandi_path="sourcedata",
         pipeline="aind+ephys",
-        version="v1.1.1+b268fd2+a66c8df",
+        version="v1.1.1",
         params="4af6a25",
-        config="0d4bf36_date-2026+05+21",
+        config="0d4bf36",
         has_output=True,
         has_logs=True,
     )
@@ -1338,7 +1321,7 @@ def test_aggregate_queue_statistics_found_timeline_via_fallback_attempt_resoluti
         / "dandiset-001849"
         / "sub-test"
         / "pipeline-aind+ephys"
-        / "version-v1.1.1+b268fd2+a66c8df_params-4af6a25_config-0d4bf36_date-2026+05+21_attempt-1"
+        / "version-v1.1.1_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
     )
     logs_dir = attempt_dir / "logs"
     logs_dir.mkdir(parents=True)
@@ -1369,6 +1352,7 @@ def _make_attempt_dir(
     config_id: str,
     attempt_number: int,
     *,
+    codebase: str = "v0.3.0",
     with_code: bool = True,
     with_output: bool = False,
     with_logs: bool = False,
@@ -1379,7 +1363,7 @@ def _make_attempt_dir(
     A directory path
 
     ``derivatives/dandiset-{dandiset_id}/sub-test/pipeline-aind+ephys/``
-    ``version-{version}_params-{params_id}_config-{config_id}_attempt-{attempt_number}/``
+    ``version-{version}_codebase-{codebase}_params-{params_id}_config-{config_id}_attempt-{attempt_number}/``
 
     is created.  *with_code*, *with_output*, and *with_logs* control whether the
     ``code/``, ``derivatives/``, and ``logs/`` subdirectories are created.  When
@@ -1391,7 +1375,7 @@ def _make_attempt_dir(
         / f"dandiset-{dandiset_id}"
         / "sub-test"
         / "pipeline-aind+ephys"
-        / f"version-{version}_params-{params_id}_config-{config_id}_attempt-{attempt_number}"
+        / f"version-{version}_codebase-{codebase}_params-{params_id}_config-{config_id}_attempt-{attempt_number}"
     )
     attempt_dir.mkdir(parents=True)
     if with_code:
@@ -1817,6 +1801,7 @@ def _make_full_attempt_dir(
     config: str,
     attempt: int,
     *,
+    codebase: str = "v0.3.0",
     session: str | None = None,
     with_code: bool = True,
     with_output: bool = False,
@@ -1828,7 +1813,7 @@ def _make_full_attempt_dir(
         parts.append(f"ses-{session}")
     parts += [
         f"pipeline-{pipeline}",
-        f"version-{version}_params-{params}_config-{config}_attempt-{attempt}",
+        f"version-{version}_codebase-{codebase}_params-{params}_config-{config}_attempt-{attempt}",
     ]
     attempt_dir = pathlib.Path(*parts)
     attempt_dir.mkdir(parents=True)
@@ -2078,7 +2063,7 @@ def test_clean_unsubmitted_capsules_removes_empty_parent_directories(tmp_path: p
         "001371",
         "S25",
         "aind+ephys",
-        "v1.1.1+b268fd2",
+        "v1.1.1",
         "abc1234",
         "def5678",
         1,
@@ -2142,7 +2127,7 @@ def test_clean_unsubmitted_capsules_removes_legacy_nested_layout(tmp_path: pathl
         dandiset_id="001371",
         subject="S25",
         pipeline="aind+ephys",
-        version="v1.1.1+b268fd2",
+        version="v1.1.1",
         params="abc1234",
         config="def5678",
         attempt=1,
@@ -2198,7 +2183,7 @@ def test_clean_unsubmitted_capsules_removed_entry_via_fallback_attempt_resolutio
         / "dandiset-001849"
         / "sub-test"
         / "pipeline-aind+ephys"
-        / "version-v1.1.1+b268fd2+a66c8df_params-4af6a25_config-0d4bf36_date-2026+05+21_attempt-1"
+        / "version-v1.1.1_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
     )
     (attempt_dir / "code").mkdir(parents=True)
     (attempt_dir / "code" / "submit.sh").write_text("#!/bin/bash\necho hello\n")
@@ -2206,9 +2191,9 @@ def test_clean_unsubmitted_capsules_removed_entry_via_fallback_attempt_resolutio
         dandiset_id="001849",
         dandi_path="sourcedata",
         pipeline="aind+ephys",
-        version="v1.1.1+b268fd2+a66c8df",
+        version="v1.1.1",
         params="4af6a25",
-        config="0d4bf36_date-2026+05+21",
+        config="0d4bf36",
         has_code=True,
         has_logs=False,
         has_output=False,

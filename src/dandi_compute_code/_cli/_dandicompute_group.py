@@ -1,3 +1,4 @@
+import logging
 import os
 import pathlib
 
@@ -21,6 +22,8 @@ from ..queue import (
     summarize_issues,
     write_queue_state,
 )
+
+logging.basicConfig(level=logging.INFO)
 
 
 def _require_dandi_api_key() -> None:

@@ -1,7 +1,7 @@
 import contextlib
-import datetime
 import gzip
 import hashlib
+import importlib.metadata
 import io
 import json
 import os
@@ -188,11 +188,9 @@ def prepare_aind_ephys_job(
             key, value = token.split("-", 1)
             entities[key] = value
 
-    # Special case - inject missing subject label and add date entity for testing asset
+    # Special case - inject missing subject label for testing asset
     if content_id == "048d1ee9-83b7-491f-8f02-1ca615b1d455":
         entities.setdefault("sub", "test")
-        today = datetime.date.today().isoformat().replace("-", "+")
-        config_id += f"_date-{today}"
         if not output_dandi_path.startswith("sub-test/"):
             output_dandi_path = f"sub-test/{output_dandi_path}"
 
@@ -217,7 +215,6 @@ def prepare_aind_ephys_job(
     if not re.match(r"^[0-9a-f]{40}$", pipeline_commit_hash):
         message = f"Unexpected commit hash format: {pipeline_commit_hash}"
         raise ValueError(message)
-    pipeline_commit_head = pipeline_commit_hash[0:7]
 
     dandi_compute_code_commit_hash = subprocess.check_output(
         ["git", "rev-parse", "HEAD"],
@@ -227,7 +224,6 @@ def prepare_aind_ephys_job(
     if not re.match(r"^[0-9a-f]{40}$", dandi_compute_code_commit_hash):
         message = f"Unexpected commit hash format: {dandi_compute_code_commit_hash}"
         raise ValueError(message)
-    dandi_compute_code_commit_head = dandi_compute_code_commit_hash[0:7]
 
     dandi_compute_code_version = subprocess.check_output(
         ["git", "describe", "--tags", "--always"],
@@ -235,11 +231,13 @@ def prepare_aind_ephys_job(
         text=True,
     ).strip()
 
+    codebase_version = importlib.metadata.version("dandi-compute-code")
+
     bidsy_pipeline_version = pipeline_version.replace("-", "+")
     output_dandiset_path_base = f"derivatives/dandiset-{dandiset_id}/{output_dandi_path}/"
     output_dandiset_path_base += (
         f"pipeline-aind+ephys/"
-        f"version-{bidsy_pipeline_version}+{pipeline_commit_head}+{dandi_compute_code_commit_head}"
+        f"version-{bidsy_pipeline_version}_codebase-v{codebase_version}"
         f"_params-{params_id}_config-{config_id}"
     )
 
@@ -312,13 +310,13 @@ def prepare_aind_ephys_job(
             {
                 "Name": "AIND Ephys Pipeline",
                 "Description": "A customized and version-locked branch of the main AIND ephys pipeline.",
-                "Version": pipeline_version,
+                "Version": f"{pipeline_version}+{pipeline_commit_hash}",
                 "CodeURL": pipeline_url,
             },
             {
                 "Name": "DANDI Compute: Code",
                 "Description": "The primary source code for orchestration of AIND on MIT Engaging.",
-                "Version": dandi_compute_code_version,
+                "Version": f"{dandi_compute_code_version}+{dandi_compute_code_commit_hash}",
                 "CodeURL": "https://github.com/dandi-compute/code",
             },
         ],

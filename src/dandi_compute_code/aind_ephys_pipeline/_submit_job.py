@@ -1,4 +1,3 @@
-import datetime
 import logging
 import os
 import pathlib
@@ -40,7 +39,7 @@ def submit_job(script_file_path: pathlib.Path) -> None:
 
     submitted_file_path = absolute_script_file_path.parent / "submitted"
     _log.info(f"Creating `submitted` file at: {submitted_file_path.parent.absolute()}")
-    submitted_file_path.write_text(datetime.datetime.now().isoformat())
+    submitted_file_path.write_bytes(b"1")
     result = subprocess.run(
         ["dandi", "upload"],
         capture_output=True,

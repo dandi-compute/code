@@ -155,6 +155,8 @@ def test_prepare_aind_ephys_job_test_content_id_uses_sub_test(
         )
 
     assert "sub-test/sourcedata/aind-sample" in str(script_path)
+    # No _date- entity in new format
+    assert "_date-" not in str(script_path)
 
 
 @pytest.mark.ai_generated
@@ -194,3 +196,52 @@ def test_prepare_aind_ephys_job_raises_on_sandbox_dandiset() -> None:
             parameters_key="default",
             pipeline_directory=None,
         )
+
+
+@pytest.mark.ai_generated
+def test_prepare_aind_ephys_job_uses_simplified_job_id_format(
+    tmp_path: pathlib.Path,
+    fake_pipeline_dir: pathlib.Path,
+) -> None:
+    """prepare_aind_ephys_job produces a job ID without commit hashes and with a _codebase-vX.Y.Z entity."""
+    content_id = "07000000-0000-0000-0000-000000000000"
+    mapping = {content_id: {"000001": "sub-mouse01/sub-mouse01_ecephys.nwb"}}
+
+    temp_dir = tmp_path / "tmpdir"
+    temp_dir.mkdir()
+
+    mock_dandiset = mock.MagicMock()
+    mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
+
+    import importlib.metadata
+
+    codebase_version = importlib.metadata.version("dandi-compute-code")
+
+    with (
+        mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
+        mock.patch("subprocess.check_output", side_effect=_git_check_output),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.download.download"),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.upload.upload"),
+        mock.patch("tempfile.mkdtemp", return_value=str(temp_dir)),
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "fake-key"}),
+    ):
+        mock_client.return_value.get_dandiset.return_value = mock_dandiset
+
+        script_path = prepare_aind_ephys_job(
+            pipeline_version="v1.1.0",
+            content_id=content_id,
+            config_key="default",
+            parameters_key="default",
+            pipeline_directory=fake_pipeline_dir,
+        )
+
+    script_path_str = str(script_path)
+    # No short commit hashes in the version entity
+    assert "+aaaaaaa" not in script_path_str
+    # No _date- entity
+    assert "_date-" not in script_path_str
+    # Codebase version entity present
+    assert f"_codebase-v{codebase_version}" in script_path_str
+    # Version uses BIDSy format (hyphens replaced with plus)
+    assert "version-v1.1.0_" in script_path_str

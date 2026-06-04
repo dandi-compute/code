@@ -67,7 +67,7 @@ def _submit_next(
         return False
 
     for code_dir_path in candidates[:max_submissions]:
-        dandi_url = f"dandi://dandi/{_DANDISET_ID}/{code_dir_path}"
+        dandi_url = f"dandi://dandi/{_DANDISET_ID}/{code_dir_path}/"
         # Temporary directory is intentionally left on disk when any step fails
         # so that it can be inspected for debugging.
         temp_dir = pathlib.Path(tempfile.mkdtemp(dir=processing_directory))
