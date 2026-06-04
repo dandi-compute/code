@@ -59,7 +59,7 @@ def _download_side_effect(command: list, **kwargs: object) -> mock.MagicMock:
         url = command[-1]
         _, code_dir_path = url.split("/001697/", 1)
         cwd = pathlib.Path(str(kwargs.get("cwd", ".")))
-        submit_sh = cwd / code_dir_path / "submit.sh"
+        submit_sh = cwd / "001697" / code_dir_path / "submit.sh"
         submit_sh.parent.mkdir(parents=True, exist_ok=True)
         submit_sh.write_text("#!/bin/bash\necho test\n")
     return result
@@ -183,7 +183,7 @@ def test_submit_next_calls_sbatch_with_submit_sh_path(tmp_path: pathlib.Path) ->
         _submit_next(processing_directory=processing_dir)
 
     sbatch_call = mock_run.call_args_list[1]
-    expected_submit_sh = (fixed_temp_dir / _EXAMPLE_CODE_DIR_PATH / "submit.sh").absolute()
+    expected_submit_sh = (fixed_temp_dir / "001697" / _EXAMPLE_CODE_DIR_PATH / "submit.sh").absolute()
     assert sbatch_call.args[0] == ["sbatch", str(expected_submit_sh)]
 
 
@@ -213,7 +213,7 @@ def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(tmp_path: pat
         result = _submit_next(processing_directory=processing_dir)
 
     assert result is True
-    submitted_marker = fixed_temp_dir / _EXAMPLE_CODE_DIR_PATH / "submitted"
+    submitted_marker = fixed_temp_dir / "001697" / _EXAMPLE_CODE_DIR_PATH / "submitted"
     assert submitted_marker.exists()
     assert submitted_marker.read_text()  # non-empty ISO datetime
 
@@ -245,7 +245,7 @@ def test_submit_next_calls_dandi_upload_with_validation_skip(tmp_path: pathlib.P
 
     upload_call = mock_run.call_args_list[2]
     assert upload_call.args[0] == ["dandi", "upload", "--validation", "skip"]
-    assert upload_call.kwargs.get("cwd") == fixed_temp_dir
+    assert upload_call.kwargs.get("cwd") == fixed_temp_dir / "001697"
 
 
 @pytest.mark.ai_generated
