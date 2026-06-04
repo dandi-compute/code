@@ -7,44 +7,43 @@ import pytest
 from dandi_compute_code.queue._process_queue import process_queue
 
 
-def _write_jsonl(file_path: pathlib.Path, entries: list[dict]) -> None:
-    file_path.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
-
-
 @pytest.fixture
 def mock_queue_state(tmp_path: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path]:
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
-    _write_jsonl(
-        queue_dir / "state.jsonl",
-        [
-            {
-                "dandiset_id": "000001",
-                "dandi_path": "sub-mouse01",
-                "pipeline": "test",
-                "version": "v1.0",
-                "params": "default",
-                "config": "abc123",
-                "attempt": 1,
-                "has_code": True,
-                "has_output": False,
-                "has_logs": False,
-                "created_at": "2024-01-01T00:00:00+00:00",
-            },
-            {
-                "dandiset_id": "000001",
-                "dandi_path": "sub-mouse02",
-                "pipeline": "test",
-                "version": "v1.0",
-                "params": "alternate",
-                "config": "xyz789",
-                "attempt": 2,
-                "has_code": True,
-                "has_output": False,
-                "has_logs": True,
-                "created_at": "2024-01-01T00:00:00+00:00",
-            },
-        ],
+    (queue_dir / "state.jsonl").write_text(
+        "\n".join(
+            json.dumps(entry)
+            for entry in [
+                {
+                    "dandiset_id": "000001",
+                    "dandi_path": "sub-mouse01",
+                    "pipeline": "test",
+                    "version": "v1.0",
+                    "params": "default",
+                    "config": "abc123",
+                    "attempt": 1,
+                    "has_code": True,
+                    "has_output": False,
+                    "has_logs": False,
+                    "created_at": "2024-01-01T00:00:00+00:00",
+                },
+                {
+                    "dandiset_id": "000001",
+                    "dandi_path": "sub-mouse02",
+                    "pipeline": "test",
+                    "version": "v1.0",
+                    "params": "alternate",
+                    "config": "xyz789",
+                    "attempt": 2,
+                    "has_code": True,
+                    "has_output": False,
+                    "has_logs": True,
+                    "created_at": "2024-01-01T00:00:00+00:00",
+                },
+            ]
+        )
+        + "\n"
     )
 
     processing_dir = tmp_path / "processing"

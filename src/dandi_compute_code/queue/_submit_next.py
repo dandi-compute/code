@@ -67,7 +67,7 @@ def _submit_next(
         return False
 
     for code_dir_path in candidates[:max_submissions]:
-        dandi_url = f"dandi://dandi/{_DANDISET_ID}/{code_dir_path}/"
+        dandi_url = f"dandi://dandi/{_DANDISET_ID}/{code_dir_path}"
         # Temporary directory is intentionally left on disk when any step fails
         # so that it can be inspected for debugging.
         temp_dir = pathlib.Path(tempfile.mkdtemp(dir=processing_directory))
@@ -86,7 +86,7 @@ def _submit_next(
             message = f"dandi download failed for {dandi_url}"
             raise RuntimeError(message)
 
-        submit_sh_path = temp_dir / "001697" / code_dir_path / "submit.sh"
+        submit_sh_path = temp_dir / code_dir_path / "submit.sh"
         result = subprocess.run(
             ["sbatch", str(submit_sh_path.absolute())],
             capture_output=True,
@@ -106,7 +106,7 @@ def _submit_next(
             ["dandi", "upload", "--validation", "skip"],
             capture_output=True,
             text=True,
-            cwd=temp_dir / "001697",
+            cwd=temp_dir,
         )
         _log.info("dandi upload returned code %d", result.returncode)
         _log.debug("dandi upload stdout: %s\nstderr: %s", result.stdout, result.stderr)
