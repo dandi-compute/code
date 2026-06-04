@@ -1,6 +1,6 @@
+import logging
 import os
 import pathlib
-import logging
 
 import click
 
@@ -31,6 +31,7 @@ logging.basicConfig(
         logging.StreamHandler(),  # optional: also to console
     ],
 )
+
 
 def _require_dandi_api_key() -> None:
     """
