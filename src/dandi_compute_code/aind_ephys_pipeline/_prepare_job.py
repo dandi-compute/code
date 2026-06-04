@@ -237,8 +237,8 @@ def prepare_aind_ephys_job(
     output_dandiset_path_base = f"derivatives/dandiset-{dandiset_id}/{output_dandi_path}/"
     output_dandiset_path_base += (
         f"pipeline-aind+ephys/"
-        f"version-{bidsy_pipeline_version}"
-        f"_params-{params_id}_config-{config_id}_codebase-v{codebase_version}"
+        f"version-{bidsy_pipeline_version}_codebase-v{codebase_version}"
+        f"_params-{params_id}_config-{config_id}"
     )
 
     # Assign the lowest integer run ID that has not been used yet, up to a maximum limit
