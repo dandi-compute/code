@@ -18,6 +18,7 @@ _FLAT_ATTEMPT_RE = re.compile(
     r"^version-(?P<version>.+?)"
     r"_params-(?P<params>[^_]+)"
     r"_config-(?P<config>[^_]+)"
+    r"(?:_codebase-(?P<codebase>[^_]+))?"
     r"(?:_.+?)?"
     r"_attempt-(?P<attempt>\d+)$"
 )
@@ -36,6 +37,7 @@ class JobInfo:
     params: str
     config: str
     attempt: int
+    codebase: str | None = None
 
 
 # --- path parsing -----------------------------------------------------------
@@ -110,6 +112,7 @@ def _parse_attempt_identity(asset_path: str) -> tuple[JobInfo, str] | None:
         params=fields["params"],
         config=fields["config"],
         attempt=int(fields["attempt"]),
+        codebase=fields.get("codebase"),
     )
     return job_info, subpath
 
@@ -183,7 +186,7 @@ class _UpstreamMetadataCache:
 
 
 def _new_attempt_record(job: JobInfo) -> dict[str, object]:
-    return {
+    record: dict[str, object] = {
         "dandiset_id": job.dandiset_id,
         "dandi_path": job.dandi_path,
         "pipeline": job.pipeline,
@@ -195,6 +198,9 @@ def _new_attempt_record(job: JobInfo) -> dict[str, object]:
         "has_output": False,
         "has_logs": False,
     }
+    if job.codebase is not None:
+        record["codebase"] = job.codebase
+    return record
 
 
 # --- attempt collection ----------------------------------------------------

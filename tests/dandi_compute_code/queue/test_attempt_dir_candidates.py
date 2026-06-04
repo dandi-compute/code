@@ -96,3 +96,23 @@ def test_attempt_dir_candidates_requires_valid_dandi_path(
     """_attempt_dir_candidates requires a valid dandi_path value."""
     with pytest.raises(expected_exception, match=expected_message):
         _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
+
+
+@pytest.mark.ai_generated
+def test_attempt_dir_candidates_includes_codebase_in_flat_path(tmp_path: pathlib.Path) -> None:
+    """_attempt_dir_candidates includes the _codebase- segment in the flat path when the entry has a codebase field."""
+    entry = {
+        "dandiset_id": "000001",
+        "dandi_path": "sub-mouse01",
+        "pipeline": "test",
+        "version": "v1.1.1",
+        "params": "4af6a25",
+        "config": "0d4bf36",
+        "codebase": "v0.3.17",
+        "attempt": 1,
+    }
+    flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
+
+    expected_prefix = tmp_path / "derivatives" / "dandiset-000001" / "sub-mouse01" / "pipeline-test"
+    assert flat_path == expected_prefix / "version-v1.1.1_params-4af6a25_config-0d4bf36_codebase-v0.3.17_attempt-1"
+    assert legacy_path == expected_prefix / "version-v1.1.1" / "params-4af6a25_config-0d4bf36_attempt-1"

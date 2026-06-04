@@ -17,8 +17,11 @@ def _resolve_attempt_dir(*, base_dir: pathlib.Path, entry: dict) -> pathlib.Path
         return nested_attempt_dir
 
     pipeline_dir_name = f"pipeline-{entry['pipeline']}"
+    codebase = entry.get("codebase")
+    codebase_segment = f"_codebase-{codebase}" if codebase is not None else ""
     flat_attempt_dir_name = (
-        f"version-{entry['version']}_params-{entry['params']}_config-{entry['config']}_attempt-{entry['attempt']}"
+        f"version-{entry['version']}_params-{entry['params']}_config-{entry['config']}"
+        f"{codebase_segment}_attempt-{entry['attempt']}"
     )
     nested_attempt_dir_name = f"params-{entry['params']}_config-{entry['config']}_attempt-{entry['attempt']}"
     for pipeline_dir in sorted(dandiset_root.rglob(pipeline_dir_name)):
