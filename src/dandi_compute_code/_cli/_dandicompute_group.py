@@ -23,14 +23,7 @@ from ..queue import (
     write_queue_state,
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(name)s %(levelname)s %(message)s",
-    handlers=[
-        logging.FileHandler(f"global_logs/dandi_compute{datetime.datetime.now():%Y%m%d_%H%M%S}.log"),
-        logging.StreamHandler(),  # optional: also to console
-    ],
-)
+logging.basicConfig(level=logging.INFO)
 
 
 def _require_dandi_api_key() -> None:
