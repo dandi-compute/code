@@ -1,4 +1,3 @@
-import datetime
 import logging
 import os
 import pathlib
@@ -38,7 +37,7 @@ def submit_job(script_file_path: pathlib.Path) -> None:
         message = "sbatch submission failed - please check the logs to see more details."
         raise RuntimeError(message)
 
-    submitted_file_path = absolute_script_file_path.parent / f"submitted"
+    submitted_file_path = absolute_script_file_path.parent / "submitted"
     _log.info(f"Creating `submitted` file at: {submitted_file_path.parent.absolute()}")
     submitted_file_path.write_bytes(b"1")
     result = subprocess.run(
