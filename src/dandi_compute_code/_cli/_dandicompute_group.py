@@ -1,6 +1,6 @@
+import datetime
 import logging
 import os
-import datetime
 import pathlib
 
 import click
