@@ -72,7 +72,7 @@ def _submit_next(
         # so that it can be inspected for debugging.
         temp_dir = pathlib.Path(tempfile.mkdtemp(dir=processing_directory))
         _log.info("Submitting job run for %s in %s", code_dir_path, temp_dir)
-       
+
         result = subprocess.run(
             ["dandi", "download", "--preserve-tree", dandi_url],
             capture_output=True,
