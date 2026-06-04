@@ -168,6 +168,7 @@ def _make_state_entry(
     version: str = "v1.0",
     params: str = "default",
     config: str = "abc123",
+    codebase: str | None = None,
     attempt: int = 1,
     has_code: bool = True,
     has_output: bool = False,
@@ -178,7 +179,7 @@ def _make_state_entry(
     normalized_dandi_path = dandi_path or "/".join(
         filter(None, [f"sub-{subject}", f"ses-{session}" if session else None])
     )
-    return {
+    entry: dict = {
         "dandiset_id": dandiset_id,
         "dandi_path": normalized_dandi_path,
         "pipeline": pipeline,
@@ -191,6 +192,9 @@ def _make_state_entry(
         "has_logs": has_logs,
         "created_at": created_at,
     }
+    if codebase is not None:
+        entry["codebase"] = codebase
+    return entry
 
 
 @pytest.mark.ai_generated
