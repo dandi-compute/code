@@ -1,5 +1,6 @@
 import os
 import pathlib
+import logging
 
 import click
 
@@ -22,6 +23,14 @@ from ..queue import (
     write_queue_state,
 )
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    handlers=[
+        logging.FileHandler("dandi_compute.log"),
+        logging.StreamHandler(),  # optional: also to console
+    ],
+)
 
 def _require_dandi_api_key() -> None:
     """
