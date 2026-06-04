@@ -57,7 +57,7 @@ _EXAMPLE_QUEUE_CONFIG = {
 _ISSUE_EXAMPLE_QUEUE_CONFIG = {
     "pipelines": {
         "aind+ephys": {
-            "version_priority": ["v1.1.1+b268fd2"],
+            "version_priority": ["v1.1.1"],
             "params_priority": ["default"],
             "max_attempts_per_asset": 1,
             "asset_overrides": {"048d1ee9-83b7-491f-8f02-1ca615b1d455": None},
@@ -511,7 +511,7 @@ def test_submit_next_found_flat_attempt_directory_under_scanned_dandi_path(tmp_p
         dandiset_id="001849",
         dandi_path="sourcedata",
         pipeline="test",
-        version="v1.1.1+b268fd2+a66c8df",
+        version="v1.1.1",
         params="4af6a25",
         config="0d4bf36",
         attempt=1,
@@ -523,7 +523,7 @@ def test_submit_next_found_flat_attempt_directory_under_scanned_dandi_path(tmp_p
         / "dandiset-001849"
         / "sub-test"
         / "pipeline-test"
-        / "version-v1.1.1+b268fd2+a66c8df_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
+        / "version-v1.1.1_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
     )
     (actual_attempt_dir / "code").mkdir(parents=True)
     script_file_path = actual_attempt_dir / "code" / "submit.sh"
@@ -1306,7 +1306,7 @@ def test_aggregate_queue_statistics_found_timeline_via_fallback_attempt_resoluti
         dandiset_id="001849",
         dandi_path="sourcedata",
         pipeline="aind+ephys",
-        version="v1.1.1+b268fd2+a66c8df",
+        version="v1.1.1",
         params="4af6a25",
         config="0d4bf36",
         has_output=True,
@@ -1321,7 +1321,7 @@ def test_aggregate_queue_statistics_found_timeline_via_fallback_attempt_resoluti
         / "dandiset-001849"
         / "sub-test"
         / "pipeline-aind+ephys"
-        / "version-v1.1.1+b268fd2+a66c8df_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
+        / "version-v1.1.1_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
     )
     logs_dir = attempt_dir / "logs"
     logs_dir.mkdir(parents=True)
@@ -2063,7 +2063,7 @@ def test_clean_unsubmitted_capsules_removes_empty_parent_directories(tmp_path: p
         "001371",
         "S25",
         "aind+ephys",
-        "v1.1.1+b268fd2",
+        "v1.1.1",
         "abc1234",
         "def5678",
         1,
@@ -2127,7 +2127,7 @@ def test_clean_unsubmitted_capsules_removes_legacy_nested_layout(tmp_path: pathl
         dandiset_id="001371",
         subject="S25",
         pipeline="aind+ephys",
-        version="v1.1.1+b268fd2",
+        version="v1.1.1",
         params="abc1234",
         config="def5678",
         attempt=1,
@@ -2183,7 +2183,7 @@ def test_clean_unsubmitted_capsules_removed_entry_via_fallback_attempt_resolutio
         / "dandiset-001849"
         / "sub-test"
         / "pipeline-aind+ephys"
-        / "version-v1.1.1+b268fd2+a66c8df_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
+        / "version-v1.1.1_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
     )
     (attempt_dir / "code").mkdir(parents=True)
     (attempt_dir / "code" / "submit.sh").write_text("#!/bin/bash\necho hello\n")
@@ -2191,7 +2191,7 @@ def test_clean_unsubmitted_capsules_removed_entry_via_fallback_attempt_resolutio
         dandiset_id="001849",
         dandi_path="sourcedata",
         pipeline="aind+ephys",
-        version="v1.1.1+b268fd2+a66c8df",
+        version="v1.1.1",
         params="4af6a25",
         config="0d4bf36",
         has_code=True,
