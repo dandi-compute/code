@@ -32,7 +32,7 @@ def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pat
     codebase = entry.get("codebase")
     codebase_segment = f"_codebase-{codebase}" if codebase is not None else ""
     flat_attempt_dir = (
-        pipeline_dir / f"version-{version}_params-{params}_config-{config}{codebase_segment}_attempt-{attempt}"
+        pipeline_dir / f"version-{version}{codebase_segment}_params-{params}_config-{config}_attempt-{attempt}"
     )
     nested_attempt_dir = pipeline_dir / f"version-{version}" / f"params-{params}_config-{config}_attempt-{attempt}"
     return flat_attempt_dir, nested_attempt_dir

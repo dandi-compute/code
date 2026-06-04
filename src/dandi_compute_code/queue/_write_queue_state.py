@@ -16,9 +16,9 @@ from ..dandiset._load_assets_jsonld_metadata import (
 
 _FLAT_ATTEMPT_RE = re.compile(
     r"^version-(?P<version>.+?)"
+    r"(?:_codebase-(?P<codebase>[^_]+))?"
     r"_params-(?P<params>[^_]+)"
     r"_config-(?P<config>[^_]+)"
-    r"(?:_codebase-(?P<codebase>[^_]+))?"
     r"(?:_.+?)?"
     r"_attempt-(?P<attempt>\d+)$"
 )

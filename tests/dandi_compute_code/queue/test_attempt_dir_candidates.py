@@ -114,5 +114,5 @@ def test_attempt_dir_candidates_includes_codebase_in_flat_path(tmp_path: pathlib
     flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
 
     expected_prefix = tmp_path / "derivatives" / "dandiset-000001" / "sub-mouse01" / "pipeline-test"
-    assert flat_path == expected_prefix / "version-v1.1.1_params-4af6a25_config-0d4bf36_codebase-v0.3.17_attempt-1"
+    assert flat_path == expected_prefix / "version-v1.1.1_codebase-v0.3.17_params-4af6a25_config-0d4bf36_attempt-1"
     assert legacy_path == expected_prefix / "version-v1.1.1" / "params-4af6a25_config-0d4bf36_attempt-1"

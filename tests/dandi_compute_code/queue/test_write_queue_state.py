@@ -608,7 +608,7 @@ def test_write_queue_state_parses_codebase_field_from_new_format_path(tmp_path: 
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_prefix = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-aind+ephys/"
-        "version-v1.1.1_params-4af6a25_config-0d4bf36_codebase-v0.3.17_attempt-1"
+        "version-v1.1.1_codebase-v0.3.17_params-4af6a25_config-0d4bf36_attempt-1"
     )
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={
