@@ -11,8 +11,8 @@ def _write_jsonl(file_path: pathlib.Path, entries: list[dict]) -> None:
     file_path.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
 
 
-def _make_state_entry() -> dict:
-    return {
+def _make_state_entry(**overrides: str | int | bool) -> dict:
+    entry = {
         "dandiset_id": "000001",
         "dandi_path": "sub-mouse01",
         "pipeline": "test",
@@ -25,13 +25,27 @@ def _make_state_entry() -> dict:
         "has_logs": False,
         "created_at": "2024-01-01T00:00:00+00:00",
     }
+    entry.update(overrides)
+    return entry
 
 
 @pytest.fixture
 def mock_queue_state(tmp_path: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path]:
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
-    _write_jsonl(queue_dir / "state.jsonl", [_make_state_entry()])
+    _write_jsonl(
+        queue_dir / "state.jsonl",
+        [
+            _make_state_entry(),
+            _make_state_entry(
+                dandi_path="sub-mouse02",
+                params="alternate",
+                config="xyz789",
+                attempt=2,
+                has_logs=True,
+            ),
+        ],
+    )
 
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
