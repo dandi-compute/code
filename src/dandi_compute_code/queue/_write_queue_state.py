@@ -16,10 +16,9 @@ from ..dandiset._load_assets_jsonld_metadata import (
 
 _FLAT_ATTEMPT_RE = re.compile(
     r"^version-(?P<version>.+?)"
-    r"(?:_codebase-(?P<codebase>[^_]+))?"
+    r"_codebase-(?P<codebase>[^_]+)"
     r"_params-(?P<params>[^_]+)"
     r"_config-(?P<config>[^_]+)"
-    r"(?:_.+?)?"
     r"_attempt-(?P<attempt>\d+)$"
 )
 _NESTED_ATTEMPT_RE = re.compile(r"^params-(?P<params>[^_]+)_config-(?P<config>[^_]+)_attempt-(?P<attempt>\d+)$")
@@ -37,7 +36,7 @@ class JobInfo:
     params: str
     config: str
     attempt: int
-    codebase: str | None = None
+    codebase: str
 
 
 # --- path parsing -----------------------------------------------------------
@@ -112,7 +111,7 @@ def _parse_attempt_identity(asset_path: str) -> tuple[JobInfo, str] | None:
         params=fields["params"],
         config=fields["config"],
         attempt=int(fields["attempt"]),
-        codebase=fields.get("codebase"),
+        codebase=fields["codebase"],
     )
     return job_info, subpath
 
@@ -197,7 +196,7 @@ def _new_attempt_record(job: JobInfo) -> dict[str, object]:
         "has_code": False,
         "has_output": False,
         "has_logs": False,
-        **({"codebase": job.codebase} if job.codebase is not None else {}),
+        "codebase": job.codebase,
     }
 
 

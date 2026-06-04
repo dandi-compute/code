@@ -7,7 +7,6 @@ import urllib.request
 
 from ._load_queue_config import _load_queue_config
 from ._order_content_ids_for_uniform_dandiset_sampling import _order_content_ids_for_uniform_dandiset_sampling
-from ._version_matches import _version_matches
 from ..aind_ephys_pipeline import prepare_aind_ephys_job
 
 _log = logging.getLogger(__name__)
@@ -107,9 +106,7 @@ def prepare_queue(
                 failure_count_by_dandiset: collections.defaultdict[str, int] = collections.defaultdict(int)
                 if max_fail is not None:
                     for entry in failure_entries:
-                        if entry.get("pipeline") != pipeline_name or not _version_matches(
-                            entry.get("version", ""), version
-                        ):
+                        if entry.get("pipeline") != pipeline_name or entry.get("version", "") != version:
                             continue
                         dandiset_id = entry.get("dandiset_id")
                         if not dandiset_id:

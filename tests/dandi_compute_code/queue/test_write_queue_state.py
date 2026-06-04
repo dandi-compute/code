@@ -58,10 +58,10 @@ def test_write_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.
     queue_dir = _make_queue_dir(tmp_path)
     attempt_metadata_by_path = {
         f"derivatives/dandiset-001697/sub-{i:02d}/sub-{i:02d}_ecephys/pipeline-test/"
-        f"version-v1.0_params-default_config-{i:07d}_attempt-1/code/submit.sh": AssetMetadata(
+        f"version-v1.0_codebase-v0.3.0_params-default_config-{i:07d}_attempt-1/code/submit.sh": AssetMetadata(
             path=(
                 f"derivatives/dandiset-001697/sub-{i:02d}/sub-{i:02d}_ecephys/pipeline-test/"
-                f"version-v1.0_params-default_config-{i:07d}_attempt-1/code/submit.sh"
+                f"version-v1.0_codebase-v0.3.0_params-default_config-{i:07d}_attempt-1/code/submit.sh"
             ),
             date_modified="2024-01-01T00:00:00+00:00",
             content_size=1,
@@ -104,7 +104,7 @@ def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pat
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_path = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
-        "version-v1.0_params-default_config-def5678_attempt-1/code/submit.sh"
+        "version-v1.0_codebase-v0.3.0_params-default_config-def5678_attempt-1/code/submit.sh"
     )
     with (
         mock.patch(
@@ -148,7 +148,7 @@ def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_
     source_path = "sub-test/sourcedata/aind-sample.nwb"
     attempt_prefix = (
         "derivatives/dandiset-001849/sub-test/sourcedata/aind-sample/pipeline-aind+ephys/"
-        "version-v1.1.1+b268fd2+2372f8e_params-4af6a25_config-0d4bf36_date-2026+05+24_attempt-1"
+        "version-v1.1.1+b268fd2+2372f8e_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
     )
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={
@@ -244,7 +244,7 @@ def test_write_queue_state_with_dandiset_directory_creates_valid_files(tmp_path:
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_path = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-aind+ephys/"
-        "version-v1.0_params-abc1234_config-def5678_attempt-1/code/submit.sh"
+        "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/code/submit.sh"
     )
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
@@ -311,7 +311,7 @@ def test_write_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathlib
     resolved_asset_path = "sub-mouse01/sub-mouse01_ses-ses001_obj-raw.nwb"
     attempt_path = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ses-ses001_obj-raw/"
-        "pipeline-aind+ephys/version-v1.0_params-abc1234_config-2222222_attempt-1/code/submit.sh"
+        "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-2222222_attempt-1/code/submit.sh"
     )
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
@@ -374,7 +374,7 @@ def test_write_queue_state_writes_resolved_dandi_path_for_root_level_asset(tmp_p
     root_asset_path = "sub-mouse01_ses-ses001_obj-raw.nwb"
     attempt_path = (
         "derivatives/dandiset-001697/sub-mouse01_ses-ses001_obj-raw/"
-        "pipeline-aind+ephys/version-v1.0_params-abc1234_config-3333333_attempt-1/code/submit.sh"
+        "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-3333333_attempt-1/code/submit.sh"
     )
 
     queue_dir = tmp_path / "queue"
@@ -484,20 +484,20 @@ def test_write_queue_state_with_dandiset_directory_includes_only_pending_in_wait
         content_id_to_asset={},
         path_to_asset_metadata={
             "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test-pipeline/"
-            "version-v1.0_params-abc1234_config-1111111_attempt-1/code/submit.sh": AssetMetadata(
+            "version-v1.0_codebase-v0.3.0_params-abc1234_config-1111111_attempt-1/code/submit.sh": AssetMetadata(
                 path=(
                     "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test-pipeline/"
-                    "version-v1.0_params-abc1234_config-1111111_attempt-1/code/submit.sh"
+                    "version-v1.0_codebase-v0.3.0_params-abc1234_config-1111111_attempt-1/code/submit.sh"
                 ),
                 date_modified="2025-01-01T00:00:00+00:00",
                 content_size=1,
                 content_id="attempt-1",
             ),
             "derivatives/dandiset-001697/sub-mouse02/sub-mouse02_ecephys/pipeline-test-pipeline/"
-            "version-v1.0_params-abc1234_config-2222222_attempt-1/code/submit.sh": AssetMetadata(
+            "version-v1.0_codebase-v0.3.0_params-abc1234_config-2222222_attempt-1/code/submit.sh": AssetMetadata(
                 path=(
                     "derivatives/dandiset-001697/sub-mouse02/sub-mouse02_ecephys/pipeline-test-pipeline/"
-                    "version-v1.0_params-abc1234_config-2222222_attempt-1/code/submit.sh"
+                    "version-v1.0_codebase-v0.3.0_params-abc1234_config-2222222_attempt-1/code/submit.sh"
                 ),
                 date_modified="2025-01-02T00:00:00+00:00",
                 content_size=1,
@@ -561,7 +561,7 @@ def test_write_queue_state_with_dandiset_directory_excludes_entries_with_submitt
     )
     attempt_path = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test-pipeline/"
-        "version-v1.0_params-abc1234_config-9999999_attempt-1/code/submit.sh"
+        "version-v1.0_codebase-v0.3.0_params-abc1234_config-9999999_attempt-1/code/submit.sh"
     )
     with (
         mock.patch(

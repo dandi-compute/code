@@ -29,10 +29,9 @@ def _attempt_dir_candidates(*, base_dir: pathlib.Path, entry: dict) -> tuple[pat
     pipeline_dir = base_dir / "derivatives" / f"dandiset-{dandiset_id}" / pathlib.PurePosixPath(normalized_dandi_path)
     pipeline_dir = pipeline_dir / f"pipeline-{pipeline}"
 
-    codebase = entry.get("codebase")
-    codebase_segment = f"_codebase-{codebase}" if codebase is not None else ""
+    codebase = entry["codebase"]
     flat_attempt_dir = (
-        pipeline_dir / f"version-{version}{codebase_segment}_params-{params}_config-{config}_attempt-{attempt}"
+        pipeline_dir / f"version-{version}_codebase-{codebase}_params-{params}_config-{config}_attempt-{attempt}"
     )
     nested_attempt_dir = pipeline_dir / f"version-{version}" / f"params-{params}_config-{config}_attempt-{attempt}"
     return flat_attempt_dir, nested_attempt_dir

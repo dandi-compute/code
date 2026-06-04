@@ -106,7 +106,7 @@ def test_aggregate_queue_statistics_found_timeline_via_fallback_attempt_resoluti
         pipeline="aind+ephys",
         version="v1.1.1+b268fd2+a66c8df",
         params="4af6a25",
-        config="0d4bf36_date-2026+05+21",
+        config="0d4bf36",
         has_output=True,
         has_logs=True,
     )
@@ -119,7 +119,7 @@ def test_aggregate_queue_statistics_found_timeline_via_fallback_attempt_resoluti
         / "dandiset-001849"
         / "sub-test"
         / "pipeline-aind+ephys"
-        / "version-v1.1.1+b268fd2+a66c8df_params-4af6a25_config-0d4bf36_date-2026+05+21_attempt-1"
+        / "version-v1.1.1+b268fd2+a66c8df_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
     )
     logs_dir = attempt_dir / "logs"
     logs_dir.mkdir(parents=True)

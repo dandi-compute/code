@@ -50,7 +50,9 @@ def test_attempt_dir_candidates_constructs_both_layouts(
 
     flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
 
-    assert flat_path == tmp_path / relative_prefix / "version-v1.0_params-abc1234_config-def5678_attempt-2"
+    assert (
+        flat_path == tmp_path / relative_prefix / "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-2"
+    )
     assert legacy_path == tmp_path / relative_prefix / "version-v1.0/params-abc1234_config-def5678_attempt-2"
 
 
