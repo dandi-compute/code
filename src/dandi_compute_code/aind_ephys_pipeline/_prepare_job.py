@@ -310,15 +310,13 @@ def prepare_aind_ephys_job(
             {
                 "Name": "AIND Ephys Pipeline",
                 "Description": "A customized and version-locked branch of the main AIND ephys pipeline.",
-                "Version": pipeline_version,
-                "CommitHash": pipeline_commit_hash,
+                "Version": f"{pipeline_version}+{pipeline_commit_hash}",
                 "CodeURL": pipeline_url,
             },
             {
                 "Name": "DANDI Compute: Code",
                 "Description": "The primary source code for orchestration of AIND on MIT Engaging.",
-                "Version": dandi_compute_code_version,
-                "CommitHash": dandi_compute_code_commit_hash,
+                "Version": f"{dandi_compute_code_version}+{dandi_compute_code_commit_hash}",
                 "CodeURL": "https://github.com/dandi-compute/code",
             },
         ],

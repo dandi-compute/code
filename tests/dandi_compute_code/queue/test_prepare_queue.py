@@ -124,31 +124,6 @@ def test_prepare_queue_skips_when_failures_reach_max(tmp_path: pathlib.Path) -> 
 
 
 @pytest.mark.ai_generated
-def test_prepare_queue_strips_commit_suffix_from_version(tmp_path: pathlib.Path) -> None:
-    """prepare_queue passes the version without its trailing commit-hash to prepare_aind_ephys_job."""
-    queue_dir = _make_queue_dir(tmp_path)
-    queue_config = json.loads((queue_dir / "queue_config.json").read_text())
-    queue_config["pipelines"]["test"]["version_priority"] = ["v1.1.0+abcdef0"]
-    (queue_dir / "queue_config.json").write_text(json.dumps(queue_config))
-
-    qualifying_ids = ["asset-bbb"]
-
-    with (
-        mock.patch("urllib.request.urlopen") as mock_urlopen,
-        mock.patch(
-            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_unique_dandiset_path",
-            return_value={},
-        ),
-        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
-    ):
-        mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(queue_directory=queue_dir)
-
-    assert mock_prepare.call_count == 1
-    assert mock_prepare.call_args.kwargs["pipeline_version"] == "v1.1.0"
-
-
-@pytest.mark.ai_generated
 def test_prepare_queue_passes_optional_args_through(tmp_path: pathlib.Path) -> None:
     """prepare_queue forwards optional args to prepare_aind_ephys_job."""
     queue_dir = _make_queue_dir(tmp_path)

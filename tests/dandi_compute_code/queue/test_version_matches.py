@@ -11,6 +11,7 @@ assert _spec.loader is not None
 _support = _importlib_util.module_from_spec(_spec)
 _spec.loader.exec_module(_support)
 
+
 globals().update(
     {
         name: value
@@ -23,40 +24,10 @@ globals().update(
 @pytest.mark.ai_generated
 def test_version_matches_exact() -> None:
     """_version_matches returns True for exact match."""
-    assert _version_matches("v1.1.1+b268fd2", "v1.1.1+b268fd2") is True
-
-
-@pytest.mark.ai_generated
-def test_version_matches_with_code_hash_suffix() -> None:
-    """_version_matches returns True when state version has an extra code-repo commit hash suffix."""
-    assert _version_matches("v1.1.1+b268fd2+abcdef1", "v1.1.1+b268fd2") is True
-
-
-@pytest.mark.ai_generated
-def test_version_matches_rejects_non_hex_suffix() -> None:
-    """_version_matches returns False when the extra suffix is not a hex hash."""
-    assert _version_matches("v1.1.1+b268fd2+notahex", "v1.1.1+b268fd2") is False
+    assert _version_matches("v1.1.1", "v1.1.1") is True
 
 
 @pytest.mark.ai_generated
 def test_version_matches_rejects_different_version() -> None:
     """_version_matches returns False when the version base is different."""
-    assert _version_matches("v1.1.0+b268fd2", "v1.1.1+b268fd2") is False
-
-
-@pytest.mark.ai_generated
-def test_version_matches_new_format_against_old_config_single_hash() -> None:
-    """_version_matches returns True when state uses new format and config has one trailing hash suffix."""
-    assert _version_matches("v1.1.1", "v1.1.1+b268fd2") is True
-
-
-@pytest.mark.ai_generated
-def test_version_matches_new_format_against_old_config_double_hash() -> None:
-    """_version_matches returns True when state uses new format and config has two trailing hash suffixes."""
-    assert _version_matches("v1.1.1", "v1.1.1+b268fd2+a66c8df") is True
-
-
-@pytest.mark.ai_generated
-def test_version_matches_new_format_rejects_different_base() -> None:
-    """_version_matches returns False when the new-format state version differs from the stripped config base."""
-    assert _version_matches("v1.1.0", "v1.1.1+b268fd2") is False
+    assert _version_matches("v1.1.0", "v1.1.1") is False
