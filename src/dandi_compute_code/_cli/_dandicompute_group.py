@@ -28,10 +28,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
     handlers=[
-        logging.FileHandler(
-            "/orcd/data/dandi/001/dandi-compute/"
-            f"global_logs/dandi_compute{datetime.datetime.now():%Y%m%d_%H%M%S}.log"
-        ),
+        logging.FileHandler("global_logs/dandi_compute{datetime.datetime.now():%Y%m%d_%H%M%S}.log"),
         logging.StreamHandler(),  # optional: also to console
     ],
 )
