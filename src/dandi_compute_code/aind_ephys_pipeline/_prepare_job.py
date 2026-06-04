@@ -191,8 +191,6 @@ def prepare_aind_ephys_job(
     # Special case - inject missing subject label for testing asset
     if content_id == "048d1ee9-83b7-491f-8f02-1ca615b1d455":
         entities.setdefault("sub", "test")
-        if not output_dandi_path.startswith("sub-test/"):
-            output_dandi_path = f"sub-test/{output_dandi_path}"
 
     if "sub" not in entities:
         message = (
