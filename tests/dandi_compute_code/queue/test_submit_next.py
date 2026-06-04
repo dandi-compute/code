@@ -151,7 +151,7 @@ def test_submit_next_calls_dandi_download_for_unsubmitted_candidate(tmp_path: pa
         mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
         _submit_next(processing_directory=processing_dir)
 
-    expected_url = f"dandi://dandi/001697/{_EXAMPLE_CODE_DIR_PATH}"
+    expected_url = f"dandi://dandi/001697/{_EXAMPLE_CODE_DIR_PATH}/"
     download_call = mock_run.call_args_list[0]
     assert download_call.args[0] == ["dandi", "download", "--preserve-tree", expected_url]
     assert download_call.kwargs.get("cwd") == fixed_temp_dir
