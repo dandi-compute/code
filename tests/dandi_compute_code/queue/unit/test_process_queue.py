@@ -1,3 +1,4 @@
+import logging
 import pathlib
 from unittest import mock
 
@@ -31,7 +32,7 @@ def test_process_queue_refreshes_state_when_empty(tmp_path: pathlib.Path, caplog
     processing_dir.mkdir()
 
     with (
-        caplog.at_level("INFO", logger="dandi_compute_code.queue._process_queue"),
+        caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._process_queue"),
         mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=2),
         mock.patch("dandi_compute_code.queue._process_queue._submit_next") as mock_submit,
     ):
