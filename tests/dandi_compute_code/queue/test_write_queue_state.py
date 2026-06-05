@@ -7,7 +7,7 @@ import pytest
 from _process_queue_test_cases import _make_queue_dir, _read_jsonl
 
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
-from dandi_compute_code.queue import write_queue_state
+from dandi_compute_code.queue import QueueState, write_queue_state
 
 
 @pytest.fixture(autouse=True)
@@ -894,6 +894,12 @@ def test_write_queue_state_log_paths_map_asset_paths_to_blob_ids(tmp_path: pathl
                 content_size=1,
                 content_id="code-id",
             ),
+            f"{attempt_prefix}/dataset_description.json": AssetMetadata(
+                path=f"{attempt_prefix}/dataset_description.json",
+                date_modified="2024-01-01T00:00:30+00:00",
+                content_size=10,
+                content_id="dataset-description-id",
+            ),
             f"{attempt_prefix}/logs/stdout.txt": AssetMetadata(
                 path=f"{attempt_prefix}/logs/stdout.txt",
                 date_modified="2024-01-01T00:01:00+00:00",
@@ -937,7 +943,41 @@ def test_write_queue_state_log_paths_map_asset_paths_to_blob_ids(tmp_path: pathl
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
     assert state_entries[0]["has_logs"] is True
+    assert state_entries[0]["dataset_description_path"] == f"{attempt_prefix}/dataset_description.json"
     assert state_entries[0]["log_paths"] == {
         f"{attempt_prefix}/logs/stdout.txt": "log-blob-id-1",
         f"{attempt_prefix}/logs/stderr.txt": "log-blob-id-2",
     }
+
+
+@pytest.mark.ai_generated
+def test_queue_state_from_jsonl_preserves_dataset_description_path(tmp_path: pathlib.Path) -> None:
+    """QueueState.from_jsonl preserves dataset_description_path entries."""
+    state_file = tmp_path / "state.jsonl"
+    state_file.write_text(
+        json.dumps(
+            {
+                "dandiset_id": "001697",
+                "dandi_path": "sub-mouse01/sub-mouse01_ecephys.nwb",
+                "pipeline": "aind+ephys",
+                "version": "v1.0",
+                "params": "abc1234",
+                "config": "def5678",
+                "attempt": 1,
+                "codebase": "v0.3.0",
+                "dataset_description_path": "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
+                "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/"
+                "dataset_description.json",
+            }
+        )
+        + "\n"
+    )
+
+    queue_state = QueueState.from_jsonl(state_file)
+
+    assert len(queue_state) == 1
+    assert queue_state.entries[0].dataset_description_path == (
+        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
+        "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/"
+        "dataset_description.json"
+    )
