@@ -29,7 +29,7 @@ extensions = [
 autosummary_generate = True
 autodoc_typehints = "description"
 autodoc_member_order = "bysource"
-napoleon_google_docstring = True
+napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 
 # Mimic black style for arguments in API ref docstrings
