@@ -52,6 +52,7 @@ class JobEntry:
     created_at: str | None = None
     job_completion_time: str | None = None
     output_paths: dict = field(default_factory=dict)
+    log_paths: dict = field(default_factory=dict)
 
     @property
     def is_pending(self) -> bool:
@@ -97,6 +98,7 @@ class JobEntry:
             created_at=data.get("created_at"),
             job_completion_time=data.get("job_completion_time"),
             output_paths=dict(data.get("output_paths") or {}),
+            log_paths=dict(data.get("log_paths") or {}),
         )
 
     def to_dict(self) -> dict:
@@ -117,6 +119,7 @@ class JobEntry:
             "has_output": self.has_output,
             "has_logs": self.has_logs,
             "output_paths": self.output_paths,
+            "log_paths": self.log_paths,
             "created_at": self.created_at,
             "job_completion_time": self.job_completion_time,
         }
