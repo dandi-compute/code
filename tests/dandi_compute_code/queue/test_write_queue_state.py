@@ -145,8 +145,8 @@ def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pat
 
 
 @pytest.mark.ai_generated
-def test_write_queue_state_marks_has_been_submitted_from_code_submitted_asset(tmp_path: pathlib.Path) -> None:
-    """write_queue_state sets has_been_submitted when code/submitted exists."""
+def test_write_queue_state_submitted_marker_sets_has_been_submitted(tmp_path: pathlib.Path) -> None:
+    """Tests that write_queue_state sets has_been_submitted when code/submitted exists."""
     queue_dir = _make_queue_dir(tmp_path)
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_prefix = (
