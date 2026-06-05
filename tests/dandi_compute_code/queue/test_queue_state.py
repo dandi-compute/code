@@ -8,7 +8,6 @@ import yaml
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.queue import JobEntry, JobInfo, QueueState
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -152,11 +151,11 @@ def test_job_entry_to_dict_round_trips_all_fields() -> None:
 @pytest.mark.parametrize(
     "has_code, has_logs, has_output, expected_pending, expected_running, expected_successful, expected_failed",
     [
-        (True, False, False, True, False, False, False),   # pending
-        (True, True, False, False, True, False, True),     # running / failed
-        (True, True, True, False, False, True, False),     # successful
-        (False, False, False, False, False, False, False), # no state
-        (True, False, True, False, False, True, False),    # has code and output but no logs
+        (True, False, False, True, False, False, False),  # pending
+        (True, True, False, False, True, False, True),  # running / failed
+        (True, True, True, False, False, True, False),  # successful
+        (False, False, False, False, False, False, False),  # no state
+        (True, False, True, False, False, True, False),  # has code and output but no logs
     ],
 )
 def test_job_entry_status_properties(

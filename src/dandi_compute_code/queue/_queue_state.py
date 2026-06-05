@@ -15,16 +15,17 @@ from __future__ import annotations
 
 import json
 import pathlib
-import yaml
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
+import yaml
+
 from ._write_queue_state import (
     JobInfo,
-    _UpstreamMetadataCache,
     _collect_attempts,
     _finalize_attempt_records,
     _sort_key,
+    _UpstreamMetadataCache,
 )
 from ..dandiset._load_assets_jsonld_metadata import (
     AssetMetadata,
