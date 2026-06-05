@@ -188,7 +188,9 @@ def test_submit_next_calls_sbatch_with_submit_sh_path(tmp_path: pathlib.Path) ->
 
 
 @pytest.mark.ai_generated
-def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(tmp_path: pathlib.Path) -> None:
+def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """_submit_next writes code/submitted adjacent to code/submit.sh after sbatch."""
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
@@ -198,6 +200,7 @@ def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(tmp_path: pat
     metadata = _make_metadata_with_submit_sh(_EXAMPLE_CODE_DIR_PATH)
 
     with (
+        caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._submit_next"),
         mock.patch(
             "dandi_compute_code.queue._submit_next.load_assets_jsonld_metadata",
             return_value=metadata,
@@ -216,6 +219,7 @@ def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(tmp_path: pat
     submitted_marker = fixed_temp_dir / "001697" / _EXAMPLE_CODE_DIR_PATH / "submitted"
     assert submitted_marker.exists()
     assert submitted_marker.read_text()  # non-empty ISO datetime
+    assert any(f"Created submitted marker at {submitted_marker}" in record.message for record in caplog.records)
 
 
 @pytest.mark.ai_generated

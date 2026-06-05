@@ -102,6 +102,7 @@ def _submit_next(
 
         submitted_marker = submit_sh_path.parent / "submitted"
         submitted_marker.write_text(datetime.datetime.now().isoformat())
+        _log.info("Created submitted marker at %s", submitted_marker)
 
         result = subprocess.run(
             ["dandi", "upload", "--validation", "skip"],
