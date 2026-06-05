@@ -197,6 +197,7 @@ def _new_attempt_record(job: JobInfo) -> dict[str, object]:
         "has_been_submitted": False,
         "has_output": False,
         "has_logs": False,
+        "dataset_description_path": None,
         "output_paths": {},
         "log_paths": {},
         "codebase": job.codebase,
@@ -237,10 +238,12 @@ def _collect_attempts(local_metadata: AssetsJsonldMetadata) -> _AttemptCollectio
             record["has_code"] = True
         if subpath.startswith("code/submitted"):
             record["has_been_submitted"] = True
-        if _subpath_is_under(subpath, "derivatives"):
+        if subpath == "dataset_description.json":
+            record["dataset_description_path"] = asset_path
+        elif _subpath_is_under(subpath, "derivatives"):
             record["has_output"] = True
             record["output_paths"][asset_path] = asset_metadata.content_id
-        if subpath.startswith("logs/"):
+        elif subpath.startswith("logs/"):
             log_relative_path = subpath.removeprefix("logs/")
             if log_relative_path and log_relative_path != "dataset_description.json":
                 record["has_logs"] = True
@@ -321,6 +324,8 @@ def write_queue_state(*, queue_directory: pathlib.Path) -> None:
     ``dandiset-*`` and ``pipeline-*`` with ``.nwb`` appended.
     ``has_code``/``has_been_submitted``/``has_output``/``has_logs`` are
     inferred from the assets present under each attempt directory.
+    ``dataset_description_path`` records the root-level ``dataset_description.json``
+    asset path when present.
     ``output_paths`` maps each output asset path to its blob ID when
     ``has_output`` is ``True``; otherwise it is an empty dict.
     ``log_paths`` maps each log asset path to its blob ID when ``has_logs`` is

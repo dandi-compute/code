@@ -51,6 +51,7 @@ class JobEntry:
     has_logs: bool = False
     created_at: str | None = None
     job_completion_time: str | None = None
+    dataset_description_path: str | None = None
     output_paths: dict = field(default_factory=dict)
     log_paths: dict = field(default_factory=dict)
 
@@ -97,6 +98,7 @@ class JobEntry:
             has_logs=bool(data.get("has_logs", False)),
             created_at=data.get("created_at"),
             job_completion_time=data.get("job_completion_time"),
+            dataset_description_path=data.get("dataset_description_path"),
             output_paths=dict(data.get("output_paths") or {}),
             log_paths=dict(data.get("log_paths") or {}),
         )
@@ -118,6 +120,7 @@ class JobEntry:
             "has_been_submitted": self.has_been_submitted,
             "has_output": self.has_output,
             "has_logs": self.has_logs,
+            "dataset_description_path": self.dataset_description_path,
             "output_paths": self.output_paths,
             "log_paths": self.log_paths,
             "created_at": self.created_at,
