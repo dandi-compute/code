@@ -4,6 +4,7 @@ import hashlib
 import importlib.metadata
 import io
 import json
+import logging
 import os
 import pathlib
 import re
@@ -19,6 +20,7 @@ import pydantic
 
 from ._handle_template import generate_aind_ephys_submission_script
 from ..dandiset._globals import _SANDBOX_DANDISET_ID
+
 
 
 @pydantic.validate_call
