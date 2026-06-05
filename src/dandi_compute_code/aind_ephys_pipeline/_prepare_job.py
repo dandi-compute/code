@@ -24,6 +24,14 @@ from ..dandiset._globals import _SANDBOX_DANDISET_ID
 _log = logging.getLogger(__name__)
 
 
+def _parse_pipeline_version(version: str, *, label: str) -> tuple[int, int, int]:
+    match = re.fullmatch(r"v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?:[-+][0-9A-Za-z.+-]+)?", version)
+    if match is None:
+        message = f"Unexpected {label} version format: {version!r}"
+        raise ValueError(message)
+    return int(match["major"]), int(match["minor"]), int(match["patch"])
+
+
 @pydantic.validate_call
 def prepare_aind_ephys_job(
     pipeline_version: str,
@@ -78,6 +86,11 @@ def prepare_aind_ephys_job(
         - ``pipeline_version`` equals the unsupported ``v1.0.0``.
         - ``config_key`` is not registered in ``registered_configs.json``.
         - ``parameters_key`` is not registered in ``registered_params.json``.
+        - The resolved parameters file is missing a ``pipeline_version`` field.
+        - The parameters file ``pipeline_version`` is in a different major
+          series than the requested ``pipeline_version``.
+        - The parameters file ``pipeline_version`` is newer than the requested
+          ``pipeline_version``.
         - The MD5 checksum of the resolved config or parameters file does not
           match its registry entry.
         - ``content_id`` is not present in the content-id-to-Dandiset mapping.
@@ -98,6 +111,7 @@ def prepare_aind_ephys_job(
             "Version `v1.0.0` is incompatible with the new parameters file usage." "Please use `v1.0.0-fixes` instead."
         )
         raise ValueError(message)
+    requested_pipeline_version = _parse_pipeline_version(pipeline_version, label="requested pipeline")
     config_registry_path = pathlib.Path(__file__).parent / "registries" / "registered_configs.json"
     config_registry = json.loads(config_registry_path.read_text())
     if config_key not in config_registry:
@@ -112,13 +126,6 @@ def prepare_aind_ephys_job(
         raise ValueError(message)
     config_file_path = pathlib.Path(__file__).parent / "configs" / config_registry[config_key]["path"]
     expected_config_md5 = config_registry[config_key]["md5"]
-
-    if content_id is None:
-        client = dandi.dandiapi.DandiAPIClient()
-        dandiset = client.get_dandiset(dandiset_id=dandiset_id)
-        asset = dandiset.get_asset_by_path(path=dandiset_path)
-        metadata = asset.get_raw_metadata()
-        content_id = metadata["contentUrl"][1].split("/")[-1]
 
     params_registry_path = pathlib.Path(__file__).parent / "registries" / "registered_params.json"
     params_registry = json.loads(params_registry_path.read_text())
@@ -143,7 +150,39 @@ def prepare_aind_ephys_job(
             "to reflect the new file contents."
         )
         raise ValueError(message)
+    parameters = json.loads(parameters_file_path.read_text())
+    if "pipeline_version" not in parameters:
+        message = f"Parameters file '{parameters_file_path.name}' is missing required 'pipeline_version'."
+        raise ValueError(message)
+    parameters_pipeline_version = _parse_pipeline_version(
+        parameters["pipeline_version"], label="parameters file pipeline"
+    )
+    different_major = parameters_pipeline_version[0] != requested_pipeline_version[0]
+    params_too_new = parameters_pipeline_version > requested_pipeline_version
+    if different_major:
+        message = (
+            f"Parameters file '{parameters_file_path.name}' targets pipeline version "
+            f"{parameters['pipeline_version']!r}, which is in a different major series than requested "
+            f"pipeline version {pipeline_version!r}. Requested pipeline version must be in the same major series."
+        )
+        raise ValueError(message)
+    if params_too_new:
+        message = (
+            f"Parameters file '{parameters_file_path.name}' targets pipeline version "
+            f"{parameters['pipeline_version']!r}, which is newer than requested "
+            f"pipeline version {pipeline_version!r}. Requested pipeline version must be at least as new as the "
+            "parameters file version."
+        )
+        raise ValueError(message)
     params_id = actual_md5[0:7]
+
+    if content_id is None:
+        client = dandi.dandiapi.DandiAPIClient()
+        dandiset = client.get_dandiset(dandiset_id=dandiset_id)
+        asset = dandiset.get_asset_by_path(path=dandiset_path)
+        metadata = asset.get_raw_metadata()
+        content_id = metadata["contentUrl"][1].split("/")[-1]
+
     actual_config_md5 = hashlib.md5(config_file_path.read_bytes()).hexdigest()
     if actual_config_md5 != expected_config_md5:
         message = (

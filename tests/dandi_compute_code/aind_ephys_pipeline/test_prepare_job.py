@@ -110,7 +110,7 @@ def test_prepare_aind_ephys_job_extracts_sub_entity_from_path(
             pipeline_version="v1.1.0",
             content_id=content_id,
             config_key="default",
-            parameters_key="default",
+            parameters_key="original",
             pipeline_directory=fake_pipeline_dir,
         )
 
@@ -150,7 +150,7 @@ def test_prepare_aind_ephys_job_test_content_id_uses_sub_test(
             pipeline_version="v1.1.0",
             content_id=test_content_id,
             config_key="default",
-            parameters_key="default",
+            parameters_key="original",
             pipeline_directory=fake_pipeline_dir,
         )
 
@@ -175,7 +175,7 @@ def test_prepare_aind_ephys_job_raises_on_missing_sub_entity(tmp_path: pathlib.P
             pipeline_version="v1.1.0",
             content_id=content_id,
             config_key="default",
-            parameters_key="default",
+            parameters_key="original",
             pipeline_directory=tmp_path,
         )
 
@@ -194,7 +194,7 @@ def test_prepare_aind_ephys_job_raises_on_sandbox_dandiset() -> None:
             pipeline_version="v1.1.0",
             content_id=content_id,
             config_key="default",
-            parameters_key="default",
+            parameters_key="original",
             pipeline_directory=None,
         )
 
@@ -233,7 +233,7 @@ def test_prepare_aind_ephys_job_uses_simplified_job_id_format(
             pipeline_version="v1.1.0",
             content_id=content_id,
             config_key="default",
-            parameters_key="default",
+            parameters_key="original",
             pipeline_directory=fake_pipeline_dir,
         )
 
@@ -246,3 +246,119 @@ def test_prepare_aind_ephys_job_uses_simplified_job_id_format(
     assert f"_codebase-v{codebase_version}" in script_path_str
     # Version uses BIDSy format (hyphens replaced with plus)
     assert "version-v1.1.0_" in script_path_str
+
+
+@pytest.mark.ai_generated
+def test_prepare_aind_ephys_job_accepts_matching_minor_version_params(
+    tmp_path: pathlib.Path,
+    fake_pipeline_dir: pathlib.Path,
+) -> None:
+    """Parameters files remain compatible when only the pipeline patch version differs."""
+    content_id = "08000000-0000-0000-0000-000000000000"
+    mapping = {content_id: {"000001": "sub-mouse01/sub-mouse01_ecephys.nwb"}}
+
+    temp_dir = tmp_path / "tmpdir"
+    temp_dir.mkdir()
+
+    mock_dandiset = mock.MagicMock()
+    mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
+
+    with (
+        mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
+        mock.patch("subprocess.check_output", side_effect=_git_check_output),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.download.download"),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.upload.upload"),
+        mock.patch("tempfile.mkdtemp", return_value=str(temp_dir)),
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "fake-key"}),
+    ):
+        mock_client.return_value.get_dandiset.return_value = mock_dandiset
+
+        script_path = prepare_aind_ephys_job(
+            pipeline_version="v1.1.5",
+            content_id=content_id,
+            config_key="default",
+            parameters_key="original",
+            pipeline_directory=fake_pipeline_dir,
+        )
+
+    assert script_path.exists()
+
+
+@pytest.mark.ai_generated
+def test_prepare_aind_ephys_job_accepts_newer_pipeline_minor_version_for_default_params(
+    tmp_path: pathlib.Path,
+    fake_pipeline_dir: pathlib.Path,
+) -> None:
+    """Parameters remain compatible with newer pipeline minor versions in the same major series."""
+    content_id = "09000000-0000-0000-0000-000000000000"
+    mapping = {content_id: {"000001": "sub-mouse01/sub-mouse01_ecephys.nwb"}}
+
+    temp_dir = tmp_path / "tmpdir"
+    temp_dir.mkdir()
+
+    mock_dandiset = mock.MagicMock()
+    mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
+
+    with (
+        mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
+        mock.patch("subprocess.check_output", side_effect=_git_check_output),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.download.download"),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.upload.upload"),
+        mock.patch("tempfile.mkdtemp", return_value=str(temp_dir)),
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "fake-key"}),
+    ):
+        mock_client.return_value.get_dandiset.return_value = mock_dandiset
+
+        script_path = prepare_aind_ephys_job(
+            pipeline_version="v1.3.1",
+            content_id=content_id,
+            config_key="default",
+            parameters_key="default",
+            pipeline_directory=fake_pipeline_dir,
+        )
+
+    assert script_path.exists()
+
+
+@pytest.mark.ai_generated
+def test_newer_params_rejected_early(tmp_path: pathlib.Path) -> None:
+    """Newer parameters versions are rejected before any content lookup work."""
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
+        pytest.raises(ValueError, match="targets pipeline version .* newer than requested pipeline version"),
+    ):
+        prepare_aind_ephys_job(
+            pipeline_version="v1.1.0",
+            dandiset_id="000001",
+            dandiset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+            config_key="default",
+            parameters_key="default",
+            pipeline_directory=tmp_path,
+        )
+
+    mock_client.assert_not_called()
+    mock_urlopen.assert_not_called()
+
+
+@pytest.mark.ai_generated
+def test_different_major_params_rejected_early(tmp_path: pathlib.Path) -> None:
+    """Different-major parameters versions are rejected before any content lookup work."""
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
+        pytest.raises(ValueError, match="different major series than requested pipeline version"),
+    ):
+        prepare_aind_ephys_job(
+            pipeline_version="v2.0.0",
+            dandiset_id="000001",
+            dandiset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+            config_key="default",
+            parameters_key="default",
+            pipeline_directory=tmp_path,
+        )
+
+    mock_client.assert_not_called()
+    mock_urlopen.assert_not_called()
