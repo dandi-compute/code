@@ -30,8 +30,8 @@
     "description": "The current recommendations for running without any motion correction."
   },
   "default": {
-    "path": "name-deterministic.json",
-    "md5": "4af6a25e20e376c81895ce9350a9cbd4",
+    "path": "name-custom+preprocessing+default_version-1+2+2.json",
+    "md5": "596a4608390895cb336b0023293878f9",
     "description": "The current recommended default parameter set."
   }
 }
