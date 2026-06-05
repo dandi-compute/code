@@ -105,7 +105,7 @@ def _submit_next(
             raise RuntimeError(message)
 
         submitted_marker = write_submitted_marker(submit_script_path=submit_sh_path)
-        _log.info(f"Created `submitted` file at: {submitted_marker.absolute()}")
+        _log.info("Created `submitted` file at: %s", submitted_marker.absolute())
 
         result = subprocess.run(
             ["dandi", "upload", "--validation", "skip"],
