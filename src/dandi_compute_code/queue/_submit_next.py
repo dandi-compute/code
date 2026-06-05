@@ -28,7 +28,7 @@ def _submit_next(
     the ``code/`` tree is downloaded via ``dandi download --preserve-tree``,
     the submission script is executed via ``sbatch``, a submitted marker
     is written adjacent to ``submit.sh``, the marker is pushed back to the
-    archive via ``dandi upload --validation skip``, and the temporary
+    archive via ``dandi upload --allow-any-path``, and the temporary
     directory is removed on success.
 
     Parameters
@@ -112,7 +112,7 @@ def _submit_next(
         _log.info("Created `submitted` file at: %s", submitted_marker.absolute())
 
         result = subprocess.run(
-            ["dandi", "upload", "--validation", "skip"],
+            ["dandi", "upload", "--allow-any-path"],
             capture_output=True,
             text=True,
             cwd=dandiset_directory,

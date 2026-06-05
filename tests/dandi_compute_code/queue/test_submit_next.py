@@ -225,8 +225,8 @@ def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(
 
 
 @pytest.mark.ai_generated
-def test_submit_next_calls_dandi_upload_with_validation_skip(tmp_path: pathlib.Path) -> None:
-    """_submit_next calls dandi upload --validation skip from the temp dir."""
+def test_submit_next_calls_dandi_upload_with_allow_any_path(tmp_path: pathlib.Path) -> None:
+    """_submit_next calls dandi upload --allow-any-path from the temp dir."""
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
     fixed_temp_dir = tmp_path / "temp_work"
@@ -250,7 +250,7 @@ def test_submit_next_calls_dandi_upload_with_validation_skip(tmp_path: pathlib.P
         _submit_next(processing_directory=processing_dir)
 
     upload_call = mock_run.call_args_list[2]
-    assert upload_call.args[0] == ["dandi", "upload", "--validation", "skip"]
+    assert upload_call.args[0] == ["dandi", "upload", "--allow-any-path"]
     assert upload_call.kwargs.get("cwd") == fixed_temp_dir / "001697"
 
 
