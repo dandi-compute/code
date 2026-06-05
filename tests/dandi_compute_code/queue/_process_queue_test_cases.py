@@ -433,8 +433,8 @@ def test_submit_next_returns_false_when_no_eligible_entries(
         config="abc123",
         attempt=1,
     )
-    (first_attempt_dir / "code" / "submitted_date-2025-01-01T00:00:00").touch()
-    (second_attempt_dir / "code" / "submitted_date-2025-01-01T00:00:00").touch()
+    (first_attempt_dir / "code" / "submitted_date-date-2025+01+01_time-00+00+00").touch()
+    (second_attempt_dir / "code" / "submitted_date-date-2025+01+01_time-00+00+00").touch()
 
     with (
         caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._submit_next"),
@@ -791,7 +791,7 @@ def test_submit_next_submits_next_entry_when_first_has_submitted_marker(tmp_path
         config="abc123",
         attempt=1,
     )
-    (first_attempt_dir / "code" / "submitted_date-2025-01-01T00:00:00").touch()
+    (first_attempt_dir / "code" / "submitted_date-date-2025+01+01_time-00+00+00").touch()
     second_attempt_dir = _make_attempt_dir_with_script(
         dandiset_dir,
         dandiset_id="000002",
@@ -1208,7 +1208,7 @@ def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pat
         config="abc123",
         attempt=1,
     )
-    (submitted_attempt_dir / "code" / "submitted_date-2025-01-01T00:00:00").touch()
+    (submitted_attempt_dir / "code" / "submitted_date-date-2025+01+01_time-00+00+00").touch()
 
     with mock.patch(
         "dandi_compute_code.queue._refresh_queue.scan_dandiset_directory",
@@ -2001,7 +2001,7 @@ def test_clean_unsubmitted_capsules_skips_entries_with_submitted_marker(tmp_path
         dandiset_dir, "000001", "mouse01", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
     )
 
-    (queued_dir / "code" / "submitted_date-2025-01-01T00:00:00").touch()
+    (queued_dir / "code" / "submitted_date-date-2025+01+01_time-00+00+00").touch()
 
     with mock.patch("subprocess.run") as mock_run, mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
@@ -2161,7 +2161,7 @@ def test_clean_unsubmitted_capsules_removes_only_queued_not_submitted(tmp_path: 
     submitted_dir = _make_full_attempt_dir(
         dandiset_dir, "000002", "mouse02", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
     )
-    (submitted_dir / "code" / "submitted_date-2025-01-01T00:00:00").touch()
+    (submitted_dir / "code" / "submitted_date-date-2025+01+01_time-00+00+00").touch()
 
     with mock.patch("subprocess.run"), mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)

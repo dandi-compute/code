@@ -39,7 +39,7 @@ def _make_metadata_with_submitted(*code_dir_paths: str) -> AssetsJsonldMetadata:
     """Return metadata with both ``code/submit.sh`` and submitted-marker assets for each path."""
     path_to_asset_metadata = {}
     for code_dir_path in code_dir_paths:
-        for filename in ("submit.sh", "submitted_date-2025-01-01T00:00:00"):
+        for filename in ("submit.sh", "submitted_date-date-2025+01+01_time-00+00+00"):
             asset_path = f"{code_dir_path}/{filename}"
             path_to_asset_metadata[asset_path] = AssetMetadata(
                 path=asset_path,
@@ -406,7 +406,7 @@ def test_submit_next_skips_candidates_with_submitted_in_metadata(tmp_path: pathl
 
     path_to_asset_metadata = {}
     # First candidate has submitted marker → should be skipped
-    for filename in ("submit.sh", "submitted_date-2025-01-01T00:00:00"):
+    for filename in ("submit.sh", "submitted_date-date-2025+01+01_time-00+00+00"):
         p = f"{submitted_path}/{filename}"
         path_to_asset_metadata[p] = AssetMetadata(
             path=p, date_modified="2025-01-01T00:00:00+00:00", content_size=1, content_id="x"
