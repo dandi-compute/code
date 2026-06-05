@@ -4,7 +4,6 @@ import shutil
 import subprocess
 import tempfile
 
-from .._write_submitted_marker import write_submitted_marker
 from ..dandiset._load_assets_jsonld_metadata import load_assets_jsonld_metadata
 
 _log = logging.getLogger(__name__)
@@ -104,7 +103,8 @@ def _submit_next(
             message = "sbatch submission failed - please check the logs to see more details."
             raise RuntimeError(message)
 
-        submitted_marker = write_submitted_marker(submit_script_path=submit_sh_path)
+        submitted_marker = submit_sh_path.parent / "submitted"
+        submitted_marker.write_bytes(b"1")
         _log.info("Created `submitted` file at: %s", submitted_marker.absolute())
 
         result = subprocess.run(
