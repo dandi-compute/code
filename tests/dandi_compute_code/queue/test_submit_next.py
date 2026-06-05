@@ -219,7 +219,8 @@ def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(
     submitted_marker = fixed_temp_dir / "001697" / _EXAMPLE_CODE_DIR_PATH / "submitted"
     assert submitted_marker.exists()
     assert submitted_marker.read_text()  # non-empty ISO datetime
-    assert any(f"Created submitted marker at {submitted_marker}" in record.message for record in caplog.records)
+    expected_message = f"Created submitted marker at {submitted_marker}"
+    assert any(expected_message in record.message for record in caplog.records)
 
 
 @pytest.mark.ai_generated
