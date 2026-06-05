@@ -109,6 +109,7 @@ def prepare_aind_ephys_job(
             "Version `v1.0.0` is incompatible with the new parameters file usage." "Please use `v1.0.0-fixes` instead."
         )
         raise ValueError(message)
+    requested_pipeline_major_minor = _parse_pipeline_major_minor(pipeline_version, label="requested pipeline")
     config_registry_path = pathlib.Path(__file__).parent / "registries" / "registered_configs.json"
     config_registry = json.loads(config_registry_path.read_text())
     if config_key not in config_registry:
@@ -152,7 +153,7 @@ def prepare_aind_ephys_job(
         message = f"Parameters file '{parameters_file_path.name}' is missing required 'pipeline_version'."
         raise ValueError(message)
     if _parse_pipeline_major_minor(parameters["pipeline_version"], label="parameters file pipeline") != (
-        _parse_pipeline_major_minor(pipeline_version, label="requested pipeline")
+        requested_pipeline_major_minor
     ):
         message = (
             f"Parameters file '{parameters_file_path.name}' targets pipeline version "
