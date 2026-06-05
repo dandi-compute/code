@@ -4,13 +4,13 @@ import hashlib
 import importlib.metadata
 import io
 import json
+import logging
 import os
 import pathlib
 import re
 import subprocess
 import tempfile
 import urllib.request
-import logging
 
 import dandi
 import dandi.dandiapi
@@ -22,6 +22,7 @@ from ._handle_template import generate_aind_ephys_submission_script
 from ..dandiset._globals import _SANDBOX_DANDISET_ID
 
 _log = logging.getLogger(__name__)
+
 
 @pydantic.validate_call
 def prepare_aind_ephys_job(
@@ -324,7 +325,7 @@ def prepare_aind_ephys_job(
     }
 
     # Construct submission script from template
-    _log.info(f"Writing job files to {pipeline_file_path.parent}")
+    _log.info(f"Writing job files to {pipeline_file_path.parent.absolute()}")
     generate_aind_ephys_submission_script(
         script_file_path=script_file_path,
         log_directory=str(log_directory),
