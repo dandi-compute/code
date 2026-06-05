@@ -166,7 +166,7 @@ def prepare_aind_ephys_job(
             f"pipeline version {pipeline_version!r}. Requested pipeline version must be in the same major series."
         )
         raise ValueError(message)
-    if params_too_new:
+    elif params_too_new:
         message = (
             f"Parameters file '{parameters_file_path.name}' targets pipeline version "
             f"{parameters['pipeline_version']!r}, which is newer than requested "
