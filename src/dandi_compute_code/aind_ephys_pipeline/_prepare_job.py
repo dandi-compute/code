@@ -325,7 +325,7 @@ def prepare_aind_ephys_job(
     }
 
     # Construct submission script from template
-    _log.info(f"Writing job files to {pipeline_file_path.parent}")
+    _log.info(f"Writing job files to {pipeline_file_path.parent.absolute()}")
     generate_aind_ephys_submission_script(
         script_file_path=script_file_path,
         log_directory=str(log_directory),
