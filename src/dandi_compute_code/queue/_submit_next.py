@@ -107,7 +107,11 @@ def _submit_next(
             message = "sbatch submission failed - please check the logs to see more details."
             raise RuntimeError(message)
 
-        submitted_marker = submit_sh_path.parent / f"submitted_date-{datetime.datetime.now().isoformat()}"
+        now = datetime.datetime.now()
+        submitted_marker = submit_sh_path.parent / (
+            f"submitted_date-date-{now.year:04d}+{now.month:02d}+{now.day:02d}"
+            f"_time-{now.hour:02d}+{now.minute:02d}+{now.second:02d}"
+        )
         submitted_marker.write_bytes(b"1")
         _log.info("Created `submitted` file at: %s", submitted_marker.absolute())
 

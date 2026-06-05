@@ -1,6 +1,7 @@
 # ruff: noqa: F821
 import importlib.util as _importlib_util
 import pathlib as _pathlib
+import re
 
 _spec = _importlib_util.spec_from_file_location(
     "_process_queue_test_cases",
@@ -219,6 +220,10 @@ def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(
     marker_files = list((fixed_temp_dir / "001697" / _EXAMPLE_CODE_DIR_PATH).glob("submitted_date-*"))
     assert len(marker_files) == 1
     submitted_marker = marker_files[0]
+    assert re.fullmatch(
+        r"submitted_date-date-\d{4}\+\d{2}\+\d{2}_time-\d{2}\+\d{2}\+\d{2}",
+        submitted_marker.name,
+    )
     assert submitted_marker.read_bytes() == b"1"
     expected_message = f"Created `submitted` file at: {submitted_marker.absolute()}"
     assert any(expected_message in record.message for record in caplog.records)
