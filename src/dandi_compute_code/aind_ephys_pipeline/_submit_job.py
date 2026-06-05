@@ -38,7 +38,7 @@ def submit_job(script_file_path: pathlib.Path) -> None:
         raise RuntimeError(message)
 
     submitted_file_path = absolute_script_file_path.parent / "submitted"
-    _log.info(f"Creating `submitted` file at: {submitted_file_path.parent.absolute()}")
+    _log.info(f"Creating `submitted` file at: {submitted_file_path.absolute()}")
     submitted_file_path.write_bytes(b"1")
     result = subprocess.run(
         ["dandi", "upload"],
