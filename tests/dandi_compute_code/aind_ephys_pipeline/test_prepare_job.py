@@ -114,8 +114,7 @@ def test_prepare_aind_ephys_job_extracts_sub_entity_from_path(
             pipeline_directory=fake_pipeline_dir,
         )
 
-    mock_mkdtemp.assert_called_once()
-    assert mock_mkdtemp.call_args.kwargs["prefix"] == "prepare-job-"
+    mock_mkdtemp.assert_called_once_with(dir=mock.ANY, prefix="prepare-job-")
     assert f"sub-{expected_sub}" in str(script_path)
     assert expected_output_path in str(script_path)
 
