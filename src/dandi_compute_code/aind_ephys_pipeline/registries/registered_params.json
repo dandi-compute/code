@@ -34,6 +34,11 @@
     "md5": "1cbdbee7d92874823027ceca08415e32",
     "description": "A new default params file added in pipeline v1.2.2."
   },
+  "name-deterministic_version-1+2+2": {
+    "path": "name-deterministic_version-1+2+2.json",
+    "md5": "63a9a9d6aa9d09ece4baf53996986d0e",
+    "description": "Same as the `name-original_version-1+2+2.json`, but all `seed` entries are set to `0` instead of `null` or some other value."
+  },
   "default": {
     "path": "name-original_version-1+2+2.json",
     "md5": "1cbdbee7d92874823027ceca08415e32",
