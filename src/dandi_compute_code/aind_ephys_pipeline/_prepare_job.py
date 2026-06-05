@@ -155,9 +155,9 @@ def prepare_aind_ephys_job(
     parameters_pipeline_version = _parse_pipeline_version(
         parameters["pipeline_version"], label="parameters file pipeline"
     )
-    if parameters_pipeline_version[0] != requested_pipeline_version[0] or parameters_pipeline_version > (
-        requested_pipeline_version
-    ):
+    different_major = parameters_pipeline_version[0] != requested_pipeline_version[0]
+    params_too_new = parameters_pipeline_version > requested_pipeline_version
+    if different_major or params_too_new:
         message = (
             f"Parameters file '{parameters_file_path.name}' targets pipeline version "
             f"{parameters['pipeline_version']!r}, which is incompatible with requested "
