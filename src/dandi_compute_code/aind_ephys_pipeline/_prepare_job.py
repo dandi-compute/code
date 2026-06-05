@@ -24,12 +24,12 @@ from ..dandiset._globals import _SANDBOX_DANDISET_ID
 _log = logging.getLogger(__name__)
 
 
-def _parse_pipeline_major_minor(version: str, *, label: str) -> tuple[int, int]:
-    match = re.fullmatch(r"v?(?P<major>\d+)\.(?P<minor>\d+)\.\d+(?:[-+][0-9A-Za-z.+-]+)?", version)
+def _parse_pipeline_version(version: str, *, label: str) -> tuple[int, int, int]:
+    match = re.fullmatch(r"v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?:[-+][0-9A-Za-z.+-]+)?", version)
     if match is None:
         message = f"Unexpected {label} version format: {version!r}"
         raise ValueError(message)
-    return int(match["major"]), int(match["minor"])
+    return int(match["major"]), int(match["minor"]), int(match["patch"])
 
 
 @pydantic.validate_call
@@ -87,8 +87,8 @@ def prepare_aind_ephys_job(
         - ``config_key`` is not registered in ``registered_configs.json``.
         - ``parameters_key`` is not registered in ``registered_params.json``.
         - The resolved parameters file is missing a ``pipeline_version`` field.
-        - The parameters file ``pipeline_version`` is incompatible with the
-          requested ``pipeline_version``.
+        - The parameters file ``pipeline_version`` requires a newer or
+          different-major ``pipeline_version`` than was requested.
         - The MD5 checksum of the resolved config or parameters file does not
           match its registry entry.
         - ``content_id`` is not present in the content-id-to-Dandiset mapping.
@@ -109,7 +109,7 @@ def prepare_aind_ephys_job(
             "Version `v1.0.0` is incompatible with the new parameters file usage." "Please use `v1.0.0-fixes` instead."
         )
         raise ValueError(message)
-    requested_pipeline_major_minor = _parse_pipeline_major_minor(pipeline_version, label="requested pipeline")
+    requested_pipeline_version = _parse_pipeline_version(pipeline_version, label="requested pipeline")
     config_registry_path = pathlib.Path(__file__).parent / "registries" / "registered_configs.json"
     config_registry = json.loads(config_registry_path.read_text())
     if config_key not in config_registry:
@@ -152,13 +152,17 @@ def prepare_aind_ephys_job(
     if "pipeline_version" not in parameters:
         message = f"Parameters file '{parameters_file_path.name}' is missing required 'pipeline_version'."
         raise ValueError(message)
-    if _parse_pipeline_major_minor(parameters["pipeline_version"], label="parameters file pipeline") != (
-        requested_pipeline_major_minor
+    parameters_pipeline_version = _parse_pipeline_version(
+        parameters["pipeline_version"], label="parameters file pipeline"
+    )
+    if parameters_pipeline_version[0] != requested_pipeline_version[0] or parameters_pipeline_version > (
+        requested_pipeline_version
     ):
         message = (
             f"Parameters file '{parameters_file_path.name}' targets pipeline version "
             f"{parameters['pipeline_version']!r}, which is incompatible with requested "
-            f"pipeline version {pipeline_version!r}. Major and minor versions must match."
+            f"pipeline version {pipeline_version!r}. Requested pipeline version must be in the same major series "
+            "and at least as new as the parameters file version."
         )
         raise ValueError(message)
     params_id = actual_md5[0:7]

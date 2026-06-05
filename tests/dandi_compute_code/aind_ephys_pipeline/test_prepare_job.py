@@ -286,7 +286,44 @@ def test_prepare_aind_ephys_job_accepts_matching_minor_version_params(
 
 
 @pytest.mark.ai_generated
-def test_prepare_aind_ephys_job_rejects_incompatible_params_before_content_lookup(tmp_path: pathlib.Path) -> None:
+def test_prepare_aind_ephys_job_accepts_newer_pipeline_minor_version_for_default_params(
+    tmp_path: pathlib.Path,
+    fake_pipeline_dir: pathlib.Path,
+) -> None:
+    """Parameters remain compatible with newer pipeline minor versions in the same major series."""
+    content_id = "09000000-0000-0000-0000-000000000000"
+    mapping = {content_id: {"000001": "sub-mouse01/sub-mouse01_ecephys.nwb"}}
+
+    temp_dir = tmp_path / "tmpdir"
+    temp_dir.mkdir()
+
+    mock_dandiset = mock.MagicMock()
+    mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
+
+    with (
+        mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
+        mock.patch("subprocess.check_output", side_effect=_git_check_output),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.download.download"),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.upload.upload"),
+        mock.patch("tempfile.mkdtemp", return_value=str(temp_dir)),
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "fake-key"}),
+    ):
+        mock_client.return_value.get_dandiset.return_value = mock_dandiset
+
+        script_path = prepare_aind_ephys_job(
+            pipeline_version="v1.3.1",
+            content_id=content_id,
+            config_key="default",
+            parameters_key="default",
+            pipeline_directory=fake_pipeline_dir,
+        )
+
+    assert script_path.exists()
+
+
+@pytest.mark.ai_generated
+def test_incompatible_params_rejected_early(tmp_path: pathlib.Path) -> None:
     """Parameters version incompatibility is checked before any content lookup work."""
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
