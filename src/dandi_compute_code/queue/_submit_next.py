@@ -16,18 +16,19 @@ def _submit_next(
     *,
     processing_directory: pathlib.Path,
     max_submissions: int = 2,
+    test: bool = False,
 ) -> bool:
     """
     Submit the next eligible pending entries from the DANDI assets metadata.
 
     Loads the DANDI ``assets.jsonld`` metadata and identifies all attempt
     directories that contain a ``code/submit.sh`` asset but no adjacent
-    ``code/submitted`` asset.  For each candidate (up to *max_submissions*),
+    submitted-marker asset. For each candidate (up to *max_submissions*),
     a temporary working directory is created inside *processing_directory*,
     the ``code/`` tree is downloaded via ``dandi download --preserve-tree``,
-    the submission script is executed via ``sbatch``, a ``submitted`` marker
+    the submission script is executed via ``sbatch``, a submitted marker
     is written adjacent to ``submit.sh``, the marker is pushed back to the
-    archive via ``dandi upload --validation skip``, and the temporary
+    archive via ``dandi upload --allow-any-path``, and the temporary
     directory is removed on success.
 
     Parameters
@@ -36,6 +37,9 @@ def _submit_next(
         Directory in which temporary per-job working trees are created.
     max_submissions : int, optional
         Maximum number of pending jobs to submit.
+    test : bool, optional
+        When ``True``, leave temporary working directories on disk after
+        successful submission for debugging.
 
     Returns
     -------
@@ -57,9 +61,12 @@ def _submit_next(
     candidates: list[str] = []
     for asset_path in sorted(paths):
         if asset_path.endswith("/code/submit.sh"):
-            submitted_path = asset_path[: -len("submit.sh")] + "submitted"
-            if submitted_path not in paths:
-                code_dir_path = asset_path[: -len("/submit.sh")]
+            code_dir_path = asset_path[: -len("/submit.sh")]
+            submitted_marker_prefix = f"{code_dir_path}/submitted_date-"
+            has_submitted_marker = any(
+                path == f"{code_dir_path}/submitted" or path.startswith(submitted_marker_prefix) for path in paths
+            )
+            if not has_submitted_marker:
                 candidates.append(code_dir_path)
 
     if not candidates:
@@ -100,11 +107,16 @@ def _submit_next(
             message = "sbatch submission failed - please check the logs to see more details."
             raise RuntimeError(message)
 
-        submitted_marker = submit_sh_path.parent / "submitted"
-        submitted_marker.write_text(datetime.datetime.now().isoformat())
+        now = datetime.datetime.now()
+        submitted_marker = submit_sh_path.parent / (
+            f"submitted_date-date-{now.year:04d}+{now.month:02d}+{now.day:02d}"
+            f"_time-{now.hour:02d}+{now.minute:02d}+{now.second:02d}"
+        )
+        submitted_marker.write_bytes(b"1")
+        _log.info("Created `submitted` file at: %s", submitted_marker.absolute())
 
         result = subprocess.run(
-            ["dandi", "upload", "--validation", "skip"],
+            ["dandi", "upload", "--allow-any-path"],
             capture_output=True,
             text=True,
             cwd=dandiset_directory,
@@ -116,6 +128,9 @@ def _submit_next(
             message = "dandi upload failed - please check the logs to see more details."
             raise RuntimeError(message)
 
-        shutil.rmtree(temp_dir)
+        if test:
+            _log.info("Leaving temporary directory in place for test mode: %s", temp_dir)
+        else:
+            shutil.rmtree(temp_dir)
 
     return True

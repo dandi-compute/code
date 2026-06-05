@@ -1,5 +1,6 @@
 import logging
 import pathlib
+import re
 from unittest import mock
 
 import pytest
@@ -140,3 +141,26 @@ def test_submit_job_raises_with_relayed_streams_on_nonzero_exit(
         f"sbatch returned code: 1\nstdout: {stdout}\nstderr: {stderr}",
     ]
     assert str(exc_info.value) == "sbatch submission failed - please check the logs to see more details."
+
+
+@pytest.mark.ai_generated
+def test_submit_job_writes_integer_timestamped_submitted_marker(tmp_path: pathlib.Path) -> None:
+    script_file_path = tmp_path / "submit.sh"
+    script_file_path.write_text("#!/usr/bin/env bash\n")
+    sbatch_process = mock.Mock(returncode=0, stdout="Submitted batch job 123\n", stderr="")
+    upload_process = mock.Mock(returncode=0, stdout="", stderr="")
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "fake-key"}, clear=True),
+        mock.patch("subprocess.run", side_effect=[sbatch_process, upload_process]),
+    ):
+        submit_job(script_file_path=script_file_path)
+
+    marker_files = list(script_file_path.parent.glob("submitted_date-*"))
+    assert len(marker_files) == 1
+    submitted_marker = marker_files[0]
+    assert re.fullmatch(
+        r"submitted_date-date-\d{4}\+\d{2}\+\d{2}_time-\d{2}\+\d{2}\+\d{2}",
+        submitted_marker.name,
+    )
+    assert submitted_marker.read_bytes() == b"1"

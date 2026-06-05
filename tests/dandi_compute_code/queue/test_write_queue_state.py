@@ -103,7 +103,7 @@ def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pat
     """write_queue_state no longer depends on local submitted marker files."""
     queue_dir = _make_queue_dir(tmp_path)
     (tmp_path / "sub-mouse01" / "code").mkdir(parents=True)
-    (tmp_path / "sub-mouse01" / "code" / "submitted").write_text("")
+    (tmp_path / "sub-mouse01" / "code" / "submitted_date-date-2025+01+01_time-00+00+00").write_text("")
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_path = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
@@ -146,7 +146,7 @@ def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pat
 
 @pytest.mark.ai_generated
 def test_write_queue_state_submitted_marker_sets_has_been_submitted(tmp_path: pathlib.Path) -> None:
-    """Tests that write_queue_state sets has_been_submitted when code/submitted exists."""
+    """Tests that write_queue_state sets has_been_submitted when code/submitted_date-* exists."""
     queue_dir = _make_queue_dir(tmp_path)
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_prefix = (
@@ -162,8 +162,8 @@ def test_write_queue_state_submitted_marker_sets_has_been_submitted(tmp_path: pa
                 content_size=1,
                 content_id="attempt-code-id",
             ),
-            f"{attempt_prefix}/code/submitted": AssetMetadata(
-                path=f"{attempt_prefix}/code/submitted",
+            f"{attempt_prefix}/code/submitted_date-date-2025+01+01_time-00+00+00": AssetMetadata(
+                path=f"{attempt_prefix}/code/submitted_date-date-2025+01+01_time-00+00+00",
                 date_modified="2024-01-01T00:01:00+00:00",
                 content_size=1,
                 content_id="attempt-submitted-id",

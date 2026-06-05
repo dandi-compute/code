@@ -331,11 +331,68 @@ def test_cli_queue_process_passes_processing_directory(tmp_path: pathlib.Path) -
                 "--processing",
                 str(processing_dir),
             ],
-            env={"DANDI_API_KEY": "test-key"},
+            env={"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"},
         )
 
     assert result.exit_code == 0, result.output
     mock_process.assert_called_once_with(
         queue_directory=queue_dir,
         processing_directory=processing_dir,
+        test=False,
     )
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_process_passes_test_flag(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue process forwards --test to process_queue."""
+    queue_dir = _make_queue_dir(tmp_path)
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    runner = CliRunner()
+
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.process_queue") as mock_process:
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "queue",
+                "process",
+                "--queue",
+                str(queue_dir),
+                "--processing",
+                str(processing_dir),
+                "--test",
+            ],
+            env={"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"},
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_process.assert_called_once_with(
+        queue_directory=queue_dir,
+        processing_directory=processing_dir,
+        test=True,
+    )
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_process_requires_dandi_devel(tmp_path: pathlib.Path) -> None:
+    """Queue process command exits non-zero when DANDI_DEVEL is not set."""
+    queue_dir = _make_queue_dir(tmp_path)
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    runner = CliRunner()
+
+    result = runner.invoke(
+        _dandicompute_group,
+        [
+            "queue",
+            "process",
+            "--queue",
+            str(queue_dir),
+            "--processing",
+            str(processing_dir),
+        ],
+        env={"DANDI_API_KEY": "test-key"},
+    )
+
+    assert result.exit_code != 0
+    assert "DANDI_DEVEL" in result.output

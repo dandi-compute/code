@@ -9,7 +9,7 @@ def _resolve_unsubmitted_attempt_dir(*, base_dir: pathlib.Path, entry: dict) -> 
         return None
 
     attempt_dir = _resolve_attempt_dir(base_dir=base_dir, entry=entry)
-    submitted_marker = attempt_dir / "code" / "submitted"
-    if submitted_marker.exists():
+    code_dir = attempt_dir / "code"
+    if (code_dir / "submitted").exists() or any(code_dir.glob("submitted_date-*")):
         return None
     return attempt_dir

@@ -40,6 +40,19 @@ def _require_dandi_api_key() -> None:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
 
 
+def _require_dandi_devel() -> None:
+    """
+    Verify that the ``DANDI_DEVEL`` environment variable is set and non-empty.
+
+    Raises
+    ------
+    click.ClickException
+        If ``DANDI_DEVEL`` is unset or empty.
+    """
+    if "DANDI_DEVEL" not in os.environ or not os.environ["DANDI_DEVEL"]:
+        raise click.ClickException("`DANDI_DEVEL` environment variable is not set.")
+
+
 # dandicompute
 @click.group(name="dandicompute")
 def _dandicompute_group():
@@ -397,17 +410,28 @@ def _queue_stats_command(
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--test",
+    "test",
+    help="Preserve temporary processing directories instead of cleaning them up.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
 def _queue_process_command(
     queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
     silent: bool = False,
+    test: bool = False,
 ) -> None:
     """Submit queued jobs when no active dandicompute jobs are running."""
     _configure_logging(silent=silent)
     _require_dandi_api_key()
+    _require_dandi_devel()
     process_queue(
         queue_directory=queue_directory,
         processing_directory=processing_directory,
+        test=test,
     )
 
 
