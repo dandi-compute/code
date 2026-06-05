@@ -506,7 +506,7 @@ def test_clean_unsubmitted_capsules_removed_entry_via_fallback_attempt_resolutio
         dandiset_dir
         / "derivatives"
         / "dandiset-001849"
-        / "sub-test"
+        / "sub-mouse01"
         / "pipeline-aind+ephys"
         / "version-v1.1.1+b268fd2+a66c8df_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
     )
