@@ -29,7 +29,7 @@
     "md5": "b6ed9dd7557ed149b7f7d57918632716",
     "description": "The current recommendations for running without any motion correction."
   },
-  "custom+preprocessing+default": {
+  "name-original_version-1+2+2": {
     "path": "name-original_version-1+2+2.json",
     "md5": "1cbdbee7d92874823027ceca08415e32",
     "description": "A new default params file added in pipeline v1.2.2."
