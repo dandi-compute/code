@@ -110,7 +110,7 @@ def test_prepare_aind_ephys_job_extracts_sub_entity_from_path(
             pipeline_version="v1.1.0",
             content_id=content_id,
             config_key="default",
-            parameters_key="default",
+            parameters_key="original",
             pipeline_directory=fake_pipeline_dir,
         )
 
@@ -150,7 +150,7 @@ def test_prepare_aind_ephys_job_test_content_id_uses_sub_test(
             pipeline_version="v1.1.0",
             content_id=test_content_id,
             config_key="default",
-            parameters_key="default",
+            parameters_key="original",
             pipeline_directory=fake_pipeline_dir,
         )
 
@@ -175,7 +175,7 @@ def test_prepare_aind_ephys_job_raises_on_missing_sub_entity(tmp_path: pathlib.P
             pipeline_version="v1.1.0",
             content_id=content_id,
             config_key="default",
-            parameters_key="default",
+            parameters_key="original",
             pipeline_directory=tmp_path,
         )
 
@@ -194,7 +194,7 @@ def test_prepare_aind_ephys_job_raises_on_sandbox_dandiset() -> None:
             pipeline_version="v1.1.0",
             content_id=content_id,
             config_key="default",
-            parameters_key="default",
+            parameters_key="original",
             pipeline_directory=None,
         )
 
@@ -233,7 +233,7 @@ def test_prepare_aind_ephys_job_uses_simplified_job_id_format(
             pipeline_version="v1.1.0",
             content_id=content_id,
             config_key="default",
-            parameters_key="default",
+            parameters_key="original",
             pipeline_directory=fake_pipeline_dir,
         )
 
@@ -290,9 +290,7 @@ def test_prepare_aind_ephys_job_rejects_incompatible_params_before_content_looku
     """Parameters version incompatibility is checked before any content lookup work."""
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
-        mock.patch(
-            "dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient"
-        ) as mock_client,
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
         pytest.raises(ValueError, match="targets pipeline version .* incompatible with requested pipeline version"),
     ):
         prepare_aind_ephys_job(
