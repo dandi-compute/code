@@ -4,12 +4,12 @@
     "md5": "29106e194b05d7ef5e8ebc39c573f67f",
     "description": "The original default recommended parameter set on the AIND ephys pipeline repo."
   },
-  "no+motion_v0": {
+  "no-motion-v1.1.0-r0": {
     "path": "name-no+motion_revision-0.json",
     "md5": "d460cf8b358cb7484acd8ad2be164bb9",
     "description": "The first attempt to disable motion correction from being applied during processing."
   },
-  "no+motion_v1": {
+  "no-motion-v1.1.0-r0": {
     "path": "name-no+motion_revision-1.json",
     "md5": "b6ed9dd7557ed149b7f7d57918632716",
     "description": "A revision of `name-no+motion_revision-0.json` which disables motion correction native to the spike sorters. Also clamps the seeds similarly to `name-determinstic.json`."
@@ -19,22 +19,22 @@
     "md5": "98b17414204e6b80aa81fb8b43cdecc5",
     "description": "Same as the `name-original.json`, but all `seed` entries are clamped to `0` instead of `null` or some other value."
   },
-  "all+channels": {
+  "all-channels": {
     "path": "name-all+channels.json",
     "md5": "27707a82a7086f58cbb18cbe7e8f1e9d",
     "description": "Same as the `name-deterministic.json`, but all parameters are set to include any detected 'bad channels' and not exclude any channels at any step of the pipeline."
   },
-  "no+motion": {
+  "no-motion": {
     "path": "name-no+motion_revision-1.json",
     "md5": "b6ed9dd7557ed149b7f7d57918632716",
     "description": "The current recommendations for running without any motion correction."
   },
-  "name-original_version-1+2+2": {
+  "original-v1.2.2": {
     "path": "name-original_version-1+2+2.json",
     "md5": "1cbdbee7d92874823027ceca08415e32",
     "description": "A new default params file added in pipeline v1.2.2."
   },
-  "name-deterministic_version-1+2+2": {
+  "deterministic-v1.2.2": {
     "path": "name-deterministic_version-1+2+2.json",
     "md5": "63a9a9d6aa9d09ece4baf53996986d0e",
     "description": "Same as the `name-original_version-1+2+2.json`, but all `seed` entries are set to `0` instead of `null` or some other value."
