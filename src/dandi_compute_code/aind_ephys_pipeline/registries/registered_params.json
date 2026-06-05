@@ -31,12 +31,12 @@
   },
   "custom+preprocessing+default": {
     "path": "name-original_version-1+2+2.json",
-    "md5": "5cb0ddd1f46064e3221569295b966727",
+    "md5": "1cbdbee7d92874823027ceca08415e32",
     "description": "A new default params file added in pipeline v1.2.2."
   },
   "default": {
     "path": "name-original_version-1+2+2.json",
-    "md5": "5cb0ddd1f46064e3221569295b966727",
+    "md5": "1cbdbee7d92874823027ceca08415e32",
     "description": "The current recommended default parameter set."
   }
 }
