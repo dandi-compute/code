@@ -323,15 +323,36 @@ def test_prepare_aind_ephys_job_accepts_newer_pipeline_minor_version_for_default
 
 
 @pytest.mark.ai_generated
-def test_incompatible_params_rejected_early(tmp_path: pathlib.Path) -> None:
-    """Parameters version incompatibility is checked before any content lookup work."""
+def test_newer_params_rejected_early(tmp_path: pathlib.Path) -> None:
+    """Newer parameters versions are rejected before any content lookup work."""
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
         mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
-        pytest.raises(ValueError, match="targets pipeline version .* incompatible with requested pipeline version"),
+        pytest.raises(ValueError, match="targets pipeline version .* newer than requested pipeline version"),
     ):
         prepare_aind_ephys_job(
             pipeline_version="v1.1.0",
+            dandiset_id="000001",
+            dandiset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+            config_key="default",
+            parameters_key="default",
+            pipeline_directory=tmp_path,
+        )
+
+    mock_client.assert_not_called()
+    mock_urlopen.assert_not_called()
+
+
+@pytest.mark.ai_generated
+def test_different_major_params_rejected_early(tmp_path: pathlib.Path) -> None:
+    """Different-major parameters versions are rejected before any content lookup work."""
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
+        pytest.raises(ValueError, match="different major series than requested pipeline version"),
+    ):
+        prepare_aind_ephys_job(
+            pipeline_version="v2.0.0",
             dandiset_id="000001",
             dandiset_path="sub-mouse01/sub-mouse01_ecephys.nwb",
             config_key="default",

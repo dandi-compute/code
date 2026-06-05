@@ -87,8 +87,10 @@ def prepare_aind_ephys_job(
         - ``config_key`` is not registered in ``registered_configs.json``.
         - ``parameters_key`` is not registered in ``registered_params.json``.
         - The resolved parameters file is missing a ``pipeline_version`` field.
-        - The parameters file ``pipeline_version`` requires a newer or
-          different-major ``pipeline_version`` than was requested.
+        - The parameters file ``pipeline_version`` is in a different major
+          series than the requested ``pipeline_version``.
+        - The parameters file ``pipeline_version`` is newer than the requested
+          ``pipeline_version``.
         - The MD5 checksum of the resolved config or parameters file does not
           match its registry entry.
         - ``content_id`` is not present in the content-id-to-Dandiset mapping.
@@ -157,12 +159,19 @@ def prepare_aind_ephys_job(
     )
     different_major = parameters_pipeline_version[0] != requested_pipeline_version[0]
     params_too_new = parameters_pipeline_version > requested_pipeline_version
-    if different_major or params_too_new:
+    if different_major:
         message = (
             f"Parameters file '{parameters_file_path.name}' targets pipeline version "
-            f"{parameters['pipeline_version']!r}, which is incompatible with requested "
-            f"pipeline version {pipeline_version!r}. Requested pipeline version must be in the same major series "
-            "and at least as new as the parameters file version."
+            f"{parameters['pipeline_version']!r}, which is in a different major series than requested "
+            f"pipeline version {pipeline_version!r}. Requested pipeline version must be in the same major series."
+        )
+        raise ValueError(message)
+    if params_too_new:
+        message = (
+            f"Parameters file '{parameters_file_path.name}' targets pipeline version "
+            f"{parameters['pipeline_version']!r}, which is newer than requested "
+            f"pipeline version {pipeline_version!r}. Requested pipeline version must be at least as new as the "
+            "parameters file version."
         )
         raise ValueError(message)
     params_id = actual_md5[0:7]
