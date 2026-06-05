@@ -39,9 +39,8 @@ def submit_job(script_file_path: pathlib.Path) -> None:
         message = "sbatch submission failed - please check the logs to see more details."
         raise RuntimeError(message)
 
-    submitted_file_path = absolute_script_file_path.parent / "submitted"
-    _log.info(f"Creating `submitted` file at: {submitted_file_path.absolute()}")
-    write_submitted_marker(submit_script_path=absolute_script_file_path)
+    submitted_file_path = write_submitted_marker(submit_script_path=absolute_script_file_path)
+    _log.info(f"Created `submitted` file at: {submitted_file_path.absolute()}")
     result = subprocess.run(
         ["dandi", "upload"],
         capture_output=True,
