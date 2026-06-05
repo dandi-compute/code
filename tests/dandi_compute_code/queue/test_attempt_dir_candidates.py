@@ -27,8 +27,8 @@ globals().update(
         ("sub-mouse01", pathlib.Path("derivatives/dandiset-000001/sub-mouse01/pipeline-test")),
         ("sub-mouse01/ses-01", pathlib.Path("derivatives/dandiset-000001/sub-mouse01/ses-01/pipeline-test")),
         (
-            "sub-test/sourcedata/aind-sample.nwb",
-            pathlib.Path("derivatives/dandiset-000001/sub-test/sourcedata/aind-sample/pipeline-test"),
+            "sourcedata/aind-sample.nwb",
+            pathlib.Path("derivatives/dandiset-000001/sourcedata/aind-sample/pipeline-test"),
         ),
     ],
 )
