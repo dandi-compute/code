@@ -293,6 +293,7 @@ def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_
     assert state_entries[0]["has_logs"] is True
     assert state_entries[0]["job_completion_time"] == "2026-05-24T10:30:00+00:00"
     assert state_entries[0]["output_paths"] == {f"{attempt_prefix}/derivatives/output.nwb": "output-content-id"}
+    assert state_entries[0]["log_paths"] == {f"{attempt_prefix}/logs/stdout.txt": "log-content-id"}
 
 
 @pytest.mark.ai_generated
@@ -771,6 +772,51 @@ def test_write_queue_state_output_paths_empty_when_no_output(tmp_path: pathlib.P
     assert state_entries[0]["output_paths"] == {}
 
 
+def test_write_queue_state_log_paths_empty_when_no_logs(tmp_path: pathlib.Path) -> None:
+    """write_queue_state writes log_paths as an empty dict when has_logs is False."""
+    queue_dir = _make_queue_dir(tmp_path)
+    source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
+    attempt_prefix = (
+        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
+        "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1"
+    )
+    metadata = AssetsJsonldMetadata(
+        content_id_to_asset={},
+        path_to_asset_metadata={
+            f"{attempt_prefix}/code/submit.sh": AssetMetadata(
+                path=f"{attempt_prefix}/code/submit.sh",
+                date_modified="2024-01-01T00:00:00+00:00",
+                content_size=1,
+                content_id="code-id",
+            ),
+        },
+    )
+    upstream_metadata = AssetsJsonldMetadata(
+        content_id_to_asset={},
+        path_to_asset_metadata={
+            source_path: AssetMetadata(
+                path=source_path,
+                date_modified="2024-01-01T00:00:00+00:00",
+                content_size=1234,
+                content_id="source-id",
+            )
+        },
+    )
+    with (
+        mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata),
+        mock.patch(
+            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            return_value=upstream_metadata,
+        ),
+    ):
+        write_queue_state(queue_directory=queue_dir)
+
+    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    assert len(state_entries) == 1
+    assert state_entries[0]["has_logs"] is False
+    assert state_entries[0]["log_paths"] == {}
+
+
 def test_write_queue_state_output_paths_maps_asset_paths_to_blob_ids(tmp_path: pathlib.Path) -> None:
     """write_queue_state populates output_paths with all derivatives asset paths mapped to their blob IDs."""
     queue_dir = _make_queue_dir(tmp_path)
@@ -828,4 +874,70 @@ def test_write_queue_state_output_paths_maps_asset_paths_to_blob_ids(tmp_path: p
     assert state_entries[0]["output_paths"] == {
         f"{attempt_prefix}/derivatives/output.nwb": "output-blob-id-1",
         f"{attempt_prefix}/derivatives/extra.json": "output-blob-id-2",
+    }
+
+
+def test_write_queue_state_log_paths_map_asset_paths_to_blob_ids(tmp_path: pathlib.Path) -> None:
+    """write_queue_state populates log_paths with log asset paths mapped to their blob IDs."""
+    queue_dir = _make_queue_dir(tmp_path)
+    source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
+    attempt_prefix = (
+        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
+        "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1"
+    )
+    metadata = AssetsJsonldMetadata(
+        content_id_to_asset={},
+        path_to_asset_metadata={
+            f"{attempt_prefix}/code/submit.sh": AssetMetadata(
+                path=f"{attempt_prefix}/code/submit.sh",
+                date_modified="2024-01-01T00:00:00+00:00",
+                content_size=1,
+                content_id="code-id",
+            ),
+            f"{attempt_prefix}/logs/stdout.txt": AssetMetadata(
+                path=f"{attempt_prefix}/logs/stdout.txt",
+                date_modified="2024-01-01T00:01:00+00:00",
+                content_size=100,
+                content_id="log-blob-id-1",
+            ),
+            f"{attempt_prefix}/logs/stderr.txt": AssetMetadata(
+                path=f"{attempt_prefix}/logs/stderr.txt",
+                date_modified="2024-01-01T00:02:00+00:00",
+                content_size=10,
+                content_id="log-blob-id-2",
+            ),
+            f"{attempt_prefix}/logs/dataset_description.json": AssetMetadata(
+                path=f"{attempt_prefix}/logs/dataset_description.json",
+                date_modified="2024-01-01T00:03:00+00:00",
+                content_size=10,
+                content_id="ignored-log-id",
+            ),
+        },
+    )
+    upstream_metadata = AssetsJsonldMetadata(
+        content_id_to_asset={},
+        path_to_asset_metadata={
+            source_path: AssetMetadata(
+                path=source_path,
+                date_modified="2024-01-01T00:00:00+00:00",
+                content_size=1234,
+                content_id="source-id",
+            )
+        },
+    )
+    with (
+        mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata),
+        mock.patch(
+            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            return_value=upstream_metadata,
+        ),
+    ):
+        write_queue_state(queue_directory=queue_dir)
+
+    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    assert len(state_entries) == 1
+    assert state_entries[0]["has_logs"] is True
+    assert state_entries[0]["log_paths"] == {
+        f"{attempt_prefix}/logs/stdout.txt": "log-blob-id-1",
+        f"{attempt_prefix}/logs/stderr.txt": "log-blob-id-2",
     }
