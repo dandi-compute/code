@@ -194,6 +194,7 @@ def _new_attempt_record(job: JobInfo) -> dict[str, object]:
         "config": job.config,
         "attempt": job.attempt,
         "has_code": False,
+        "has_been_submitted": False,
         "has_output": False,
         "has_logs": False,
         "codebase": job.codebase,
@@ -232,6 +233,8 @@ def _collect_attempts(local_metadata: AssetsJsonldMetadata) -> _AttemptCollectio
 
         if _subpath_is_under(subpath, "code"):
             record["has_code"] = True
+        if subpath == "code/submitted":
+            record["has_been_submitted"] = True
         if _subpath_is_under(subpath, "derivatives"):
             record["has_output"] = True
         if subpath.startswith("logs/"):
@@ -312,8 +315,8 @@ def write_queue_state(*, queue_directory: pathlib.Path) -> None:
     ``derivatives/dandiset-*/.../pipeline-*/..._attempt-*`` path structure in
     ``assets.jsonld``. ``dandi_path`` is derived from the path segment between
     ``dandiset-*`` and ``pipeline-*`` with ``.nwb`` appended.
-    ``has_code``/``has_output``/``has_logs`` are inferred from the assets
-    present under each attempt directory.
+    ``has_code``/``has_been_submitted``/``has_output``/``has_logs`` are
+    inferred from the assets present under each attempt directory.
 
     For meta-analysis dandisets, the ``content_id`` and ``asset_size_bytes``
     of each attempt's source NWB are resolved by fetching the upstream

@@ -92,7 +92,10 @@ def test_write_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 5
-    assert all(entry["has_code"] and not entry["has_output"] and not entry["has_logs"] for entry in state_entries)
+    assert all(
+        entry["has_code"] and not entry["has_been_submitted"] and not entry["has_output"] and not entry["has_logs"]
+        for entry in state_entries
+    )
 
 
 @pytest.mark.ai_generated
@@ -139,6 +142,59 @@ def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pat
         write_queue_state(queue_directory=queue_dir)
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
+
+
+@pytest.mark.ai_generated
+def test_write_queue_state_submitted_marker_sets_has_been_submitted(tmp_path: pathlib.Path) -> None:
+    """Tests that write_queue_state sets has_been_submitted when code/submitted exists."""
+    queue_dir = _make_queue_dir(tmp_path)
+    source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
+    attempt_prefix = (
+        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
+        "version-v1.0_codebase-v0.3.0_params-default_config-def5678_attempt-1"
+    )
+    metadata = AssetsJsonldMetadata(
+        content_id_to_asset={},
+        path_to_asset_metadata={
+            f"{attempt_prefix}/code/submit.sh": AssetMetadata(
+                path=f"{attempt_prefix}/code/submit.sh",
+                date_modified="2024-01-01T00:00:00+00:00",
+                content_size=1,
+                content_id="attempt-code-id",
+            ),
+            f"{attempt_prefix}/code/submitted": AssetMetadata(
+                path=f"{attempt_prefix}/code/submitted",
+                date_modified="2024-01-01T00:01:00+00:00",
+                content_size=1,
+                content_id="attempt-submitted-id",
+            ),
+        },
+    )
+    upstream_metadata = AssetsJsonldMetadata(
+        content_id_to_asset={},
+        path_to_asset_metadata={
+            source_path: AssetMetadata(
+                path=source_path,
+                date_modified="2024-01-01T00:00:00+00:00",
+                content_size=1234,
+                content_id="source-id",
+            )
+        },
+    )
+    with (
+        mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata),
+        mock.patch(
+            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            return_value=upstream_metadata,
+        ),
+    ):
+        write_queue_state(queue_directory=queue_dir)
+    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    assert len(state_entries) == 1
+    assert state_entries[0]["has_code"] is True
+    assert state_entries[0]["has_been_submitted"] is True
+    assert state_entries[0]["has_output"] is False
+    assert state_entries[0]["has_logs"] is False
 
 
 @pytest.mark.ai_generated
@@ -232,6 +288,7 @@ def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_
     assert state_entries[0]["content_id"] == "source-content-id"
     assert state_entries[0]["asset_size_bytes"] == 1234
     assert state_entries[0]["has_code"] is True
+    assert state_entries[0]["has_been_submitted"] is False
     assert state_entries[0]["has_output"] is True
     assert state_entries[0]["has_logs"] is True
     assert state_entries[0]["job_completion_time"] == "2026-05-24T10:30:00+00:00"
