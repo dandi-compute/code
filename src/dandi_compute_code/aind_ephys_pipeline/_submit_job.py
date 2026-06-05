@@ -5,6 +5,8 @@ import subprocess
 
 import pydantic
 
+from .._write_submitted_marker import write_submitted_marker
+
 _log = logging.getLogger(__name__)
 
 
@@ -39,7 +41,7 @@ def submit_job(script_file_path: pathlib.Path) -> None:
 
     submitted_file_path = absolute_script_file_path.parent / "submitted"
     _log.info(f"Creating `submitted` file at: {submitted_file_path.absolute()}")
-    submitted_file_path.write_bytes(b"1")
+    write_submitted_marker(submit_script_path=absolute_script_file_path)
     result = subprocess.run(
         ["dandi", "upload"],
         capture_output=True,

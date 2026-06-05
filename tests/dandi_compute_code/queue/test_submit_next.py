@@ -218,7 +218,7 @@ def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(
     assert result is True
     submitted_marker = fixed_temp_dir / "001697" / _EXAMPLE_CODE_DIR_PATH / "submitted"
     assert submitted_marker.exists()
-    assert submitted_marker.read_text()  # non-empty ISO datetime
+    assert submitted_marker.read_bytes() == b"1"
     expected_message = f"Created submitted marker at {submitted_marker}"
     assert any(expected_message in record.message for record in caplog.records)
 
@@ -310,6 +310,34 @@ def test_submit_next_does_not_clean_up_temp_dir_on_download_failure(tmp_path: pa
     ):
         with pytest.raises(RuntimeError, match="dandi download failed"):
             _submit_next(processing_directory=processing_dir)
+
+    mock_rmtree.assert_not_called()
+
+
+@pytest.mark.ai_generated
+def test_submit_next_does_not_clean_up_temp_dir_in_test_mode(tmp_path: pathlib.Path) -> None:
+    """_submit_next preserves temp dir after success when test mode is enabled."""
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    fixed_temp_dir = tmp_path / "temp_work"
+    fixed_temp_dir.mkdir()
+
+    metadata = _make_metadata_with_submit_sh(_EXAMPLE_CODE_DIR_PATH)
+
+    with (
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.load_assets_jsonld_metadata",
+            return_value=metadata,
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            return_value=str(fixed_temp_dir),
+        ),
+        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree") as mock_rmtree,
+    ):
+        mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
+        _submit_next(processing_directory=processing_dir, test=True)
 
     mock_rmtree.assert_not_called()
 

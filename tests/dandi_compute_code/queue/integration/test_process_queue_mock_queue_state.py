@@ -85,6 +85,7 @@ def test_process_queue_submits_when_no_jobs_running(mock_queue_state: tuple[path
     mock_submit.assert_called_once_with(
         processing_directory=processing_dir,
         max_submissions=2,
+        test=False,
     )
 
 
@@ -122,6 +123,7 @@ def test_process_queue_submits_one_when_one_job_running(mock_queue_state: tuple[
     mock_submit.assert_called_once_with(
         processing_directory=processing_dir,
         max_submissions=1,
+        test=False,
     )
 
 
@@ -144,4 +146,27 @@ def test_process_queue_passes_processing_directory_to_submit_next(
     mock_submit.assert_called_once_with(
         processing_directory=processing_dir,
         max_submissions=2,
+        test=False,
+    )
+
+
+@pytest.mark.ai_generated
+def test_process_queue_forwards_test_flag(mock_queue_state: tuple[pathlib.Path, pathlib.Path]) -> None:
+    """process_queue forwards test=True to _submit_next."""
+    queue_dir, processing_dir = mock_queue_state
+
+    with (
+        mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=0),
+        mock.patch("dandi_compute_code.queue._process_queue._submit_next", return_value=True) as mock_submit,
+    ):
+        process_queue(
+            queue_directory=queue_dir,
+            processing_directory=processing_dir,
+            test=True,
+        )
+
+    mock_submit.assert_called_once_with(
+        processing_directory=processing_dir,
+        max_submissions=2,
+        test=True,
     )

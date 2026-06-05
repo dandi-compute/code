@@ -11,6 +11,7 @@ def process_queue(
     *,
     queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
+    test: bool = False,
 ) -> None:
     """
     Submit jobs from ``state.jsonl`` up to two total
@@ -27,6 +28,8 @@ def process_queue(
     :param processing_directory: Path to the directory used for temporary working trees
         during job submission.
     :type processing_directory: pathlib.Path
+    :param test: If ``True``, preserve temporary processing directories on success.
+    :type test: bool
     :raises FileNotFoundError: If ``state.jsonl`` is not found in *queue_directory*.
     """
     state_file = queue_directory / "state.jsonl"
@@ -43,4 +46,5 @@ def process_queue(
         _submit_next(
             processing_directory=processing_directory,
             max_submissions=available_slots,
+            test=test,
         )

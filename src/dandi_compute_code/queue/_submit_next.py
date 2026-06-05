@@ -1,10 +1,10 @@
-import datetime
 import logging
 import pathlib
 import shutil
 import subprocess
 import tempfile
 
+from .._write_submitted_marker import write_submitted_marker
 from ..dandiset._load_assets_jsonld_metadata import load_assets_jsonld_metadata
 
 _log = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ def _submit_next(
     *,
     processing_directory: pathlib.Path,
     max_submissions: int = 2,
+    test: bool = False,
 ) -> bool:
     """
     Submit the next eligible pending entries from the DANDI assets metadata.
@@ -36,6 +37,9 @@ def _submit_next(
         Directory in which temporary per-job working trees are created.
     max_submissions : int, optional
         Maximum number of pending jobs to submit.
+    test : bool, optional
+        When ``True``, leave temporary working directories on disk after
+        successful submission for debugging.
 
     Returns
     -------
@@ -100,8 +104,7 @@ def _submit_next(
             message = "sbatch submission failed - please check the logs to see more details."
             raise RuntimeError(message)
 
-        submitted_marker = submit_sh_path.parent / "submitted"
-        submitted_marker.write_text(datetime.datetime.now().isoformat())
+        submitted_marker = write_submitted_marker(submit_script_path=submit_sh_path)
         _log.info("Created submitted marker at %s", submitted_marker)
 
         result = subprocess.run(
@@ -117,6 +120,9 @@ def _submit_next(
             message = "dandi upload failed - please check the logs to see more details."
             raise RuntimeError(message)
 
-        shutil.rmtree(temp_dir)
+        if test:
+            _log.info("Leaving temporary directory in place for test mode: %s", temp_dir)
+        else:
+            shutil.rmtree(temp_dir)
 
     return True
