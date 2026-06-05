@@ -769,6 +769,7 @@ def test_write_queue_state_output_paths_empty_when_no_output(tmp_path: pathlib.P
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
     assert state_entries[0]["has_output"] is False
+    assert state_entries[0]["dataset_description_path"] is None
     assert state_entries[0]["output_paths"] == {}
 
 

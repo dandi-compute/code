@@ -238,12 +238,12 @@ def _collect_attempts(local_metadata: AssetsJsonldMetadata) -> _AttemptCollectio
             record["has_code"] = True
         if subpath.startswith("code/submitted"):
             record["has_been_submitted"] = True
-        if _subpath_is_under(subpath, "derivatives"):
-            record["has_output"] = True
-            record["output_paths"][asset_path] = asset_metadata.content_id
         if subpath == "dataset_description.json":
             record["dataset_description_path"] = asset_path
-        if subpath.startswith("logs/"):
+        elif _subpath_is_under(subpath, "derivatives"):
+            record["has_output"] = True
+            record["output_paths"][asset_path] = asset_metadata.content_id
+        elif subpath.startswith("logs/"):
             log_relative_path = subpath.removeprefix("logs/")
             if log_relative_path and log_relative_path != "dataset_description.json":
                 record["has_logs"] = True
