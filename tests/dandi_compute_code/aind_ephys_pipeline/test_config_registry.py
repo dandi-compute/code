@@ -4,6 +4,8 @@ import pathlib
 
 import pytest
 
+_DEFAULT_PARAMS_PATH = "name-custom+preprocessing+default_version-1+2+2.json"
+
 
 @pytest.mark.ai_generated
 def test_registered_configs_md5_matches_files() -> None:
@@ -22,14 +24,14 @@ def test_registered_configs_md5_matches_files() -> None:
 
 @pytest.mark.ai_generated
 def test_registered_default_params_matches_custom_preprocessing_file() -> None:
-    """registered_params.json points the default params entry at the custom preprocessing file."""
+    """Verify that registered_params.json default entry points to the custom preprocessing file."""
     repository_root = pathlib.Path(__file__).resolve().parents[3]
     pipeline_dir = repository_root / "src" / "dandi_compute_code" / "aind_ephys_pipeline"
     registry_path = pipeline_dir / "registries" / "registered_params.json"
     registry = json.loads(registry_path.read_text())
 
     default_entry = registry["default"]
-    assert default_entry["path"] == "name-custom+preprocessing+default_version-1+2+2.json"
+    assert default_entry["path"] == _DEFAULT_PARAMS_PATH
     params_path = pipeline_dir / "params" / default_entry["path"]
     assert params_path.exists()
     assert hashlib.md5(params_path.read_bytes()).hexdigest() == default_entry["md5"]  # noqa: S324
