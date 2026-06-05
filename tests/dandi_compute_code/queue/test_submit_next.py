@@ -35,10 +35,10 @@ def _make_metadata_with_submit_sh(*code_dir_paths: str) -> AssetsJsonldMetadata:
 
 
 def _make_metadata_with_submitted(*code_dir_paths: str) -> AssetsJsonldMetadata:
-    """Return metadata with both ``code/submit.sh`` and ``code/submitted`` for each path."""
+    """Return metadata with both ``code/submit.sh`` and submitted-marker assets for each path."""
     path_to_asset_metadata = {}
     for code_dir_path in code_dir_paths:
-        for filename in ("submit.sh", "submitted"):
+        for filename in ("submit.sh", "submitted_date-2025-01-01T00:00:00"):
             asset_path = f"{code_dir_path}/{filename}"
             path_to_asset_metadata[asset_path] = AssetMetadata(
                 path=asset_path,
@@ -107,7 +107,7 @@ def test_submit_next_returns_false_and_logs_when_no_eligible_entries(
 def test_submit_next_returns_false_when_all_submit_sh_have_submitted_marker(
     tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """_submit_next returns False when every code/submit.sh has an adjacent code/submitted."""
+    """_submit_next returns False when every code/submit.sh has an adjacent submitted marker."""
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
 
@@ -191,7 +191,7 @@ def test_submit_next_calls_sbatch_with_submit_sh_path(tmp_path: pathlib.Path) ->
 def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(
     tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """_submit_next writes code/submitted adjacent to code/submit.sh after sbatch."""
+    """_submit_next writes a submitted marker adjacent to code/submit.sh after sbatch."""
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
     fixed_temp_dir = tmp_path / "temp_work"
@@ -216,8 +216,9 @@ def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(
         result = _submit_next(processing_directory=processing_dir)
 
     assert result is True
-    submitted_marker = fixed_temp_dir / "001697" / _EXAMPLE_CODE_DIR_PATH / "submitted"
-    assert submitted_marker.exists()
+    marker_files = list((fixed_temp_dir / "001697" / _EXAMPLE_CODE_DIR_PATH).glob("submitted_date-*"))
+    assert len(marker_files) == 1
+    submitted_marker = marker_files[0]
     assert submitted_marker.read_bytes() == b"1"
     expected_message = f"Created `submitted` file at: {submitted_marker.absolute()}"
     assert any(expected_message in record.message for record in caplog.records)
@@ -386,7 +387,7 @@ def test_submit_next_submits_up_to_max_submissions(tmp_path: pathlib.Path) -> No
 
 @pytest.mark.ai_generated
 def test_submit_next_skips_candidates_with_submitted_in_metadata(tmp_path: pathlib.Path) -> None:
-    """_submit_next skips code dirs where code/submitted is already in the metadata."""
+    """_submit_next skips code dirs where a submitted marker is already in the metadata."""
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
     fixed_temp_dir = tmp_path / "temp_work"
@@ -400,7 +401,7 @@ def test_submit_next_skips_candidates_with_submitted_in_metadata(tmp_path: pathl
 
     path_to_asset_metadata = {}
     # First candidate has submitted marker → should be skipped
-    for filename in ("submit.sh", "submitted"):
+    for filename in ("submit.sh", "submitted_date-2025-01-01T00:00:00"):
         p = f"{submitted_path}/{filename}"
         path_to_asset_metadata[p] = AssetMetadata(
             path=p, date_modified="2025-01-01T00:00:00+00:00", content_size=1, content_id="x"

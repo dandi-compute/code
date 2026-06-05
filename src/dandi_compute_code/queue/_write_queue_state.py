@@ -234,7 +234,7 @@ def _collect_attempts(local_metadata: AssetsJsonldMetadata) -> _AttemptCollectio
 
         if _subpath_is_under(subpath, "code"):
             record["has_code"] = True
-        if subpath == "code/submitted":
+        if subpath == "code/submitted" or subpath.startswith("code/submitted_date-"):
             record["has_been_submitted"] = True
         if _subpath_is_under(subpath, "derivatives"):
             record["has_output"] = True

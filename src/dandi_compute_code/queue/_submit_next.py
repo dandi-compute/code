@@ -1,3 +1,4 @@
+import datetime
 import logging
 import pathlib
 import shutil
@@ -22,10 +23,10 @@ def _submit_next(
 
     Loads the DANDI ``assets.jsonld`` metadata and identifies all attempt
     directories that contain a ``code/submit.sh`` asset but no adjacent
-    ``code/submitted`` asset.  For each candidate (up to *max_submissions*),
+    submitted-marker asset. For each candidate (up to *max_submissions*),
     a temporary working directory is created inside *processing_directory*,
     the ``code/`` tree is downloaded via ``dandi download --preserve-tree``,
-    the submission script is executed via ``sbatch``, a ``submitted`` marker
+    the submission script is executed via ``sbatch``, a submitted marker
     is written adjacent to ``submit.sh``, the marker is pushed back to the
     archive via ``dandi upload --validation skip``, and the temporary
     directory is removed on success.
@@ -60,9 +61,12 @@ def _submit_next(
     candidates: list[str] = []
     for asset_path in sorted(paths):
         if asset_path.endswith("/code/submit.sh"):
-            submitted_path = asset_path[: -len("submit.sh")] + "submitted"
-            if submitted_path not in paths:
-                code_dir_path = asset_path[: -len("/submit.sh")]
+            code_dir_path = asset_path[: -len("/submit.sh")]
+            submitted_marker_prefix = f"{code_dir_path}/submitted_date-"
+            has_submitted_marker = any(
+                path == f"{code_dir_path}/submitted" or path.startswith(submitted_marker_prefix) for path in paths
+            )
+            if not has_submitted_marker:
                 candidates.append(code_dir_path)
 
     if not candidates:
@@ -103,7 +107,7 @@ def _submit_next(
             message = "sbatch submission failed - please check the logs to see more details."
             raise RuntimeError(message)
 
-        submitted_marker = submit_sh_path.parent / "submitted"
+        submitted_marker = submit_sh_path.parent / f"submitted_date-{datetime.datetime.now().isoformat()}"
         submitted_marker.write_bytes(b"1")
         _log.info("Created `submitted` file at: %s", submitted_marker.absolute())
 

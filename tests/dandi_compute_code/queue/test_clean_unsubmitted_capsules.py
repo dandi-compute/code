@@ -203,7 +203,7 @@ def test_clean_unsubmitted_capsules_ignores_dataset_description_in_logs(
 
 @pytest.mark.ai_generated
 def test_clean_unsubmitted_capsules_skips_entries_with_submitted_marker(tmp_path: pathlib.Path) -> None:
-    """clean_unsubmitted_capsules does not remove capsules with a code/submitted marker."""
+    """clean_unsubmitted_capsules does not remove capsules with a submitted marker file."""
     dandiset_dir = tmp_path / "dandiset"
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
@@ -226,7 +226,7 @@ def test_clean_unsubmitted_capsules_skips_entries_with_submitted_marker(tmp_path
         ],
     )
 
-    (queued_dir / "code" / "submitted").touch()
+    (queued_dir / "code" / "submitted_date-2025-01-01T00:00:00").touch()
 
     with mock.patch("subprocess.run") as mock_run, mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
@@ -459,7 +459,7 @@ def test_clean_unsubmitted_capsules_removes_only_queued_not_submitted(tmp_path: 
     submitted_dir = _make_full_attempt_dir(
         dandiset_dir, "000002", "mouse02", "aind+ephys", "v1.0", "abc1234", "def5678", 1, with_code=True
     )
-    (submitted_dir / "code" / "submitted").touch()
+    (submitted_dir / "code" / "submitted_date-2025-01-01T00:00:00").touch()
     _write_state_entries(
         queue_dir,
         [
