@@ -145,7 +145,7 @@ def test_submit_next_calls_dandi_download_for_unsubmitted_candidate(tmp_path: pa
         mock.patch(
             "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
             return_value=str(fixed_temp_dir),
-        ),
+        ) as mock_mkdtemp,
         mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
         mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree"),
     ):
@@ -153,6 +153,7 @@ def test_submit_next_calls_dandi_download_for_unsubmitted_candidate(tmp_path: pa
         _submit_next(processing_directory=processing_dir)
 
     expected_url = f"dandi://dandi/001697/{_EXAMPLE_CODE_DIR_PATH}/"
+    mock_mkdtemp.assert_called_once_with(dir=processing_dir, prefix="submit-next-")
     download_call = mock_run.call_args_list[0]
     assert download_call.args[0] == ["dandi", "download", "--preserve-tree", expected_url]
     assert download_call.kwargs.get("cwd") == fixed_temp_dir

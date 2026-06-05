@@ -303,7 +303,7 @@ def prepare_aind_ephys_job(
 
     # Create an empty copy of Dandiset
     processing_directory = dandi_compute_dir / "processing"
-    temporary_processing_directory = pathlib.Path(tempfile.mkdtemp(dir=processing_directory))
+    temporary_processing_directory = pathlib.Path(tempfile.mkdtemp(dir=processing_directory, prefix="prepare-job-"))
     dandi.download.download(
         urls="DANDI:001697",
         output_dir=temporary_processing_directory,

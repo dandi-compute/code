@@ -101,7 +101,7 @@ def test_prepare_aind_ephys_job_extracts_sub_entity_from_path(
         mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
         mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.download.download"),
         mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.upload.upload"),
-        mock.patch("tempfile.mkdtemp", return_value=str(temp_dir)),
+        mock.patch("tempfile.mkdtemp", return_value=str(temp_dir)) as mock_mkdtemp,
         mock.patch.dict(os.environ, {"DANDI_API_KEY": "fake-key"}),
     ):
         mock_client.return_value.get_dandiset.return_value = mock_dandiset
@@ -114,6 +114,7 @@ def test_prepare_aind_ephys_job_extracts_sub_entity_from_path(
             pipeline_directory=fake_pipeline_dir,
         )
 
+    mock_mkdtemp.assert_called_once_with(dir=mock.ANY, prefix="prepare-job-")
     assert f"sub-{expected_sub}" in str(script_path)
     assert expected_output_path in str(script_path)
 
