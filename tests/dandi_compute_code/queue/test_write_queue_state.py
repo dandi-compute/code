@@ -201,9 +201,9 @@ def test_write_queue_state_submitted_marker_sets_has_been_submitted(tmp_path: pa
 def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_paths(tmp_path: pathlib.Path) -> None:
     """write_queue_state parses attempt metadata from derivatives asset paths."""
     queue_dir = _make_queue_dir(tmp_path)
-    source_path = "sub-test/sourcedata/aind-sample.nwb"
+    source_path = "sub-mouse01/sourcedata/aind-sample.nwb"
     attempt_prefix = (
-        "derivatives/dandiset-001849/sub-test/sourcedata/aind-sample/pipeline-aind+ephys/"
+        "derivatives/dandiset-001849/sub-mouse01/sourcedata/aind-sample/pipeline-aind+ephys/"
         "version-v1.1.1+b268fd2+2372f8e_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
     )
     metadata = AssetsJsonldMetadata(

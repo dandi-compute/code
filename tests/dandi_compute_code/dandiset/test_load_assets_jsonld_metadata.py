@@ -30,7 +30,7 @@ def test_load_assets_jsonld_metadata_returns_indexed_model() -> None:
     payload = json.dumps(
         [
             {
-                "path": "sub-test/sub-test_ecephys.nwb",
+                "path": "sub-mouse01/sub-mouse01_ecephys.nwb",
                 "contentSize": "123",
                 "dateModified": "2026-01-01T00:00:00+00:00",
                 "contentUrl": ["https://example.test/blobs/content-id-123?download=1"],
@@ -44,8 +44,8 @@ def test_load_assets_jsonld_metadata_returns_indexed_model() -> None:
         metadata = load_assets_jsonld_metadata()
 
     assert isinstance(metadata, AssetsJsonldMetadata)
-    assert metadata.path_to_asset_metadata["sub-test/sub-test_ecephys.nwb"] == AssetMetadata(
-        path="sub-test/sub-test_ecephys.nwb",
+    assert metadata.path_to_asset_metadata["sub-mouse01/sub-mouse01_ecephys.nwb"] == AssetMetadata(
+        path="sub-mouse01/sub-mouse01_ecephys.nwb",
         date_modified="2026-01-01T00:00:00+00:00",
         content_size=123,
         content_id="content-id-123",
@@ -62,7 +62,7 @@ def test_load_assets_jsonld_metadata_is_publicly_exported() -> None:
 def _make_valid_asset(**overrides: object) -> dict[str, object]:
     """Return a minimal valid asset dict, with optional field overrides."""
     asset: dict[str, object] = {
-        "path": "sub-test/sub-test_ecephys.nwb",
+        "path": "sub-mouse01/sub-mouse01_ecephys.nwb",
         "contentSize": 100,
         "dateModified": "2026-01-01T00:00:00+00:00",
         "contentUrl": ["https://example.test/blobs/content-id-abc"],
@@ -114,7 +114,7 @@ def test_load_assets_jsonld_metadata_normalizes_string_content_size() -> None:
     """load_assets_jsonld_metadata converts a numeric-string contentSize to int."""
     asset = _make_valid_asset(contentSize="456")
     metadata = _load_with_assets(asset)
-    path = "sub-test/sub-test_ecephys.nwb"
+    path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     assert metadata.path_to_asset_metadata[path].content_size == 456
     assert metadata.content_id_to_asset["content-id-abc"]["contentSize"] == 456
 

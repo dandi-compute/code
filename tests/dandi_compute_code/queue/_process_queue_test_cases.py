@@ -521,7 +521,7 @@ def test_submit_next_found_flat_attempt_directory_under_scanned_dandi_path(tmp_p
         dandiset_dir
         / "derivatives"
         / "dandiset-001849"
-        / "sub-test"
+        / "sub-mouse01"
         / "pipeline-test"
         / "version-v1.1.1_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
     )
@@ -1319,7 +1319,7 @@ def test_aggregate_queue_statistics_found_timeline_via_fallback_attempt_resoluti
         dandiset_dir
         / "derivatives"
         / "dandiset-001849"
-        / "sub-test"
+        / "sub-mouse01"
         / "pipeline-aind+ephys"
         / "version-v1.1.1_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
     )
@@ -1362,7 +1362,7 @@ def _make_attempt_dir(
 
     A directory path
 
-    ``derivatives/dandiset-{dandiset_id}/sub-test/pipeline-aind+ephys/``
+    ``derivatives/dandiset-{dandiset_id}/sub-mouse01/pipeline-aind+ephys/``
     ``version-{version}_codebase-{codebase}_params-{params_id}_config-{config_id}_attempt-{attempt_number}/``
 
     is created.  *with_code*, *with_output*, and *with_logs* control whether the
@@ -1373,7 +1373,7 @@ def _make_attempt_dir(
         base
         / "derivatives"
         / f"dandiset-{dandiset_id}"
-        / "sub-test"
+        / "sub-mouse01"
         / "pipeline-aind+ephys"
         / f"version-{version}_codebase-{codebase}_params-{params_id}_config-{config_id}_attempt-{attempt_number}"
     )
@@ -2181,7 +2181,7 @@ def test_clean_unsubmitted_capsules_removed_entry_via_fallback_attempt_resolutio
         dandiset_dir
         / "derivatives"
         / "dandiset-001849"
-        / "sub-test"
+        / "sub-mouse01"
         / "pipeline-aind+ephys"
         / "version-v1.1.1_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
     )

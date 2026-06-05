@@ -155,7 +155,7 @@ def test_prepare_aind_ephys_job_test_content_id_uses_sub_test(
         )
 
     assert "sourcedata/aind-sample" in str(script_path)
-    assert "sub-test/" not in str(script_path)
+    assert "sub-mouse01/" not in str(script_path)
     # No _date- entity in new format
     assert "_date-" not in str(script_path)
 
