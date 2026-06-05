@@ -11,7 +11,6 @@ import re
 import subprocess
 import tempfile
 import urllib.request
-import logging
 
 import dandi
 import dandi.dandiapi
