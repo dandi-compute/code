@@ -988,8 +988,6 @@ def test_queue_state_from_jsonl_preserves_dataset_description_path(tmp_path: pat
     }
 
 
-
-
 def test_queue_state_null_dataset_description_path(
     tmp_path: pathlib.Path,
 ) -> None:
