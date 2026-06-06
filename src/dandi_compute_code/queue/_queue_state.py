@@ -89,7 +89,12 @@ class JobEntry:
             codebase=data.get("codebase", ""),
         )
         dataset_description_path = data.get("dataset_description_path")
-        normalized_dataset_description_path = {} if dataset_description_path is None else dict(dataset_description_path)
+        try:
+            normalized_dataset_description_path = (
+                {} if dataset_description_path is None else dict(dataset_description_path)
+            )
+        except TypeError as exc:
+            raise TypeError(f"Expected mapping or null, got {type(dataset_description_path).__name__}") from exc
         return cls(
             job=job,
             content_id=data.get("content_id"),

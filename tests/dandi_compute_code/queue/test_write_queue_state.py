@@ -1010,9 +1010,7 @@ def test_queue_state_invalid_dataset_description_type(
         + "\n"
     )
 
-    # The dict() constructor owns the exact TypeError text for invalid inputs.
-    # Only the exception type is asserted.
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="Expected mapping or null"):
         QueueState.from_jsonl(state_file)
 
 
