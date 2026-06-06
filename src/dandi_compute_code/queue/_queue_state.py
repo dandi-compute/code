@@ -52,8 +52,8 @@ class JobEntry:
     created_at: str | None = None
     job_completion_time: str | None = None
     dataset_description_path: dict[str, str] = field(default_factory=dict)
-    output_paths: dict = field(default_factory=dict)
-    log_paths: dict = field(default_factory=dict)
+    output_paths: dict[str, str] = field(default_factory=dict)
+    log_paths: dict[str, str] = field(default_factory=dict)
 
     @property
     def is_pending(self) -> bool:
@@ -86,15 +86,8 @@ class JobEntry:
             params=data["params"],
             config=data["config"],
             attempt=int(data["attempt"]),
-            codebase=data.get("codebase", ""),
+            codebase=data["codebase"],
         )
-        dataset_description_path = data.get("dataset_description_path")
-        if dataset_description_path is None:
-            normalized_dataset_description_path = {}
-        elif isinstance(dataset_description_path, Mapping):
-            normalized_dataset_description_path = dict(dataset_description_path)
-        else:
-            raise TypeError(f"Expected mapping or null, got {type(dataset_description_path).__name__}")
         return cls(
             job=job,
             content_id=data.get("content_id"),
@@ -105,7 +98,7 @@ class JobEntry:
             has_logs=bool(data.get("has_logs", False)),
             created_at=data.get("created_at"),
             job_completion_time=data.get("job_completion_time"),
-            dataset_description_path=normalized_dataset_description_path,
+            dataset_description_path=dict(data.get("dataset_description_path") or {}),
             output_paths=dict(data.get("output_paths") or {}),
             log_paths=dict(data.get("log_paths") or {}),
         )
