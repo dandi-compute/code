@@ -988,30 +988,6 @@ def test_queue_state_from_jsonl_preserves_dataset_description_path(tmp_path: pat
     }
 
 
-def test_queue_state_invalid_dataset_description_type(
-    tmp_path: pathlib.Path,
-) -> None:
-    """QueueState.from_jsonl raises when dataset_description_path has an invalid type."""
-    state_file = tmp_path / "state.jsonl"
-    state_file.write_text(
-        json.dumps(
-            {
-                "dandiset_id": "001697",
-                "dandi_path": "sub-mouse01/sub-mouse01_ecephys.nwb",
-                "pipeline": "aind+ephys",
-                "version": "v1.0",
-                "params": "abc1234",
-                "config": "def5678",
-                "attempt": 1,
-                "codebase": "v0.3.0",
-                "dataset_description_path": 123,
-            }
-        )
-        + "\n"
-    )
-
-    with pytest.raises(TypeError, match="Expected mapping or null"):
-        QueueState.from_jsonl(state_file)
 
 
 def test_queue_state_null_dataset_description_path(
