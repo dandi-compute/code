@@ -7,7 +7,7 @@ import urllib.request
 
 from ._load_queue_config import _load_queue_config
 from ._order_content_ids_for_uniform_dandiset_sampling import _order_content_ids_for_uniform_dandiset_sampling
-from ..aind_ephys_pipeline import prepare_aind_ephys_job
+from ..aind_ephys_pipeline import UnmappedContentIDError, prepare_aind_ephys_job
 
 _log = logging.getLogger(__name__)
 
@@ -137,12 +137,18 @@ def prepare_queue(
                             )
 
                     _log.info(f"Preparing content ID: {content_id}")
-                    prepare_aind_ephys_job(
-                        content_id=content_id,
-                        parameters_key=params,
-                        pipeline_version=version,
-                        pipeline_directory=pipeline_directory,
-                        config_key=config_key,
-                        silent=True,
-                    )
+                    try:
+                        prepare_aind_ephys_job(
+                            content_id=content_id,
+                            parameters_key=params,
+                            pipeline_version=version,
+                            pipeline_directory=pipeline_directory,
+                            config_key=config_key,
+                            silent=True,
+                        )
+                    except UnmappedContentIDError as error:
+                        _log.warning(
+                            f"Skipping preparation for {pipeline_name}/{version}/{params}/{content_id}: {error}"
+                        )
+                        continue
                     prepared_count += 1

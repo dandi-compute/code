@@ -21,6 +21,7 @@ import pytest
 from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
+from dandi_compute_code.aind_ephys_pipeline import UnmappedContentIDError
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.queue import write_queue_state
 from dandi_compute_code.queue._aggregate_queue_statistics import aggregate_queue_statistics
@@ -1699,6 +1700,44 @@ def test_prepare_queue_uses_explicit_content_ids_when_provided(tmp_path: pathlib
     mock_urlopen.assert_not_called()
     assert mock_prepare.call_count == 1
     assert mock_prepare.call_args.kwargs["content_id"] == "explicit-asset-001"
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_warns_and_continues_for_unmapped_content_id(
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """prepare_queue logs a warning for unmapped content IDs and continues to later candidates."""
+    queue_dir = _make_queue_dir(tmp_path)
+    qualifying_ids = ["asset-aaa", "asset-bbb"]
+    prepared_content_ids: list[str] = []
+
+    def _prepare_side_effect(*, content_id: str, **kwargs: Any) -> None:
+        if content_id == "asset-aaa":
+            raise UnmappedContentIDError(
+                "Content ID asset-aaa not found in content ID to unique Dandiset path mapping. "
+                "This likely means that the content ID is not associated with a Dandiset, "
+                "or that the mapping file is out of date."
+            )
+        prepared_content_ids.append(content_id)
+
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch(
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_unique_dandiset_path",
+            return_value={},
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job", side_effect=_prepare_side_effect
+        ) as mock_prepare,
+    ):
+        mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
+        with caplog.at_level(logging.WARNING, logger="dandi_compute_code.queue._prepare_queue"):
+            prepare_queue(queue_directory=queue_dir)
+
+    assert mock_prepare.call_count == 2
+    assert mock_prepare.call_args_list[1].kwargs["content_id"] == "asset-bbb"
+    assert prepared_content_ids == ["asset-bbb"]
+    assert any("Skipping preparation for test/v1.0/default/asset-aaa" in record.message for record in caplog.records)
 
 
 @pytest.mark.ai_generated
