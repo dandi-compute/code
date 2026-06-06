@@ -215,7 +215,6 @@ def test_prepare_aind_ephys_job_uses_simplified_job_id_format(
 
     mock_dandiset = mock.MagicMock()
     mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
-    codebase_version = importlib.metadata.version("dandi-compute-code")
 
     with (
         mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
@@ -242,7 +241,7 @@ def test_prepare_aind_ephys_job_uses_simplified_job_id_format(
     # No _date- entity
     assert "_date-" not in script_path_str
     # Codebase version entity present
-    assert f"_codebase-v{codebase_version}" in script_path_str
+    assert f"_codebase-v{importlib.metadata.version('dandi-compute-code')}" in script_path_str
     # Version uses BIDSy format (hyphens replaced with plus)
     assert "version-v1.1.0_" in script_path_str
 
