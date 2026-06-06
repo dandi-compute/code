@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import yaml
