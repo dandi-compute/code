@@ -35,19 +35,6 @@ from ..dandiset._load_assets_jsonld_metadata import (
 )
 
 
-def _coerce_path_mapping(value: object) -> dict[str, str]:
-    """Normalize path-mapping fields from JSONL.
-
-    ``state.jsonl`` stores ``dataset_description_path`` the same way as the
-    other path lists: a mapping from asset path to blob ID.
-    """
-    if value is None:
-        return {}
-    if isinstance(value, dict):
-        return dict(value)
-    raise TypeError(f"Expected mapping or null, got {type(value).__name__}")
-
-
 @dataclass
 class JobEntry:
     """
@@ -101,6 +88,13 @@ class JobEntry:
             attempt=int(data["attempt"]),
             codebase=data.get("codebase", ""),
         )
+        dataset_description_path = data.get("dataset_description_path")
+        if dataset_description_path is None:
+            normalized_dataset_description_path = {}
+        elif isinstance(dataset_description_path, dict):
+            normalized_dataset_description_path = dict(dataset_description_path)
+        else:
+            raise TypeError(f"Expected mapping or null, got {type(dataset_description_path).__name__}")
         return cls(
             job=job,
             content_id=data.get("content_id"),
@@ -111,7 +105,7 @@ class JobEntry:
             has_logs=bool(data.get("has_logs", False)),
             created_at=data.get("created_at"),
             job_completion_time=data.get("job_completion_time"),
-            dataset_description_path=_coerce_path_mapping(data.get("dataset_description_path")),
+            dataset_description_path=normalized_dataset_description_path,
             output_paths=dict(data.get("output_paths") or {}),
             log_paths=dict(data.get("log_paths") or {}),
         )
