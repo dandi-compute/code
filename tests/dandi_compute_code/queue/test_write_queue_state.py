@@ -1048,3 +1048,31 @@ def test_queue_state_from_jsonl_rejects_invalid_dataset_description_path_type(
 
     with pytest.raises(TypeError, match="Expected mapping or string"):
         QueueState.from_jsonl(state_file)
+
+
+def test_queue_state_from_jsonl_converts_null_dataset_description_path_to_empty_dict(
+    tmp_path: pathlib.Path,
+) -> None:
+    """QueueState.from_jsonl converts null dataset_description_path values to empty dicts."""
+    state_file = tmp_path / "state.jsonl"
+    state_file.write_text(
+        json.dumps(
+            {
+                "dandiset_id": "001697",
+                "dandi_path": "sub-mouse01/sub-mouse01_ecephys.nwb",
+                "pipeline": "aind+ephys",
+                "version": "v1.0",
+                "params": "abc1234",
+                "config": "def5678",
+                "attempt": 1,
+                "codebase": "v0.3.0",
+                "dataset_description_path": None,
+            }
+        )
+        + "\n"
+    )
+
+    queue_state = QueueState.from_jsonl(state_file)
+
+    assert len(queue_state) == 1
+    assert queue_state.entries[0].dataset_description_path == {}
