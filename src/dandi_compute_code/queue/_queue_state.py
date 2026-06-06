@@ -35,6 +35,16 @@ from ..dandiset._load_assets_jsonld_metadata import (
 )
 
 
+def _coerce_path_mapping(value: object) -> dict[str, str | None]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str):
+        return {value: None}
+    raise TypeError(f"Expected mapping or string, got {type(value).__name__}")
+
+
 @dataclass
 class JobEntry:
     """
@@ -51,7 +61,7 @@ class JobEntry:
     has_logs: bool = False
     created_at: str | None = None
     job_completion_time: str | None = None
-    dataset_description_path: str | None = None
+    dataset_description_path: dict[str, str | None] = field(default_factory=dict)
     output_paths: dict = field(default_factory=dict)
     log_paths: dict = field(default_factory=dict)
 
@@ -98,7 +108,7 @@ class JobEntry:
             has_logs=bool(data.get("has_logs", False)),
             created_at=data.get("created_at"),
             job_completion_time=data.get("job_completion_time"),
-            dataset_description_path=data.get("dataset_description_path"),
+            dataset_description_path=_coerce_path_mapping(data.get("dataset_description_path")),
             output_paths=dict(data.get("output_paths") or {}),
             log_paths=dict(data.get("log_paths") or {}),
         )

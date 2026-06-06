@@ -769,7 +769,7 @@ def test_write_queue_state_output_paths_empty_when_no_output(tmp_path: pathlib.P
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
     assert state_entries[0]["has_output"] is False
-    assert state_entries[0]["dataset_description_path"] is None
+    assert state_entries[0]["dataset_description_path"] == {}
     assert state_entries[0]["output_paths"] == {}
 
 
@@ -944,7 +944,9 @@ def test_write_queue_state_log_paths_map_asset_paths_to_blob_ids(tmp_path: pathl
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
     assert state_entries[0]["has_logs"] is True
-    assert state_entries[0]["dataset_description_path"] == f"{attempt_prefix}/dataset_description.json"
+    assert state_entries[0]["dataset_description_path"] == {
+        f"{attempt_prefix}/dataset_description.json": "dataset-description-id"
+    }
     assert state_entries[0]["log_paths"] == {
         f"{attempt_prefix}/logs/stdout.txt": "log-blob-id-1",
         f"{attempt_prefix}/logs/stderr.txt": "log-blob-id-2",
@@ -966,9 +968,11 @@ def test_queue_state_from_jsonl_preserves_dataset_description_path(tmp_path: pat
                 "config": "def5678",
                 "attempt": 1,
                 "codebase": "v0.3.0",
-                "dataset_description_path": "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
-                "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/"
-                "dataset_description.json",
+                "dataset_description_path": {
+                    "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
+                    "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/"
+                    "dataset_description.json": "dataset-description-id"
+                },
             }
         )
         + "\n"
@@ -977,8 +981,8 @@ def test_queue_state_from_jsonl_preserves_dataset_description_path(tmp_path: pat
     queue_state = QueueState.from_jsonl(state_file)
 
     assert len(queue_state) == 1
-    assert queue_state.entries[0].dataset_description_path == (
+    assert queue_state.entries[0].dataset_description_path == {
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
         "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/"
-        "dataset_description.json"
-    )
+        "dataset_description.json": "dataset-description-id"
+    }
