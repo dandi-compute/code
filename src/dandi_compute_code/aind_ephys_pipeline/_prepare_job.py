@@ -36,6 +36,11 @@ def _parse_pipeline_version(version: str, *, label: str) -> tuple[int, int, int]
     return int(match["major"]), int(match["minor"]), int(match["patch"])
 
 
+def _get_codebase_version() -> str:
+    codebase_version = importlib.metadata.version("dandi-compute-code")
+    return f"v{codebase_version}"
+
+
 @pydantic.validate_call
 def prepare_aind_ephys_job(
     pipeline_version: str,
@@ -269,7 +274,7 @@ def prepare_aind_ephys_job(
         message = f"Unexpected commit hash format: {dandi_compute_code_commit_hash}"
         raise ValueError(message)
 
-    codebase_version = importlib.metadata.version("dandi-compute-code")
+    codebase_version = _get_codebase_version()
 
     bidsy_pipeline_version = pipeline_version.replace("-", "+")
     output_dandiset_path_base = f"derivatives/dandiset-{dandiset_id}/{output_dandi_path}/"
@@ -354,7 +359,7 @@ def prepare_aind_ephys_job(
             {
                 "Name": "DANDI Compute: Code",
                 "Description": "The primary source code for orchestration of AIND on MIT Engaging.",
-                "Version": f"v{codebase_version}+{dandi_compute_code_commit_hash}",
+                "Version": f"{codebase_version}+{dandi_compute_code_commit_hash}",
                 "CodeURL": "https://github.com/dandi-compute/code",
             },
         ],

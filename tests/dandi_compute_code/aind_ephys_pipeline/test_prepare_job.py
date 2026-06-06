@@ -13,7 +13,7 @@ from unittest import mock
 
 import pytest
 
-from dandi_compute_code.aind_ephys_pipeline._prepare_job import prepare_aind_ephys_job
+from dandi_compute_code.aind_ephys_pipeline._prepare_job import _get_codebase_version, prepare_aind_ephys_job
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -215,9 +215,7 @@ def test_prepare_aind_ephys_job_uses_simplified_job_id_format(
     mock_dandiset = mock.MagicMock()
     mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
 
-    import importlib.metadata
-
-    codebase_version = importlib.metadata.version("dandi-compute-code")
+    codebase_version = _get_codebase_version()
 
     with (
         mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
@@ -264,9 +262,7 @@ def test_prepare_aind_ephys_job_writes_codebase_version_in_dataset_description(
     mock_dandiset = mock.MagicMock()
     mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
 
-    import importlib.metadata
-
-    codebase_version = importlib.metadata.version("dandi-compute-code")
+    codebase_version = _get_codebase_version()
 
     with (
         mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
@@ -287,9 +283,16 @@ def test_prepare_aind_ephys_job_writes_codebase_version_in_dataset_description(
             pipeline_directory=fake_pipeline_dir,
         )
 
-    dataset_description_path = script_path.parent.parent / "dataset_description.json"
+    output_directory = script_path.parent.parent
+    dataset_description_path = output_directory / "dataset_description.json"
     dataset_description = json.loads(dataset_description_path.read_text())
-    assert dataset_description["GeneratedBy"][1]["Version"] == f"v{codebase_version}+{'a' * 40}"
+    codebase_entry = next(
+        (entry for entry in dataset_description["GeneratedBy"] if entry["Name"] == "DANDI Compute: Code"),
+        None,
+    )
+    assert codebase_entry is not None
+    expected_version = f"{codebase_version}+{_FAKE_COMMIT_HASH}"
+    assert codebase_entry["Version"] == expected_version
 
 
 @pytest.mark.ai_generated
