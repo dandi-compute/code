@@ -250,6 +250,49 @@ def test_prepare_aind_ephys_job_uses_simplified_job_id_format(
 
 
 @pytest.mark.ai_generated
+def test_prepare_aind_ephys_job_writes_codebase_version_in_dataset_description(
+    tmp_path: pathlib.Path,
+    fake_pipeline_dir: pathlib.Path,
+) -> None:
+    """dataset_description.json records the installed codebase version with a leading v."""
+    content_id = "07500000-0000-0000-0000-000000000000"
+    mapping = {content_id: {"000001": "sub-mouse01/sub-mouse01_ecephys.nwb"}}
+
+    temp_dir = tmp_path / "tmpdir"
+    temp_dir.mkdir()
+
+    mock_dandiset = mock.MagicMock()
+    mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
+
+    import importlib.metadata
+
+    codebase_version = importlib.metadata.version("dandi-compute-code")
+
+    with (
+        mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
+        mock.patch("subprocess.check_output", side_effect=_git_check_output),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.download.download"),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.upload.upload"),
+        mock.patch("tempfile.mkdtemp", return_value=str(temp_dir)),
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "fake-key"}),
+    ):
+        mock_client.return_value.get_dandiset.return_value = mock_dandiset
+
+        script_path = prepare_aind_ephys_job(
+            pipeline_version="v1.1.0",
+            content_id=content_id,
+            config_key="default",
+            parameters_key="original",
+            pipeline_directory=fake_pipeline_dir,
+        )
+
+    dataset_description_path = script_path.parent.parent / "dataset_description.json"
+    dataset_description = json.loads(dataset_description_path.read_text())
+    assert dataset_description["GeneratedBy"][1]["Version"] == f"v{codebase_version}+{'a' * 40}"
+
+
+@pytest.mark.ai_generated
 def test_prepare_aind_ephys_job_accepts_matching_minor_version_params(
     tmp_path: pathlib.Path,
     fake_pipeline_dir: pathlib.Path,

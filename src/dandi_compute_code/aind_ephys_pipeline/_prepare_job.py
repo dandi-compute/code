@@ -269,12 +269,6 @@ def prepare_aind_ephys_job(
         message = f"Unexpected commit hash format: {dandi_compute_code_commit_hash}"
         raise ValueError(message)
 
-    dandi_compute_code_version = subprocess.check_output(
-        ["git", "describe", "--tags", "--always"],
-        cwd=dandi_compute_code_source_dir,
-        text=True,
-    ).strip()
-
     codebase_version = importlib.metadata.version("dandi-compute-code")
 
     bidsy_pipeline_version = pipeline_version.replace("-", "+")
@@ -360,7 +354,7 @@ def prepare_aind_ephys_job(
             {
                 "Name": "DANDI Compute: Code",
                 "Description": "The primary source code for orchestration of AIND on MIT Engaging.",
-                "Version": f"{dandi_compute_code_version}+{dandi_compute_code_commit_hash}",
+                "Version": f"v{codebase_version}+{dandi_compute_code_commit_hash}",
                 "CodeURL": "https://github.com/dandi-compute/code",
             },
         ],
