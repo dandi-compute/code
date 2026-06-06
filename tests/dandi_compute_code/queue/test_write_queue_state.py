@@ -1010,7 +1010,7 @@ def test_queue_state_invalid_dataset_description_type(
         + "\n"
     )
 
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="Expected mapping or null"):
         QueueState.from_jsonl(state_file)
 
 
