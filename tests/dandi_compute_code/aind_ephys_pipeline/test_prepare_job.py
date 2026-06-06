@@ -6,6 +6,7 @@ logic that resolves the ``sub-`` label used in the output directory hierarchy.
 """
 
 import gzip
+import importlib.metadata
 import json
 import os
 import pathlib
@@ -215,10 +216,6 @@ def test_prepare_aind_ephys_job_uses_simplified_job_id_format(
     mock_dandiset = mock.MagicMock()
     mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
 
-    import importlib.metadata
-
-    codebase_version = importlib.metadata.version("dandi-compute-code")
-
     with (
         mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
         mock.patch("subprocess.check_output", side_effect=_git_check_output),
@@ -244,9 +241,55 @@ def test_prepare_aind_ephys_job_uses_simplified_job_id_format(
     # No _date- entity
     assert "_date-" not in script_path_str
     # Codebase version entity present
-    assert f"_codebase-v{codebase_version}" in script_path_str
+    assert f"_codebase-v{importlib.metadata.version('dandi-compute-code')}" in script_path_str
     # Version uses BIDSy format (hyphens replaced with plus)
     assert "version-v1.1.0_" in script_path_str
+
+
+@pytest.mark.ai_generated
+def test_prepare_aind_ephys_job_writes_codebase_version_in_dataset_description(
+    tmp_path: pathlib.Path,
+    fake_pipeline_dir: pathlib.Path,
+) -> None:
+    """dataset_description.json records the installed codebase version with a leading v."""
+    content_id = "07500000-0000-0000-0000-000000000000"
+    mapping = {content_id: {"000001": "sub-mouse01/sub-mouse01_ecephys.nwb"}}
+
+    temp_dir = tmp_path / "tmpdir"
+    temp_dir.mkdir()
+
+    mock_dandiset = mock.MagicMock()
+    mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
+
+    with (
+        mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
+        mock.patch("subprocess.check_output", side_effect=_git_check_output),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.download.download"),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.upload.upload"),
+        mock.patch("tempfile.mkdtemp", return_value=str(temp_dir)),
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "fake-key"}),
+    ):
+        mock_client.return_value.get_dandiset.return_value = mock_dandiset
+
+        script_path = prepare_aind_ephys_job(
+            pipeline_version="v1.1.0",
+            content_id=content_id,
+            config_key="default",
+            parameters_key="original",
+            pipeline_directory=fake_pipeline_dir,
+        )
+
+    output_directory = script_path.parent.parent
+    dataset_description_path = output_directory / "dataset_description.json"
+    dataset_description = json.loads(dataset_description_path.read_text())
+    codebase_entry = next(
+        (entry for entry in dataset_description["GeneratedBy"] if entry["Name"] == "DANDI Compute: Code"),
+        None,
+    )
+    assert codebase_entry is not None
+    expected_version = f"v{importlib.metadata.version('dandi-compute-code')}+{_FAKE_COMMIT_HASH}"
+    assert codebase_entry["Version"] == expected_version
 
 
 @pytest.mark.ai_generated
