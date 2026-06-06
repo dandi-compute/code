@@ -1,0 +1,2 @@
+*.json text eol=lf
+*.config text eol=lf
