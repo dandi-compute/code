@@ -631,6 +631,7 @@ def _delete_version_command(dandiset_directory: pathlib.Path, version: str, sile
     if not silent:
         _styled_echo(text=f"\nDeleted {len(deleted)} version {noun}.", color="green")
 
+
 # Required for daily tests
 _dandicompute_group.prepare_queue = prepare_queue
 _dandicompute_group.prepare_aind_ephys_job = prepare_aind_ephys_job
@@ -640,4 +641,3 @@ _dandicompute_group.dump_issues = dump_issues
 _dandicompute_group.summarize_issues = summarize_issues
 _dandicompute_group.process_queue = process_queue
 _dandicompute_group.write_queue_state = write_queue_state
-
