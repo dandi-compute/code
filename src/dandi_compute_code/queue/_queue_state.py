@@ -36,6 +36,13 @@ from ..dandiset._load_assets_jsonld_metadata import (
 
 
 def _coerce_path_mapping(value: object) -> dict[str, str | None]:
+    """Normalise path-mapping fields from JSONL.
+
+    ``state.jsonl`` now stores ``dataset_description_path`` the same way as the
+    other path lists: a mapping from asset path to blob ID. Older queue-state
+    files used a bare string path, so that legacy form is converted to a
+    single-entry mapping with a ``None`` value.
+    """
     if value is None:
         return {}
     if isinstance(value, dict):
