@@ -113,16 +113,6 @@ def _prepare_group() -> None:
     pass
 
 
-_dandicompute_group.prepare_queue = prepare_queue
-_dandicompute_group.prepare_aind_ephys_job = prepare_aind_ephys_job
-_dandicompute_group.clean_unsubmitted_capsules = clean_unsubmitted_capsules
-_dandicompute_group.aggregate_queue_statistics = aggregate_queue_statistics
-_dandicompute_group.dump_issues = dump_issues
-_dandicompute_group.summarize_issues = summarize_issues
-_dandicompute_group.process_queue = process_queue
-_dandicompute_group.write_queue_state = write_queue_state
-
-
 # dandicompute prepare aind [OPTIONS]
 @_prepare_group.command(name="aind")
 @click.option(
@@ -640,3 +630,14 @@ def _delete_version_command(dandiset_directory: pathlib.Path, version: str, sile
     deleted = delete_dandiset_version(dandiset_directory=dandiset_directory, version=version)
     if not silent:
         _styled_echo(text=f"\nDeleted {len(deleted)} version {noun}.", color="green")
+
+# Required for daily tests
+_dandicompute_group.prepare_queue = prepare_queue
+_dandicompute_group.prepare_aind_ephys_job = prepare_aind_ephys_job
+_dandicompute_group.clean_unsubmitted_capsules = clean_unsubmitted_capsules
+_dandicompute_group.aggregate_queue_statistics = aggregate_queue_statistics
+_dandicompute_group.dump_issues = dump_issues
+_dandicompute_group.summarize_issues = summarize_issues
+_dandicompute_group.process_queue = process_queue
+_dandicompute_group.write_queue_state = write_queue_state
+
