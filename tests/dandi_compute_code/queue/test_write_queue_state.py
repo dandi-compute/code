@@ -988,7 +988,7 @@ def test_queue_state_from_jsonl_preserves_dataset_description_path(tmp_path: pat
     }
 
 
-def test_queue_state_from_jsonl_converts_legacy_dataset_description_path_string(
+def test_queue_state_from_jsonl_converts_legacy_dataset_description_path(
     tmp_path: pathlib.Path,
 ) -> None:
     """QueueState.from_jsonl converts legacy string dataset_description_path values."""
@@ -1024,7 +1024,7 @@ def test_queue_state_from_jsonl_converts_legacy_dataset_description_path_string(
     }
 
 
-def test_queue_state_from_jsonl_rejects_invalid_dataset_description_path_type(
+def test_queue_state_from_jsonl_rejects_invalid_dataset_description_type(
     tmp_path: pathlib.Path,
 ) -> None:
     """QueueState.from_jsonl raises when dataset_description_path has an invalid type."""
@@ -1050,7 +1050,7 @@ def test_queue_state_from_jsonl_rejects_invalid_dataset_description_path_type(
         QueueState.from_jsonl(state_file)
 
 
-def test_queue_state_from_jsonl_converts_null_dataset_description_path_to_empty_dict(
+def test_queue_state_from_jsonl_converts_null_dataset_description_path(
     tmp_path: pathlib.Path,
 ) -> None:
     """QueueState.from_jsonl converts null dataset_description_path values to empty dicts."""
