@@ -1732,6 +1732,7 @@ def test_prepare_queue_warns_and_continues_for_unmapped_content_id(
             prepare_queue(queue_directory=queue_dir)
 
     assert mock_prepare.call_count == 2
+    assert mock_prepare.call_args_list[1].kwargs["content_id"] == "asset-bbb"
     assert any("Skipping preparation for test/v1.0/default/asset-aaa" in record.message for record in caplog.records)
 
 

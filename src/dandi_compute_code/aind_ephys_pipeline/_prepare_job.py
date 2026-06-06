@@ -24,11 +24,15 @@ from ..dandiset._globals import _SANDBOX_DANDISET_ID
 _log = logging.getLogger(__name__)
 
 
+class UnmappedContentIDError(ValueError):
+    """Raised when a content ID cannot be resolved to a unique Dandiset path."""
+
+
 def _parse_pipeline_version(version: str, *, label: str) -> tuple[int, int, int]:
     match = re.fullmatch(r"v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?:[-+][0-9A-Za-z.+-]+)?", version)
     if match is None:
         message = f"Unexpected {label} version format: {version!r}"
-        raise ValueError(message)
+        raise UnmappedContentIDError(message)
     return int(match["major"]), int(match["minor"]), int(match["patch"])
 
 

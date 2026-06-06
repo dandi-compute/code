@@ -7,7 +7,7 @@ import urllib.request
 
 from ._load_queue_config import _load_queue_config
 from ._order_content_ids_for_uniform_dandiset_sampling import _order_content_ids_for_uniform_dandiset_sampling
-from ..aind_ephys_pipeline import prepare_aind_ephys_job
+from ..aind_ephys_pipeline import UnmappedContentIDError, prepare_aind_ephys_job
 
 _log = logging.getLogger(__name__)
 
@@ -146,12 +146,9 @@ def prepare_queue(
                             config_key=config_key,
                             silent=True,
                         )
-                    except ValueError as error:
-                        message = str(error)
-                        if "not found in content ID to unique Dandiset path mapping" not in message:
-                            raise
+                    except UnmappedContentIDError as error:
                         _log.warning(
-                            f"Skipping preparation for {pipeline_name}/{version}/{params}/{content_id}: {message}"
+                            f"Skipping preparation for {pipeline_name}/{version}/{params}/{content_id}: {error}"
                         )
                         continue
                     prepared_count += 1
