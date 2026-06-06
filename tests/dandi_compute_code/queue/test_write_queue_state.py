@@ -986,3 +986,65 @@ def test_queue_state_from_jsonl_preserves_dataset_description_path(tmp_path: pat
         "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/"
         "dataset_description.json": "dataset-description-id"
     }
+
+
+def test_queue_state_from_jsonl_converts_legacy_dataset_description_path_string(
+    tmp_path: pathlib.Path,
+) -> None:
+    """QueueState.from_jsonl converts legacy string dataset_description_path values."""
+    state_file = tmp_path / "state.jsonl"
+    state_file.write_text(
+        json.dumps(
+            {
+                "dandiset_id": "001697",
+                "dandi_path": "sub-mouse01/sub-mouse01_ecephys.nwb",
+                "pipeline": "aind+ephys",
+                "version": "v1.0",
+                "params": "abc1234",
+                "config": "def5678",
+                "attempt": 1,
+                "codebase": "v0.3.0",
+                "dataset_description_path": (
+                    "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
+                    "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/"
+                    "dataset_description.json"
+                ),
+            }
+        )
+        + "\n"
+    )
+
+    queue_state = QueueState.from_jsonl(state_file)
+
+    assert len(queue_state) == 1
+    assert queue_state.entries[0].dataset_description_path == {
+        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
+        "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/"
+        "dataset_description.json": None
+    }
+
+
+def test_queue_state_from_jsonl_rejects_invalid_dataset_description_path_type(
+    tmp_path: pathlib.Path,
+) -> None:
+    """QueueState.from_jsonl raises when dataset_description_path has an invalid type."""
+    state_file = tmp_path / "state.jsonl"
+    state_file.write_text(
+        json.dumps(
+            {
+                "dandiset_id": "001697",
+                "dandi_path": "sub-mouse01/sub-mouse01_ecephys.nwb",
+                "pipeline": "aind+ephys",
+                "version": "v1.0",
+                "params": "abc1234",
+                "config": "def5678",
+                "attempt": 1,
+                "codebase": "v0.3.0",
+                "dataset_description_path": 123,
+            }
+        )
+        + "\n"
+    )
+
+    with pytest.raises(TypeError, match="Expected mapping or string"):
+        QueueState.from_jsonl(state_file)
