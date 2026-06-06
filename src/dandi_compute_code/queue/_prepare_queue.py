@@ -137,12 +137,21 @@ def prepare_queue(
                             )
 
                     _log.info(f"Preparing content ID: {content_id}")
-                    prepare_aind_ephys_job(
-                        content_id=content_id,
-                        parameters_key=params,
-                        pipeline_version=version,
-                        pipeline_directory=pipeline_directory,
-                        config_key=config_key,
-                        silent=True,
-                    )
+                    try:
+                        prepare_aind_ephys_job(
+                            content_id=content_id,
+                            parameters_key=params,
+                            pipeline_version=version,
+                            pipeline_directory=pipeline_directory,
+                            config_key=config_key,
+                            silent=True,
+                        )
+                    except ValueError as error:
+                        message = str(error)
+                        if "not found in content ID to unique Dandiset path mapping" not in message:
+                            raise
+                        _log.warning(
+                            f"Skipping preparation for {pipeline_name}/{version}/{params}/{content_id}: {message}"
+                        )
+                        continue
                     prepared_count += 1

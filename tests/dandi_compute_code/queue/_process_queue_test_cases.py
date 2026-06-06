@@ -1702,6 +1702,40 @@ def test_prepare_queue_uses_explicit_content_ids_when_provided(tmp_path: pathlib
 
 
 @pytest.mark.ai_generated
+def test_prepare_queue_warns_and_continues_for_unmapped_content_id(
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """prepare_queue logs a warning for unmapped content IDs and continues to later candidates."""
+    queue_dir = _make_queue_dir(tmp_path)
+    qualifying_ids = ["asset-aaa", "asset-bbb"]
+
+    def _prepare_side_effect(*, content_id: str, **kwargs: Any) -> None:
+        if content_id == "asset-aaa":
+            raise ValueError(
+                "Content ID asset-aaa not found in content ID to unique Dandiset path mapping. "
+                "This likely means that the content ID is not associated with a Dandiset, "
+                "or that the mapping file is out of date."
+            )
+
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch(
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_unique_dandiset_path",
+            return_value={},
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job", side_effect=_prepare_side_effect
+        ) as mock_prepare,
+    ):
+        mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
+        with caplog.at_level(logging.WARNING, logger="dandi_compute_code.queue._prepare_queue"):
+            prepare_queue(queue_directory=queue_dir)
+
+    assert mock_prepare.call_count == 2
+    assert any("Skipping preparation for test/v1.0/default/asset-aaa" in record.message for record in caplog.records)
+
+
+@pytest.mark.ai_generated
 def test_cli_prepare_test_calls_prepare_queue_with_test_content_id(tmp_path: pathlib.Path) -> None:
     """dandicompute prepare aind --test calls prepare_queue with the known test content ID."""
     queue_dir = tmp_path / "queue"
