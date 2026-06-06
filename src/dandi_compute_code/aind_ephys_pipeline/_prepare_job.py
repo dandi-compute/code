@@ -32,7 +32,7 @@ def _parse_pipeline_version(version: str, *, label: str) -> tuple[int, int, int]
     match = re.fullmatch(r"v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?:[-+][0-9A-Za-z.+-]+)?", version)
     if match is None:
         message = f"Unexpected {label} version format: {version!r}"
-        raise UnmappedContentIDError(message)
+        raise ValueError(message)
     return int(match["major"]), int(match["minor"]), int(match["patch"])
 
 
@@ -212,7 +212,7 @@ def prepare_aind_ephys_job(
             "This likely means that the content ID is not associated with a Dandiset, "
             "or that the mapping file is out of date."
         )
-        raise ValueError(message)
+        raise UnmappedContentIDError(message)
 
     dandiset_id, dandiset_path = next(iter(content_id_to_unique_dandiset_path[content_id].items()))
     if dandiset_id == _SANDBOX_DANDISET_ID:

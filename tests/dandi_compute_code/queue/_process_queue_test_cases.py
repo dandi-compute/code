@@ -21,6 +21,7 @@ import pytest
 from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
+from dandi_compute_code.aind_ephys_pipeline import UnmappedContentIDError
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.queue import write_queue_state
 from dandi_compute_code.queue._aggregate_queue_statistics import aggregate_queue_statistics
@@ -1708,14 +1709,16 @@ def test_prepare_queue_warns_and_continues_for_unmapped_content_id(
     """prepare_queue logs a warning for unmapped content IDs and continues to later candidates."""
     queue_dir = _make_queue_dir(tmp_path)
     qualifying_ids = ["asset-aaa", "asset-bbb"]
+    prepared_content_ids: list[str] = []
 
     def _prepare_side_effect(*, content_id: str, **kwargs: Any) -> None:
         if content_id == "asset-aaa":
-            raise ValueError(
+            raise UnmappedContentIDError(
                 "Content ID asset-aaa not found in content ID to unique Dandiset path mapping. "
                 "This likely means that the content ID is not associated with a Dandiset, "
                 "or that the mapping file is out of date."
             )
+        prepared_content_ids.append(content_id)
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
@@ -1733,6 +1736,7 @@ def test_prepare_queue_warns_and_continues_for_unmapped_content_id(
 
     assert mock_prepare.call_count == 2
     assert mock_prepare.call_args_list[1].kwargs["content_id"] == "asset-bbb"
+    assert prepared_content_ids == ["asset-bbb"]
     assert any("Skipping preparation for test/v1.0/default/asset-aaa" in record.message for record in caplog.records)
 
 
