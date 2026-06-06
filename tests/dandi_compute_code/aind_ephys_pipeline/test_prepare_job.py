@@ -6,6 +6,7 @@ logic that resolves the ``sub-`` label used in the output directory hierarchy.
 """
 
 import gzip
+import importlib.metadata
 import json
 import os
 import pathlib
@@ -13,7 +14,7 @@ from unittest import mock
 
 import pytest
 
-from dandi_compute_code.aind_ephys_pipeline._prepare_job import _get_codebase_version, prepare_aind_ephys_job
+from dandi_compute_code.aind_ephys_pipeline._prepare_job import prepare_aind_ephys_job
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -214,8 +215,7 @@ def test_prepare_aind_ephys_job_uses_simplified_job_id_format(
 
     mock_dandiset = mock.MagicMock()
     mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
-
-    codebase_version = _get_codebase_version()
+    codebase_version = importlib.metadata.version("dandi-compute-code")
 
     with (
         mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
@@ -262,8 +262,6 @@ def test_prepare_aind_ephys_job_writes_codebase_version_in_dataset_description(
     mock_dandiset = mock.MagicMock()
     mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
 
-    codebase_version = _get_codebase_version()
-
     with (
         mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
         mock.patch("subprocess.check_output", side_effect=_git_check_output),
@@ -291,7 +289,7 @@ def test_prepare_aind_ephys_job_writes_codebase_version_in_dataset_description(
         None,
     )
     assert codebase_entry is not None
-    expected_version = f"{codebase_version}+{_FAKE_COMMIT_HASH}"
+    expected_version = f"v{importlib.metadata.version('dandi-compute-code')}+{_FAKE_COMMIT_HASH}"
     assert codebase_entry["Version"] == expected_version
 
 
