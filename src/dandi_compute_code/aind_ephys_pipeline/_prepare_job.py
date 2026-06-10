@@ -372,7 +372,7 @@ def prepare_aind_ephys_job(
         environment_directory=environment_directory,
         config_file_path=str(code_config_file_path),
         pipeline_file_path=str(pipeline_file_path),
-        pipeline_repo_directory=str(pipeline_repo_directory),
+        pipeline_repo_directory=str(pipeline_repo_directory.absolute()),
         pipeline_version=pipeline_version,
         temp_name=temporary_processing_directory.name,
         done_tracker_file_path=str(done_tracker_file_path),
