@@ -381,7 +381,7 @@ def test_cli_queue_process_reports_when_no_jobs_waiting(tmp_path: pathlib.Path) 
     processing_dir.mkdir()
     runner = CliRunner()
 
-    with mock.patch("dandi_compute_code._cli._dandicompute_group.process_queue", return_value=False):
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.process_queue", return_value="no-pending"):
         result = runner.invoke(
             _dandicompute_group,
             [

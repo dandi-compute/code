@@ -428,12 +428,12 @@ def _queue_process_command(
     _configure_logging(silent=silent)
     _require_dandi_api_key()
     _require_dandi_devel()
-    did_submit = process_queue(
+    queue_status = process_queue(
         queue_directory=queue_directory,
         processing_directory=processing_directory,
         test=test,
     )
-    if not silent and did_submit is False:
+    if not silent and queue_status == "no-pending":
         _styled_echo(text="\nNo jobs were found waiting to be submitted.", color="yellow")
 
 
