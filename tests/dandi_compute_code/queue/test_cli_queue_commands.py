@@ -374,6 +374,32 @@ def test_cli_queue_process_passes_test_flag(tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.ai_generated
+def test_cli_queue_process_reports_when_no_jobs_waiting(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue process reports when no jobs are waiting for submission."""
+    queue_dir = _make_queue_dir(tmp_path)
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    runner = CliRunner()
+
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.process_queue", return_value=False):
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "queue",
+                "process",
+                "--queue",
+                str(queue_dir),
+                "--processing",
+                str(processing_dir),
+            ],
+            env={"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"},
+        )
+
+    assert result.exit_code == 0, result.output
+    assert "No jobs were found waiting to be submitted." in result.output
+
+
+@pytest.mark.ai_generated
 def test_cli_queue_process_requires_dandi_devel(tmp_path: pathlib.Path) -> None:
     """Queue process command exits non-zero when DANDI_DEVEL is not set."""
     queue_dir = _make_queue_dir(tmp_path)

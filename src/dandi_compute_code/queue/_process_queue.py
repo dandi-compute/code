@@ -12,7 +12,7 @@ def process_queue(
     queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
     test: bool = False,
-) -> None:
+) -> bool | None:
     """
     Submit jobs from ``state.jsonl`` up to two total
     running ``AIND-Ephys-Pipeline`` SLURM jobs.
@@ -30,6 +30,11 @@ def process_queue(
     :type processing_directory: pathlib.Path
     :param test: If ``True``, preserve temporary processing directories on success.
     :type test: bool
+    :returns:
+        ``True`` when one or more jobs were submitted, ``False`` when no
+        pending jobs were available to submit, and ``None`` when submission
+        was skipped because no queue slots were available.
+    :rtype: bool | None
     :raises FileNotFoundError: If ``state.jsonl`` is not found in *queue_directory*.
     """
     state_file = queue_directory / "state.jsonl"
@@ -38,13 +43,15 @@ def process_queue(
         raise FileNotFoundError(message)
     if not state_file.read_text().strip():
         _log.info(f"No entries in {state_file}")
-        return
+        return False
 
     running_count = _count_running_aind_ephys_pipeline_jobs()
     available_slots = max(0, 2 - running_count)
-    if available_slots > 0:
-        _submit_next(
-            processing_directory=processing_directory,
-            max_submissions=available_slots,
-            test=test,
-        )
+    if available_slots < 1:
+        return None
+
+    return _submit_next(
+        processing_directory=processing_directory,
+        max_submissions=available_slots,
+        test=test,
+    )
