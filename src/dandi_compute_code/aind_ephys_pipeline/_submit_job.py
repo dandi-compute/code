@@ -40,7 +40,7 @@ def submit_job(script_file_path: pathlib.Path) -> None:
 
     now = datetime.datetime.now()
     submitted_file_path = absolute_script_file_path.parent / (
-        f"submitted_date-date-{now.year:04d}+{now.month:02d}+{now.day:02d}"
+        f"submitted_date-{now.year:04d}+{now.month:02d}+{now.day:02d}"
         f"_time-{now.hour:02d}+{now.minute:02d}+{now.second:02d}"
     )
     submitted_file_path.write_bytes(b"1")
