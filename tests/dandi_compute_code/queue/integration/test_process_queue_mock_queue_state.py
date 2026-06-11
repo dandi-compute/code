@@ -63,6 +63,7 @@ def test_process_queue_skips_refresh_when_state_non_empty(mock_queue_state: tupl
         process_queue(
             queue_directory=queue_dir,
             processing_directory=processing_dir,
+            jitter_seconds=0,
         )
 
     mock_submit.assert_not_called()
@@ -80,6 +81,7 @@ def test_process_queue_submits_when_no_jobs_running(mock_queue_state: tuple[path
         process_queue(
             queue_directory=queue_dir,
             processing_directory=processing_dir,
+            jitter_seconds=0,
         )
 
     mock_submit.assert_called_once_with(
@@ -104,6 +106,7 @@ def test_process_queue_respects_explicit_max_concurrent_jobs(
             queue_directory=queue_dir,
             processing_directory=processing_dir,
             max_concurrent_aind_jobs=3,
+            jitter_seconds=0,
         )
 
     mock_submit.assert_called_once_with(
@@ -125,6 +128,7 @@ def test_process_queue_does_not_submit_when_jobs_running(mock_queue_state: tuple
         process_queue(
             queue_directory=queue_dir,
             processing_directory=processing_dir,
+            jitter_seconds=0,
         )
 
     mock_submit.assert_not_called()
@@ -142,6 +146,7 @@ def test_process_queue_submits_one_when_one_job_running(mock_queue_state: tuple[
         process_queue(
             queue_directory=queue_dir,
             processing_directory=processing_dir,
+            jitter_seconds=0,
         )
 
     mock_submit.assert_called_once_with(
@@ -165,6 +170,7 @@ def test_process_queue_passes_processing_directory_to_submit_next(
         process_queue(
             queue_directory=queue_dir,
             processing_directory=processing_dir,
+            jitter_seconds=0,
         )
 
     mock_submit.assert_called_once_with(
@@ -187,6 +193,7 @@ def test_process_queue_forwards_test_flag(mock_queue_state: tuple[pathlib.Path, 
             queue_directory=queue_dir,
             processing_directory=processing_dir,
             test=True,
+            jitter_seconds=0,
         )
 
     mock_submit.assert_called_once_with(

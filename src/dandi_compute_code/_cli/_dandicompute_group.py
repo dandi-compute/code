@@ -427,12 +427,22 @@ def _queue_stats_command(
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--jitter",
+    "jitter_seconds",
+    help="Maximum seconds of random sleep applied before processing to spread concurrent invocations.",
+    required=False,
+    type=click.FloatRange(min=0),
+    default=30.0,
+    show_default=True,
+)
 def _queue_process_command(
     queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
     max_concurrent_aind_jobs: int = 2,
     silent: bool = False,
     test: bool = False,
+    jitter_seconds: float = 30.0,
 ) -> None:
     """Submit queued jobs when no active dandicompute jobs are running."""
     _configure_logging(silent=silent)
@@ -442,6 +452,7 @@ def _queue_process_command(
         queue_directory=queue_directory,
         processing_directory=processing_directory,
         max_concurrent_aind_jobs=max_concurrent_aind_jobs,
+        jitter_seconds=jitter_seconds,
         test=test,
     )
     if not silent and queue_status == "no-pending":
