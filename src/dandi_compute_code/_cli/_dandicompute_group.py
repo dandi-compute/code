@@ -404,7 +404,7 @@ def _queue_stats_command(
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 @click.option(
-    "--max-concurrent-aind-jobs",
+    "--max",
     "max_concurrent_aind_jobs",
     help="Maximum number of AIND jobs allowed to be running before submission is skipped.",
     required=False,

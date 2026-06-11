@@ -345,7 +345,7 @@ def test_cli_queue_process_passes_processing_directory(tmp_path: pathlib.Path) -
 
 @pytest.mark.ai_generated
 def test_cli_queue_process_passes_max_concurrent_aind_jobs(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue process forwards --max-concurrent-aind-jobs to process_queue."""
+    """dandicompute queue process forwards --max to process_queue."""
     queue_dir = _make_queue_dir(tmp_path)
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
@@ -361,7 +361,7 @@ def test_cli_queue_process_passes_max_concurrent_aind_jobs(tmp_path: pathlib.Pat
                 str(queue_dir),
                 "--processing",
                 str(processing_dir),
-                "--max-concurrent-aind-jobs",
+                "--max",
                 "4",
             ],
             env={"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"},
