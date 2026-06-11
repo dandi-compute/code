@@ -339,7 +339,7 @@ def test_cli_queue_process_passes_processing_directory(tmp_path: pathlib.Path) -
         queue_directory=queue_dir,
         processing_directory=processing_dir,
         max_concurrent_aind_jobs=2,
-        jitter_seconds=60.0,
+        jitter_seconds=30.0,
         test=False,
     )
 
@@ -373,7 +373,7 @@ def test_cli_queue_process_passes_max_concurrent_aind_jobs(tmp_path: pathlib.Pat
         queue_directory=queue_dir,
         processing_directory=processing_dir,
         max_concurrent_aind_jobs=4,
-        jitter_seconds=60.0,
+        jitter_seconds=30.0,
         test=False,
     )
 
@@ -406,7 +406,7 @@ def test_cli_queue_process_passes_test_flag(tmp_path: pathlib.Path) -> None:
         queue_directory=queue_dir,
         processing_directory=processing_dir,
         max_concurrent_aind_jobs=2,
-        jitter_seconds=60.0,
+        jitter_seconds=30.0,
         test=True,
     )
 

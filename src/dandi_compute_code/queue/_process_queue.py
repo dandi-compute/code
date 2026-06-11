@@ -15,7 +15,7 @@ def process_queue(
     queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
     max_concurrent_aind_jobs: int = 2,
-    jitter_seconds: float = 60.0,
+    jitter_seconds: float = 30.0,
     test: bool = False,
 ) -> Literal["submitted", "no-pending", "slots-unavailable"]:
     """

@@ -433,7 +433,7 @@ def _queue_stats_command(
     help="Maximum seconds of random sleep applied before processing to spread concurrent invocations.",
     required=False,
     type=click.FloatRange(min=0),
-    default=60.0,
+    default=30.0,
     show_default=True,
 )
 def _queue_process_command(
@@ -442,7 +442,7 @@ def _queue_process_command(
     max_concurrent_aind_jobs: int = 2,
     silent: bool = False,
     test: bool = False,
-    jitter_seconds: float = 60.0,
+    jitter_seconds: float = 30.0,
 ) -> None:
     """Submit queued jobs when no active dandicompute jobs are running."""
     _configure_logging(silent=silent)
