@@ -339,6 +339,7 @@ def test_cli_queue_process_passes_processing_directory(tmp_path: pathlib.Path) -
         queue_directory=queue_dir,
         processing_directory=processing_dir,
         max_concurrent_aind_jobs=2,
+        jitter_seconds=60.0,
         test=False,
     )
 
@@ -372,6 +373,7 @@ def test_cli_queue_process_passes_max_concurrent_aind_jobs(tmp_path: pathlib.Pat
         queue_directory=queue_dir,
         processing_directory=processing_dir,
         max_concurrent_aind_jobs=4,
+        jitter_seconds=60.0,
         test=False,
     )
 
@@ -404,6 +406,7 @@ def test_cli_queue_process_passes_test_flag(tmp_path: pathlib.Path) -> None:
         queue_directory=queue_dir,
         processing_directory=processing_dir,
         max_concurrent_aind_jobs=2,
+        jitter_seconds=60.0,
         test=True,
     )
 
@@ -457,3 +460,71 @@ def test_cli_queue_process_requires_dandi_devel(tmp_path: pathlib.Path) -> None:
 
     assert result.exit_code != 0
     assert "DANDI_DEVEL" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_process_passes_jitter_seconds(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue process forwards --jitter to process_queue."""
+    queue_dir = _make_queue_dir(tmp_path)
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    runner = CliRunner()
+
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.process_queue") as mock_process:
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "queue",
+                "process",
+                "--queue",
+                str(queue_dir),
+                "--processing",
+                str(processing_dir),
+                "--jitter",
+                "120.0",
+            ],
+            env={"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"},
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_process.assert_called_once_with(
+        queue_directory=queue_dir,
+        processing_directory=processing_dir,
+        max_concurrent_aind_jobs=2,
+        jitter_seconds=120.0,
+        test=False,
+    )
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_process_passes_zero_jitter(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue process forwards --jitter 0 to process_queue."""
+    queue_dir = _make_queue_dir(tmp_path)
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    runner = CliRunner()
+
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.process_queue") as mock_process:
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "queue",
+                "process",
+                "--queue",
+                str(queue_dir),
+                "--processing",
+                str(processing_dir),
+                "--jitter",
+                "0",
+            ],
+            env={"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"},
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_process.assert_called_once_with(
+        queue_directory=queue_dir,
+        processing_directory=processing_dir,
+        max_concurrent_aind_jobs=2,
+        jitter_seconds=0.0,
+        test=False,
+    )

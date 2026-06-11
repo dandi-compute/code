@@ -1,5 +1,7 @@
 import logging
 import pathlib
+import random
+import time
 from typing import Literal
 
 from ._count_running_aind_ephys_pipeline_jobs import _count_running_aind_ephys_pipeline_jobs
@@ -13,6 +15,7 @@ def process_queue(
     queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
     max_concurrent_aind_jobs: int = 2,
+    jitter_seconds: float = 60.0,
     test: bool = False,
 ) -> Literal["submitted", "no-pending", "slots-unavailable"]:
     """
@@ -25,6 +28,10 @@ def process_queue(
     checked for currently running ``AIND-Ephys-Pipeline`` jobs, and up to the
     difference from ``max_concurrent_aind_jobs`` jobs are submitted.
 
+    A random delay of up to *jitter_seconds* is applied before any work is
+    done to spread out concurrent invocations and avoid thundering-herd
+    submission bursts.
+
     :param queue_directory: Path to the queue root directory.
     :type queue_directory: pathlib.Path
     :param processing_directory: Path to the directory used for temporary working trees
@@ -34,6 +41,11 @@ def process_queue(
         Maximum number of ``AIND-Ephys-Pipeline`` jobs allowed to be running
         concurrently before new submissions are skipped.
     :type max_concurrent_aind_jobs: int
+    :param jitter_seconds:
+        Maximum number of seconds to sleep before proceeding. A uniformly
+        random duration between ``0`` and *jitter_seconds* is chosen each
+        invocation. Set to ``0`` to disable jitter entirely.
+    :type jitter_seconds: float
     :param test: If ``True``, preserve temporary processing directories on success.
     :type test: bool
     :returns:
@@ -43,7 +55,16 @@ def process_queue(
         slots were available.
     :rtype: Literal["submitted", "no-pending", "slots-unavailable"]
     :raises FileNotFoundError: If ``state.jsonl`` is not found in *queue_directory*.
+    :raises ValueError: If *jitter_seconds* is negative.
     """
+    if jitter_seconds < 0:
+        message = "jitter_seconds must be non-negative"
+        raise ValueError(message)
+    if jitter_seconds > 0:
+        delay = random.uniform(0, jitter_seconds)
+        _log.info("Sleeping %.2f seconds (jitter) before processing queue", delay)
+        time.sleep(delay)
+
     state_file = queue_directory / "state.jsonl"
     if not state_file.exists():
         message = f"State file not found: {state_file}"
