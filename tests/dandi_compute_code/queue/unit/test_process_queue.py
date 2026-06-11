@@ -43,3 +43,20 @@ def test_process_queue_refreshes_state_when_empty(tmp_path: pathlib.Path, caplog
 
     mock_submit.assert_not_called()
     assert any("No entries in" in record.message for record in caplog.records)
+
+
+@pytest.mark.ai_generated
+def test_process_queue_rejects_non_positive_max_concurrent_jobs(tmp_path: pathlib.Path) -> None:
+    """process_queue raises when max_concurrent_aind_jobs is less than one."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "state.jsonl").write_text("{}\n")
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+
+    with pytest.raises(ValueError, match="max_concurrent_aind_jobs must be at least 1"):
+        process_queue(
+            queue_directory=queue_dir,
+            processing_directory=processing_dir,
+            max_concurrent_aind_jobs=0,
+        )

@@ -90,6 +90,30 @@ def test_process_queue_submits_when_no_jobs_running(mock_queue_state: tuple[path
 
 
 @pytest.mark.ai_generated
+def test_process_queue_respects_explicit_max_concurrent_jobs(
+    mock_queue_state: tuple[pathlib.Path, pathlib.Path],
+) -> None:
+    """process_queue uses the explicit AIND concurrency limit to compute submissions."""
+    queue_dir, processing_dir = mock_queue_state
+
+    with (
+        mock.patch("dandi_compute_code.queue._process_queue._count_running_aind_ephys_pipeline_jobs", return_value=1),
+        mock.patch("dandi_compute_code.queue._process_queue._submit_next", return_value=True) as mock_submit,
+    ):
+        process_queue(
+            queue_directory=queue_dir,
+            processing_directory=processing_dir,
+            max_concurrent_aind_jobs=3,
+        )
+
+    mock_submit.assert_called_once_with(
+        processing_directory=processing_dir,
+        max_submissions=2,
+        test=False,
+    )
+
+
+@pytest.mark.ai_generated
 def test_process_queue_does_not_submit_when_jobs_running(mock_queue_state: tuple[pathlib.Path, pathlib.Path]) -> None:
     """process_queue does not submit when two AIND-Ephys-Pipeline jobs already run."""
     queue_dir, processing_dir = mock_queue_state

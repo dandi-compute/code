@@ -404,6 +404,15 @@ def _queue_stats_command(
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 @click.option(
+    "--max-concurrent-aind-jobs",
+    "max_concurrent_aind_jobs",
+    help="Maximum number of AIND jobs allowed to be running before submission is skipped.",
+    required=False,
+    type=click.IntRange(min=1),
+    default=2,
+    show_default=True,
+)
+@click.option(
     "--silent",
     help="Suppress informational log output.",
     required=False,
@@ -421,6 +430,7 @@ def _queue_stats_command(
 def _queue_process_command(
     queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
+    max_concurrent_aind_jobs: int = 2,
     silent: bool = False,
     test: bool = False,
 ) -> None:
@@ -431,6 +441,7 @@ def _queue_process_command(
     queue_status = process_queue(
         queue_directory=queue_directory,
         processing_directory=processing_directory,
+        max_concurrent_aind_jobs=max_concurrent_aind_jobs,
         test=test,
     )
     if not silent and queue_status == "no-pending":

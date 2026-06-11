@@ -12,23 +12,28 @@ def process_queue(
     *,
     queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
+    max_concurrent_aind_jobs: int = 2,
     test: bool = False,
 ) -> Literal["submitted", "no-pending", "slots-unavailable"]:
     """
-    Submit jobs from ``state.jsonl`` up to two total
+    Submit jobs from ``state.jsonl`` up to ``max_concurrent_aind_jobs`` total
     running ``AIND-Ephys-Pipeline`` SLURM jobs.
 
     If ``state.jsonl`` is absent, a :class:`FileNotFoundError` is raised.
     If ``state.jsonl`` exists but is empty, a warning is emitted and the
     invocation returns without submitting jobs. Otherwise ``squeue --me`` is
     checked for currently running ``AIND-Ephys-Pipeline`` jobs, and up to the
-    difference from two jobs are submitted.
+    difference from ``max_concurrent_aind_jobs`` jobs are submitted.
 
     :param queue_directory: Path to the queue root directory.
     :type queue_directory: pathlib.Path
     :param processing_directory: Path to the directory used for temporary working trees
         during job submission.
     :type processing_directory: pathlib.Path
+    :param max_concurrent_aind_jobs:
+        Maximum number of ``AIND-Ephys-Pipeline`` jobs allowed to be running
+        concurrently before new submissions are skipped.
+    :type max_concurrent_aind_jobs: int
     :param test: If ``True``, preserve temporary processing directories on success.
     :type test: bool
     :returns:
@@ -43,12 +48,15 @@ def process_queue(
     if not state_file.exists():
         message = f"State file not found: {state_file}"
         raise FileNotFoundError(message)
+    if max_concurrent_aind_jobs < 1:
+        message = "max_concurrent_aind_jobs must be at least 1"
+        raise ValueError(message)
     if not state_file.read_text().strip():
         _log.info(f"No entries in {state_file}")
         return "no-pending"
 
     running_count = _count_running_aind_ephys_pipeline_jobs()
-    available_slots = max(0, 2 - running_count)
+    available_slots = max(0, max_concurrent_aind_jobs - running_count)
     if available_slots < 1:
         return "slots-unavailable"
 
