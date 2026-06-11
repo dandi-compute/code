@@ -338,6 +338,40 @@ def test_cli_queue_process_passes_processing_directory(tmp_path: pathlib.Path) -
     mock_process.assert_called_once_with(
         queue_directory=queue_dir,
         processing_directory=processing_dir,
+        max_concurrent_aind_jobs=2,
+        test=False,
+    )
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_process_passes_max_concurrent_aind_jobs(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue process forwards --max to process_queue."""
+    queue_dir = _make_queue_dir(tmp_path)
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    runner = CliRunner()
+
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.process_queue") as mock_process:
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "queue",
+                "process",
+                "--queue",
+                str(queue_dir),
+                "--processing",
+                str(processing_dir),
+                "--max",
+                "4",
+            ],
+            env={"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"},
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_process.assert_called_once_with(
+        queue_directory=queue_dir,
+        processing_directory=processing_dir,
+        max_concurrent_aind_jobs=4,
         test=False,
     )
 
@@ -369,6 +403,7 @@ def test_cli_queue_process_passes_test_flag(tmp_path: pathlib.Path) -> None:
     mock_process.assert_called_once_with(
         queue_directory=queue_dir,
         processing_directory=processing_dir,
+        max_concurrent_aind_jobs=2,
         test=True,
     )
 
