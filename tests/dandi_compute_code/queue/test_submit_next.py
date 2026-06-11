@@ -39,7 +39,7 @@ def _make_metadata_with_submitted(*code_dir_paths: str) -> AssetsJsonldMetadata:
     """Return metadata with both ``code/submit.sh`` and submitted-marker assets for each path."""
     path_to_asset_metadata = {}
     for code_dir_path in code_dir_paths:
-        for filename in ("submit.sh", "submitted_date-date-2025+01+01_time-00+00+00"):
+        for filename in ("submit.sh", "submitted_date-2025+01+01_time-00+00+00"):
             asset_path = f"{code_dir_path}/{filename}"
             path_to_asset_metadata[asset_path] = AssetMetadata(
                 path=asset_path,
@@ -222,7 +222,7 @@ def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(
     assert len(marker_files) == 1
     submitted_marker = marker_files[0]
     assert re.fullmatch(
-        r"submitted_date-date-\d{4}\+\d{2}\+\d{2}_time-\d{2}\+\d{2}\+\d{2}",
+        r"submitted_date-\d{4}\+\d{2}\+\d{2}_time-\d{2}\+\d{2}\+\d{2}",
         submitted_marker.name,
     )
     assert submitted_marker.read_bytes() == b"1"

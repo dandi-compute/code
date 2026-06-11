@@ -160,7 +160,7 @@ def test_submit_job_writes_integer_timestamped_submitted_marker(tmp_path: pathli
     assert len(marker_files) == 1
     submitted_marker = marker_files[0]
     assert re.fullmatch(
-        r"submitted_date-date-\d{4}\+\d{2}\+\d{2}_time-\d{2}\+\d{2}\+\d{2}",
+        r"submitted_date-\d{4}\+\d{2}\+\d{2}_time-\d{2}\+\d{2}\+\d{2}",
         submitted_marker.name,
     )
     assert submitted_marker.read_bytes() == b"1"

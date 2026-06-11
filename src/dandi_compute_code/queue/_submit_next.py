@@ -109,7 +109,7 @@ def _submit_next(
 
         now = datetime.datetime.now()
         submitted_marker = submit_sh_path.parent / (
-            f"submitted_date-date-{now.year:04d}+{now.month:02d}+{now.day:02d}"
+            f"submitted_date-{now.year:04d}+{now.month:02d}+{now.day:02d}"
             f"_time-{now.hour:02d}+{now.minute:02d}+{now.second:02d}"
         )
         submitted_marker.write_bytes(b"1")
