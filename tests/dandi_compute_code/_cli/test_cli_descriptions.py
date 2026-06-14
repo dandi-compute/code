@@ -18,6 +18,7 @@ from dandi_compute_code._cli import _dandicompute_group
         (["queue", "refresh", "--help"], "Regenerate state.jsonl from DANDI assets metadata."),
         (["queue", "clean", "--help"], "Delete unsubmitted capsules that are no longer present in the queue."),
         (["queue", "stats", "--help"], "Write aggregate queue statistics from state.jsonl and timeline reports."),
+        (["queue", "pending", "--help"], "Report whether any queued jobs are awaiting submission."),
         (["issues", "--help"], "Scan logs and write per-capsule and aggregate issue reports."),
         (["issues", "dump", "--help"], "Scan nextflow and slurm logs and write per-capsule issue records."),
         (["issues", "summarize", "--help"], "Summarize discovered issue lines by descending occurrence count."),
