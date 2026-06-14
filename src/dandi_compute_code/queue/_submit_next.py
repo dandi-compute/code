@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 
-from ..dandiset._load_assets_jsonld_metadata import load_assets_jsonld_metadata
+from ._find_pending_entries import _find_pending_entries
 
 _log = logging.getLogger(__name__)
 
@@ -55,19 +55,7 @@ def _submit_next(
     if max_submissions < 1:
         return False
 
-    metadata = load_assets_jsonld_metadata()
-    paths = set(metadata.path_to_asset_metadata.keys())
-
-    candidates: list[str] = []
-    for asset_path in sorted(paths):
-        if asset_path.endswith("/code/submit.sh"):
-            code_dir_path = asset_path[: -len("/submit.sh")]
-            submitted_marker_prefix = f"{code_dir_path}/submitted_date-"
-            has_submitted_marker = any(
-                path == f"{code_dir_path}/submitted" or path.startswith(submitted_marker_prefix) for path in paths
-            )
-            if not has_submitted_marker:
-                candidates.append(code_dir_path)
+    candidates = _find_pending_entries()
 
     if not candidates:
         _log.info("No eligible pending entries available for submission")

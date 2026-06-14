@@ -30,6 +30,12 @@ To clean unsubmitted job capsules:
 dandicompute queue clean --queue ./queue/ --dandiset ./dandi/001697/
 ```
 
+To check whether there is any queued work before dispatching, use `queue pending`. It exits with code 0 when at least one job is awaiting submission, and code 1 when there is nothing to process. This lets a crontab skip the dispatch entirely when the queue is empty:
+
+```bash
+dandicompute queue pending --silent && dandicompute queue process --queue ./queue/ --processing ./processing/
+```
+
 
 
 ## Contributing Non-Code Files

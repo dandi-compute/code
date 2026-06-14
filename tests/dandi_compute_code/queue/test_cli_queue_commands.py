@@ -497,6 +497,42 @@ def test_cli_queue_process_passes_jitter_seconds(tmp_path: pathlib.Path) -> None
 
 
 @pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    ("pending", "expected_exit_code", "expected_output"),
+    [
+        pytest.param(True, 0, "true", id="pending-exits-zero"),
+        pytest.param(False, 1, "false", id="not-pending-exits-one"),
+    ],
+)
+def test_cli_queue_pending_reports_and_sets_exit_code(
+    pending: bool, expected_exit_code: int, expected_output: str
+) -> None:
+    """dandicompute queue pending prints the boolean and exits 0 when pending, 1 otherwise."""
+    runner = CliRunner()
+
+    with mock.patch(
+        "dandi_compute_code._cli._dandicompute_group.has_pending_jobs", return_value=pending
+    ) as mock_has_pending:
+        result = runner.invoke(_dandicompute_group, ["queue", "pending"])
+
+    assert result.exit_code == expected_exit_code, result.output
+    mock_has_pending.assert_called_once_with()
+    assert expected_output in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_pending_silent_suppresses_output(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue pending --silent still sets the exit code but prints nothing."""
+    runner = CliRunner()
+
+    with mock.patch("dandi_compute_code._cli._dandicompute_group.has_pending_jobs", return_value=False):
+        result = runner.invoke(_dandicompute_group, ["queue", "pending", "--silent"])
+
+    assert result.exit_code == 1, result.output
+    assert "false" not in result.output
+
+
+@pytest.mark.ai_generated
 def test_cli_queue_process_passes_zero_jitter(tmp_path: pathlib.Path) -> None:
     """dandicompute queue process forwards --jitter 0 to process_queue."""
     queue_dir = _make_queue_dir(tmp_path)

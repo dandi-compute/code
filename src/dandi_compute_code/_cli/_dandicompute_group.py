@@ -17,6 +17,7 @@ from ..queue import (
     aggregate_queue_statistics,
     clean_unsubmitted_capsules,
     dump_issues,
+    has_pending_jobs,
     prepare_queue,
     process_queue,
     summarize_issues,
@@ -387,6 +388,32 @@ def _queue_stats_command(
         _styled_echo(text=f"\nWrote queue aggregate statistics: {queue_directory / output_file_name}", color="green")
 
 
+# dandicompute queue pending [OPTIONS]
+@_queue_group.command(name="pending")
+@click.option(
+    "--silent",
+    help="Suppress informational log output and the printed result.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
+@click.pass_context
+def _queue_pending_command(context: click.Context, silent: bool = False) -> None:
+    """Report whether any queued jobs are awaiting submission.
+
+    Prints ``true`` and exits with code 0 when at least one job is pending.
+    Prints ``false`` and exits with code 1 when nothing is pending. This lets a
+    crontab skip the dispatch entirely when there is no work, for example:
+
+        dandicompute queue pending --silent && dandicompute queue process ...
+    """
+    _configure_logging(silent=silent)
+    pending = has_pending_jobs()
+    if not silent:
+        _styled_echo(text="true" if pending else "false", color="green" if pending else "yellow")
+    context.exit(0 if pending else 1)
+
+
 # dandicompute queue process [OPTIONS]
 @_queue_group.command(name="process")
 @click.option(
@@ -664,4 +691,5 @@ _dandicompute_group.aggregate_queue_statistics = aggregate_queue_statistics
 _dandicompute_group.dump_issues = dump_issues
 _dandicompute_group.summarize_issues = summarize_issues
 _dandicompute_group.process_queue = process_queue
+_dandicompute_group.has_pending_jobs = has_pending_jobs
 _dandicompute_group.write_queue_state = write_queue_state
