@@ -61,11 +61,12 @@ def prepare_queue(
 
     if content_ids is None:
         qualifying_aind_content_ids_url = (
-            "https://raw.githubusercontent.com/dandi-cache/qualifying-aind-content-ids/refs/heads/min/"
-            "derivatives/qualifying_aind_content_ids.min.json.gz"
+            "https://raw.githubusercontent.com/dandi-cache/qualifying-aind-content-ids/dist/"
+            "derivatives/qualifying_aind_content_ids.jsonl.gz"
         )
         with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
-            fetched_content_ids = json.loads(gzip.decompress(response.read()))
+            decompressed = gzip.decompress(response.read()).decode()
+            fetched_content_ids = [json.loads(line) for line in decompressed.splitlines() if line.strip()]
         content_ids = _order_content_ids_for_uniform_dandiset_sampling(content_ids=fetched_content_ids)
 
     state_file = queue_directory / "state.jsonl"
