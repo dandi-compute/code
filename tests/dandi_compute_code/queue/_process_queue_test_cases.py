@@ -129,9 +129,10 @@ def _read_jsonl(file_path: pathlib.Path) -> list[dict]:
     return [json.loads(line) for line in file_path.read_text().splitlines() if line.strip()]
 
 
-def _mock_urlopen_response(payload: object) -> mock.MagicMock:
+def _mock_urlopen_response(payload: list) -> mock.MagicMock:
     mock_response = mock.MagicMock()
-    mock_response.read.return_value = gzip.compress(json.dumps(payload).encode())
+    jsonl = "\n".join(json.dumps(item) for item in payload)
+    mock_response.read.return_value = gzip.compress(jsonl.encode())
     mock_response.__enter__.return_value = mock_response
     mock_response.__exit__.return_value = False
     return mock_response
