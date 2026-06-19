@@ -22,7 +22,6 @@ def _load_content_id_to_usage_dandiset_path() -> dict[str, dict[str, str]]:
             return json.loads(gzip.decompress(response.read()))
     except Exception as exception:
         message = (
-            "Unable to load content-id-to-usage-dandiset-path mapping from "
-            f"{_CONTENT_ID_TO_USAGE_DANDISET_PATH_URL}"
+            "Unable to load content-id-to-usage-dandiset-path mapping from " f"{_CONTENT_ID_TO_USAGE_DANDISET_PATH_URL}"
         )
         raise RuntimeError(message) from exception
