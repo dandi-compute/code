@@ -199,22 +199,22 @@ def prepare_aind_ephys_job(
     config_id = actual_config_md5[0:7]
 
     dandi_compute_dir = pathlib.Path("/orcd/data/dandi/001/dandi-compute")
-    content_id_to_unique_dandiset_path_url = (
-        "https://raw.githubusercontent.com/dandi-cache/content-id-to-unique-dandiset-path/refs/heads/min/"
-        "derivatives/content_id_to_unique_dandiset_path.min.json.gz"
+    content_id_to_usage_dandiset_path_url = (
+        "https://raw.githubusercontent.com/dandi-cache/content-id-to-usage-dandiset-path/min/"
+        "derivatives/content_id_to_usage_dandiset_path.min.json.gz"
     )
-    with urllib.request.urlopen(url=content_id_to_unique_dandiset_path_url) as response:
-        content_id_to_unique_dandiset_path = json.loads(gzip.decompress(response.read()))
+    with urllib.request.urlopen(url=content_id_to_usage_dandiset_path_url) as response:
+        content_id_to_usage_dandiset_path = json.loads(gzip.decompress(response.read()))
 
-    if content_id not in content_id_to_unique_dandiset_path:
+    if content_id not in content_id_to_usage_dandiset_path:
         message = (
-            f"Content ID {content_id} not found in content ID to unique Dandiset path mapping. "
+            f"Content ID {content_id} not found in content ID to usage Dandiset path mapping. "
             "This likely means that the content ID is not associated with a Dandiset, "
             "or that the mapping file is out of date."
         )
         raise UnmappedContentIDError(message)
 
-    dandiset_id, dandiset_path = next(iter(content_id_to_unique_dandiset_path[content_id].items()))
+    dandiset_id, dandiset_path = next(iter(content_id_to_usage_dandiset_path[content_id].items()))
     if dandiset_id == _SANDBOX_DANDISET_ID:
         message = (
             f"Content ID {content_id} maps to sandbox dandiset {_SANDBOX_DANDISET_ID}, "
