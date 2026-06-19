@@ -1,7 +1,7 @@
 import logging
 
 from ._create_dandi_api_client import _create_dandi_api_client
-from ._load_content_id_to_unique_dandiset_path import _load_content_id_to_unique_dandiset_path
+from ._load_content_id_to_usage_dandiset_path import _load_content_id_to_usage_dandiset_path
 from ._normalize_asset_path import _normalize_asset_path
 
 _log = logging.getLogger(__name__)
@@ -30,17 +30,17 @@ def _lookup_asset_size_bytes(
         Either tuple value can be ``None`` when lookup conditions are not met.
     :rtype: tuple[int | None, str | None]
     """
-    content_id_to_unique_dandiset_path = _load_content_id_to_unique_dandiset_path()
-    if content_id not in content_id_to_unique_dandiset_path:
+    content_id_to_usage_dandiset_path = _load_content_id_to_usage_dandiset_path()
+    if content_id not in content_id_to_usage_dandiset_path:
         _log.warning(
             (
                 f"Unable to resolve asset_size_bytes for {content_id}. "
-                "Content ID is not present in content-id-to-unique-dandiset-path mapping."
+                "Content ID is not present in content-id-to-usage-dandiset-path mapping."
             ),
         )
         return None, None
 
-    mapped_dandiset_path = content_id_to_unique_dandiset_path[content_id]
+    mapped_dandiset_path = content_id_to_usage_dandiset_path[content_id]
     if len(mapped_dandiset_path) != 1:
         _log.warning(
             (

@@ -1,7 +1,7 @@
 import collections
 import random
 
-from ..dandiset._load_content_id_to_unique_dandiset_path import _load_content_id_to_unique_dandiset_path
+from ..dandiset._load_content_id_to_usage_dandiset_path import _load_content_id_to_usage_dandiset_path
 
 
 def _order_content_ids_for_uniform_dandiset_sampling(*, content_ids: list[str]) -> list[str]:
@@ -12,7 +12,7 @@ def _order_content_ids_for_uniform_dandiset_sampling(*, content_ids: list[str]) 
     singleton groups so they remain eligible without being merged into the
     randomization for any unrelated Dandiset.
     """
-    content_id_to_dandiset_path = _load_content_id_to_unique_dandiset_path()
+    content_id_to_dandiset_path = _load_content_id_to_usage_dandiset_path()
     content_ids_by_dandiset: dict[str | tuple[str, str], list[str]] = {}
     for content_id in content_ids:
         content_id_mapping = content_id_to_dandiset_path.get(content_id, {})

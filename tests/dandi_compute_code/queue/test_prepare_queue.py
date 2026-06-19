@@ -47,7 +47,7 @@ def test_prepare_queue_calls_prepare_for_each_qualifying_asset(tmp_path: pathlib
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
         mock.patch(
-            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_unique_dandiset_path",
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_usage_dandiset_path",
             return_value={},
         ),
         mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
@@ -110,7 +110,7 @@ def test_prepare_queue_skips_when_failures_reach_max(tmp_path: pathlib.Path) -> 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
         mock.patch(
-            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_unique_dandiset_path",
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_usage_dandiset_path",
             return_value={},
         ),
         mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
@@ -136,7 +136,7 @@ def test_prepare_queue_passes_optional_args_through(tmp_path: pathlib.Path) -> N
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
         mock.patch(
-            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_unique_dandiset_path",
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_usage_dandiset_path",
             return_value={},
         ),
         mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
@@ -164,7 +164,7 @@ def test_prepare_queue_limit_stops_after_n_assets(tmp_path: pathlib.Path) -> Non
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
         mock.patch(
-            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_unique_dandiset_path",
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_usage_dandiset_path",
             return_value={},
         ),
         mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
@@ -189,7 +189,7 @@ def test_prepare_queue_limit_samples_uniformly_over_dandisets(tmp_path: pathlib.
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
         mock.patch(
-            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_unique_dandiset_path",
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_usage_dandiset_path",
             return_value=content_id_mapping,
         ),
         mock.patch(
