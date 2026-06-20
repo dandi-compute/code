@@ -66,7 +66,7 @@ def prepare_queue(
         )
         with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
             decompressed = gzip.decompress(response.read()).decode()
-            fetched_content_ids = [line.strip() for line in decompressed.splitlines() if line.strip()]
+            fetched_content_ids = [json.loads(line) for line in decompressed.splitlines() if line.strip()]
         content_ids = _order_content_ids_for_uniform_dandiset_sampling(content_ids=fetched_content_ids)
 
     state_file = queue_directory / "state.jsonl"
