@@ -66,10 +66,6 @@ def prepare_queue(
         )
         with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
             decompressed = gzip.decompress(response.read()).decode()
-            # The file is JSON Lines: each line is a JSON-encoded content ID string
-            # (e.g. `"019fac19-..."`). Decode each line so the surrounding quotes are
-            # stripped; otherwise the quoted value never matches the bare-UUID keys in
-            # the content-ID-to-usage-Dandiset-path mapping.
             fetched_content_ids = [json.loads(line) for line in decompressed.splitlines() if line.strip()]
         content_ids = _order_content_ids_for_uniform_dandiset_sampling(content_ids=fetched_content_ids)
 

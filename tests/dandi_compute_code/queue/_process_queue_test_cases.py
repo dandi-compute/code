@@ -131,7 +131,6 @@ def _read_jsonl(file_path: pathlib.Path) -> list[dict]:
 
 def _mock_urlopen_response(payload: list) -> mock.MagicMock:
     mock_response = mock.MagicMock()
-    # The qualifying-content-ids file is JSON Lines: each line is a JSON-encoded value.
     jsonl = "\n".join(json.dumps(item) for item in payload)
     mock_response.read.return_value = gzip.compress(jsonl.encode())
     mock_response.__enter__.return_value = mock_response
