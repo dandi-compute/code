@@ -20,6 +20,7 @@
 - Prefer assigning return values to named locals before `return` when this improves readability and debugger breakpoint placement.
 - Avoid excessive em-dashes, colons, and semicolons in written text such as documentation. Prefer breaking into separate, shorter sentences instead.
 - Favor defining one-word names for CLI flags, then map those onto longer, more explicit keyword arguments at the API level.
+- Keep inline comments sparse. Only explain non-obvious "why", not "what" the code does. Prefer self-documenting code and clear names over narration; do not annotate routine logic.
 
 ## Tests
 
