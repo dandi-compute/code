@@ -22,6 +22,7 @@ from ..queue import (
     prepare_queue,
     process_queue,
     summarize_issues,
+    write_archive_state,
     write_queue_state,
 )
 
@@ -737,6 +738,34 @@ def _archive_job_command(
         _styled_echo(text=f"\nArchived job capsule: {capsule_path}", color="green")
 
 
+# dandicompute archive refresh [OPTIONS]
+@_archive_group.command(name="refresh")
+@click.option(
+    "--queue",
+    "queue_directory",
+    help="Path to the queue root directory.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+@click.option(
+    "--silent",
+    help="Suppress informational log output.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
+def _archive_refresh_command(
+    queue_directory: pathlib.Path,
+    silent: bool = False,
+) -> None:
+    """Regenerate archive_state.jsonl from the failed runs archive metadata."""
+    _configure_logging(silent=silent)
+    try:
+        write_archive_state(queue_directory=queue_directory)
+    except FileNotFoundError as error:
+        raise click.ClickException(str(error)) from error
+
+
 # Required for daily tests
 _dandicompute_group.prepare_queue = prepare_queue
 _dandicompute_group.prepare_aind_ephys_job = prepare_aind_ephys_job
@@ -747,4 +776,5 @@ _dandicompute_group.summarize_issues = summarize_issues
 _dandicompute_group.process_queue = process_queue
 _dandicompute_group.has_pending_jobs = has_pending_jobs
 _dandicompute_group.write_queue_state = write_queue_state
+_dandicompute_group.write_archive_state = write_archive_state
 _dandicompute_group.move_job_capsule = move_job_capsule

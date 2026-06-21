@@ -4,7 +4,7 @@ import json
 import logging
 import urllib.request
 
-from ._globals import _ASSETS_JSONLD_URL
+from ._globals import _ASSETS_JSONLD_URL_TEMPLATE, _JOB_CAPSULES_DANDISET_ID
 
 _log = logging.getLogger(__name__)
 
@@ -64,29 +64,35 @@ def _build_asset_metadata(asset: dict[str, object]) -> tuple[str, AssetMetadata]
     )
 
 
-@functools.lru_cache(maxsize=1)
-def load_assets_jsonld_metadata() -> AssetsJsonldMetadata:
+@functools.lru_cache(maxsize=None)
+def load_assets_jsonld_metadata(dandiset_id: str = _JOB_CAPSULES_DANDISET_ID) -> AssetsJsonldMetadata:
     """
-    Load content-id and path metadata from the DANDI 001697 draft ``assets.jsonld`` stream.
+    Load content-id and path metadata from a DANDI draft ``assets.jsonld`` stream.
 
+    :param dandiset_id:
+        The Dandiset whose draft ``assets.jsonld`` is loaded.  Defaults to the
+        job capsules Dandiset (``001697``), where jobs run; pass the failed runs
+        archive Dandiset (``001873``) to describe the archived state instead.
+    :type dandiset_id: str
     :returns:
         Indexed assets metadata.
     :rtype: AssetsJsonldMetadata
     """
+    assets_jsonld_url = _ASSETS_JSONLD_URL_TEMPLATE.format(dandiset_id=dandiset_id)
     content_id_to_asset: dict[str, dict[str, object]] = {}
     path_to_asset_metadata: dict[str, AssetMetadata] = {}
     try:
-        with urllib.request.urlopen(_ASSETS_JSONLD_URL, timeout=30) as response:
+        with urllib.request.urlopen(assets_jsonld_url, timeout=30) as response:
             assets = json.load(response)
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exception:
-        _log.warning("Unable to load metadata from %s: %s", _ASSETS_JSONLD_URL, exception)
+        _log.warning("Unable to load metadata from %s: %s", assets_jsonld_url, exception)
         return AssetsJsonldMetadata(
             content_id_to_asset=content_id_to_asset,
             path_to_asset_metadata=path_to_asset_metadata,
         )
 
     if not isinstance(assets, list):
-        raise ValueError(f"Expected a JSON array from {_ASSETS_JSONLD_URL}, got {type(assets).__name__}")
+        raise ValueError(f"Expected a JSON array from {assets_jsonld_url}, got {type(assets).__name__}")
 
     for asset in assets:
         if not isinstance(asset, dict):

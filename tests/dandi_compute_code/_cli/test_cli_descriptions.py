@@ -28,6 +28,10 @@ from dandi_compute_code._cli import _dandicompute_group
             ["archive", "job", "--help"],
             "Move a job capsule from the job capsules Dandiset to the failed runs archive.",
         ),
+        (
+            ["archive", "refresh", "--help"],
+            "Regenerate archive_state.jsonl from the failed runs archive metadata.",
+        ),
     ],
 )
 def test_cli_help_includes_descriptions(args: list[str], expected_text: str) -> None:

@@ -7,6 +7,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from ._load_queue_config import _load_queue_config
+from ..dandiset._globals import _FAILED_RUNS_ARCHIVE_DANDISET_ID, _JOB_CAPSULES_DANDISET_ID
 from ..dandiset._load_assets_jsonld_metadata import (
     AssetMetadata,
     AssetsJsonldMetadata,
@@ -314,9 +315,14 @@ def _sort_key(record: dict[str, object]) -> tuple[str, str, str]:
     )
 
 
-def write_queue_state(*, queue_directory: pathlib.Path) -> None:
+def write_queue_state(
+    *,
+    queue_directory: pathlib.Path,
+    dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
+    state_file_name: str = "state.jsonl",
+) -> None:
     """
-    Write ``state.jsonl`` from DANDI ``assets.jsonld`` metadata.
+    Write a queue state file from DANDI ``assets.jsonld`` metadata.
 
     Each state entry represents one attempt capsule inferred from the
     ``derivatives/dandiset-*/.../pipeline-*/..._attempt-*`` path structure in
@@ -339,9 +345,15 @@ def write_queue_state(*, queue_directory: pathlib.Path) -> None:
 
     :param queue_directory: Path to the queue root directory.
     :type queue_directory: pathlib.Path
+    :param dandiset_id: The Dandiset whose ``assets.jsonld`` is read to portray
+        the state. Defaults to the job capsules Dandiset (``001697``).
+    :type dandiset_id: str
+    :param state_file_name: Name of the state file written under
+        *queue_directory*. Defaults to ``state.jsonl``.
+    :type state_file_name: str
     """
     _load_queue_config(queue_directory=queue_directory)
-    local_metadata = load_assets_jsonld_metadata()
+    local_metadata = load_assets_jsonld_metadata(dandiset_id=dandiset_id)
 
     collection = _collect_attempts(local_metadata)
     upstream_cache = _UpstreamMetadataCache()
@@ -351,7 +363,27 @@ def write_queue_state(*, queue_directory: pathlib.Path) -> None:
     )
     records.sort(key=_sort_key)
 
-    state_file = queue_directory / "state.jsonl"
+    state_file = queue_directory / state_file_name
     with state_file.open(mode="w") as file_stream:
         for record in records:
             file_stream.write(json.dumps(record) + "\n")
+
+
+def write_archive_state(*, queue_directory: pathlib.Path) -> None:
+    """
+    Write ``archive_state.jsonl`` from the failed runs archive ``assets.jsonld``.
+
+    This is the archive counterpart to :func:`write_queue_state`. It produces an
+    identically structured state file that lives adjacent to ``state.jsonl`` in
+    *queue_directory*, but portrays the state of the failed runs archive
+    Dandiset (``001873``) — where ``dandicompute archive job`` moves capsules —
+    rather than the job capsules Dandiset (``001697``) where jobs run.
+
+    :param queue_directory: Path to the queue root directory.
+    :type queue_directory: pathlib.Path
+    """
+    write_queue_state(
+        queue_directory=queue_directory,
+        dandiset_id=_FAILED_RUNS_ARCHIVE_DANDISET_ID,
+        state_file_name="archive_state.jsonl",
+    )
