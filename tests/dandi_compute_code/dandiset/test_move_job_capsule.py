@@ -287,4 +287,4 @@ def test_cli_archive_job_invokes_move(tmp_path: pathlib.Path) -> None:
         )
     assert result.exit_code == 0, result.output
     assert "Archived job capsule" in result.output
-    mock_move.assert_called_once_with(capsule_path=_EXAMPLE_CAPSULE_PATH, scratch_directory=None, test=False)
+    mock_move.assert_called_once_with(capsule_path=_EXAMPLE_CAPSULE_PATH, processing_directory=None, test=False)

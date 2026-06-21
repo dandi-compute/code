@@ -15,19 +15,19 @@ def move_job_capsule(
     capsule_path: str,
     source_dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
     target_dandiset_id: str = _FAILED_RUNS_ARCHIVE_DANDISET_ID,
-    scratch_directory: pathlib.Path | None = None,
+    processing_directory: pathlib.Path | None = None,
     test: bool = False,
 ) -> None:
     """
     Move a single job capsule folder from one Dandiset to another.
 
     The capsule subtree is downloaded from *source_dandiset_id* into a fresh
-    scratch directory via ``dandi download --preserve-tree``, copied under a
-    locally materialized copy of the *target_dandiset_id* tree, uploaded via
+    temporary working tree via ``dandi download --preserve-tree``, copied under
+    a locally materialized copy of the *target_dandiset_id* tree, uploaded via
     ``dandi upload --allow-any-path``, and only then removed from
-    *source_dandiset_id* via ``dandi delete``. The scratch directory is removed
-    on success. Each step is restricted to the single capsule subtree so the
-    operation touches the minimum number of assets.
+    *source_dandiset_id* via ``dandi delete``. The temporary working tree is
+    removed on success. Each step is restricted to the single capsule subtree
+    so the operation touches the minimum number of assets.
 
     The path of the capsule inside the Dandiset is preserved exactly. Only the
     enclosing Dandiset changes. Deletion from the source happens only after the
@@ -46,19 +46,20 @@ def move_job_capsule(
     target_dandiset_id : str, optional
         Dandiset the capsule is moved to. Defaults to the failed runs archive
         Dandiset (``001873``).
-    scratch_directory : pathlib.Path, optional
+    processing_directory : pathlib.Path, optional
         Directory in which the temporary per-capsule working tree is created.
         When ``None``, the system default temporary location is used.
     test : bool, optional
-        When ``True``, leave the scratch directory on disk after a successful
-        move for debugging.
+        When ``True``, leave the temporary working tree on disk after a
+        successful move for debugging.
 
     Raises
     ------
     RuntimeError
         If ``DANDI_API_KEY`` is unset or blank, or if any ``dandi`` subprocess
-        returns a non-zero exit code. The scratch directory is intentionally
-        left in place when any step fails so that it can be inspected.
+        returns a non-zero exit code. The temporary working tree is
+        intentionally left in place when any step fails so that it can be
+        inspected.
     """
     if not os.environ.get("DANDI_API_KEY", "").strip():
         message = "`DANDI_API_KEY` environment variable is not set or is blank."
@@ -66,13 +67,13 @@ def move_job_capsule(
 
     relative_capsule_path = capsule_path.strip("/")
 
-    scratch_root = pathlib.Path(tempfile.mkdtemp(dir=scratch_directory, prefix="move-capsule-"))
+    processing_root = pathlib.Path(tempfile.mkdtemp(dir=processing_directory, prefix="move-capsule-"))
     _log.info(
         "Moving job capsule %s from %s to %s in %s",
         relative_capsule_path,
         source_dandiset_id,
         target_dandiset_id,
-        scratch_root,
+        processing_root,
     )
 
     source_url = f"dandi://dandi/{source_dandiset_id}/{relative_capsule_path}/"
@@ -80,7 +81,7 @@ def move_job_capsule(
         ["dandi", "download", "--preserve-tree", source_url],
         capture_output=True,
         text=True,
-        cwd=scratch_root,
+        cwd=processing_root,
     )
     _log.info("dandi download returned code %d for %s", download.returncode, source_url)
     _log.debug("dandi download stdout: %s\nstderr: %s", download.stdout, download.stderr)
@@ -94,7 +95,7 @@ def move_job_capsule(
         ["dandi", "download", "--download", "dandiset.yaml", target_url],
         capture_output=True,
         text=True,
-        cwd=scratch_root,
+        cwd=processing_root,
     )
     _log.info("dandi download of dandiset.yaml returned code %d for %s", metadata_download.returncode, target_url)
     _log.debug("dandi download stdout: %s\nstderr: %s", metadata_download.stdout, metadata_download.stderr)
@@ -103,12 +104,12 @@ def move_job_capsule(
         message = f"dandi download of dandiset.yaml failed for {target_url}"
         raise RuntimeError(message)
 
-    source_capsule_directory = scratch_root / source_dandiset_id / relative_capsule_path
-    target_capsule_directory = scratch_root / target_dandiset_id / relative_capsule_path
+    source_capsule_directory = processing_root / source_dandiset_id / relative_capsule_path
+    target_capsule_directory = processing_root / target_dandiset_id / relative_capsule_path
     target_capsule_directory.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source_capsule_directory, target_capsule_directory)
 
-    target_dandiset_directory = scratch_root / target_dandiset_id
+    target_dandiset_directory = processing_root / target_dandiset_id
     upload = subprocess.run(
         ["dandi", "upload", "--allow-any-path", relative_capsule_path],
         capture_output=True,
@@ -138,6 +139,6 @@ def move_job_capsule(
         raise RuntimeError(message)
 
     if test:
-        _log.info("Leaving scratch directory in place for test mode: %s", scratch_root)
+        _log.info("Leaving temporary working tree in place for test mode: %s", processing_root)
     else:
-        shutil.rmtree(scratch_root)
+        shutil.rmtree(processing_root)

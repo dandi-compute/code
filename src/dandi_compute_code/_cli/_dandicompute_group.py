@@ -701,8 +701,8 @@ def _archive_group() -> None:
     type=str,
 )
 @click.option(
-    "--scratch",
-    "scratch_directory",
+    "--processing",
+    "processing_directory",
     help="Directory for the temporary working tree (defaults to the system temporary location).",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -711,7 +711,7 @@ def _archive_group() -> None:
 @click.option(
     "--test",
     "test",
-    help="Preserve the scratch directory instead of cleaning it up.",
+    help="Preserve the temporary working tree instead of cleaning it up.",
     required=False,
     is_flag=True,
     default=False,
@@ -725,14 +725,14 @@ def _archive_group() -> None:
 )
 def _archive_job_command(
     capsule_path: str,
-    scratch_directory: pathlib.Path | None = None,
+    processing_directory: pathlib.Path | None = None,
     test: bool = False,
     silent: bool = False,
 ) -> None:
     """Move a job capsule from the job capsules Dandiset to the failed runs archive."""
     _configure_logging(silent=silent)
     _require_dandi_api_key()
-    move_job_capsule(capsule_path=capsule_path, scratch_directory=scratch_directory, test=test)
+    move_job_capsule(capsule_path=capsule_path, processing_directory=processing_directory, test=test)
     if not silent:
         _styled_echo(text=f"\nArchived job capsule: {capsule_path}", color="green")
 
