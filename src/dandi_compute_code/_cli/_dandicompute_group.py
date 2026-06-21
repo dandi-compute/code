@@ -22,6 +22,7 @@ from ..queue import (
     prepare_queue,
     process_queue,
     summarize_issues,
+    write_archive_state,
     write_queue_state,
 )
 
@@ -735,3 +736,31 @@ def _archive_job_command(
     move_job_capsule(capsule_path=capsule_path, processing_directory=processing_directory, test=test)
     if not silent:
         _styled_echo(text=f"\nArchived job capsule: {capsule_path}", color="green")
+
+
+# dandicompute archive refresh [OPTIONS]
+@_archive_group.command(name="refresh")
+@click.option(
+    "--queue",
+    "queue_directory",
+    help="Path to the queue root directory.",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+)
+@click.option(
+    "--silent",
+    help="Suppress informational log output.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
+def _archive_refresh_command(
+    queue_directory: pathlib.Path,
+    silent: bool = False,
+) -> None:
+    """Regenerate archive_state.jsonl from the failed runs archive metadata."""
+    _configure_logging(silent=silent)
+    try:
+        write_archive_state(queue_directory=queue_directory)
+    except FileNotFoundError as error:
+        raise click.ClickException(str(error)) from error
