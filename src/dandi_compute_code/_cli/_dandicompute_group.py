@@ -691,8 +691,8 @@ def _archive_group() -> None:
     pass
 
 
-# dandicompute archive capsule [OPTIONS]
-@_archive_group.command(name="capsule")
+# dandicompute archive job [OPTIONS]
+@_archive_group.command(name="job")
 @click.option(
     "--path",
     "capsule_path",
@@ -723,7 +723,7 @@ def _archive_group() -> None:
     is_flag=True,
     default=False,
 )
-def _archive_capsule_command(
+def _archive_job_command(
     capsule_path: str,
     scratch_directory: pathlib.Path | None = None,
     test: bool = False,

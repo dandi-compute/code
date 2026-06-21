@@ -33,7 +33,7 @@ dandicompute queue clean --queue ./queue/ --dandiset ./dandi/001697/
 To archive a failed job capsule by moving it from `001697` to the permanent archive `001873`:
 
 ```bash
-dandicompute archive capsule --path derivatives/dandiset-000409/sub-mouse01/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1
+dandicompute archive job --path derivatives/dandiset-000409/sub-mouse01/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1
 ```
 
 The capsule subtree is downloaded into a scratch directory, uploaded to `001873`, and only then deleted from `001697`. The scratch directory is cleaned up on success. A failed upload never removes the original.

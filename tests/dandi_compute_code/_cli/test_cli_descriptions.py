@@ -25,7 +25,7 @@ from dandi_compute_code._cli import _dandicompute_group
         (["delete", "--help"], "Delete remote and local derivatives for specific version patterns."),
         (["archive", "--help"], "Move job capsules into the permanent archive of failed job runs."),
         (
-            ["archive", "capsule", "--help"],
+            ["archive", "job", "--help"],
             "Move a job capsule from the job capsules Dandiset to the failed runs archive.",
         ),
     ],

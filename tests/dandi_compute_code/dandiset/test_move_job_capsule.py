@@ -1,5 +1,5 @@
 """
-Unit tests for move_job_capsule and the ``dandicompute archive capsule`` CLI command.
+Unit tests for move_job_capsule and the ``dandicompute archive job`` CLI command.
 """
 
 import os
@@ -260,22 +260,22 @@ def test_move_job_capsule_strips_surrounding_slashes(tmp_path: pathlib.Path) -> 
 
 
 @pytest.mark.ai_generated
-def test_cli_archive_capsule_fails_without_api_key(tmp_path: pathlib.Path) -> None:
+def test_cli_archive_job_fails_without_api_key(tmp_path: pathlib.Path) -> None:
     """CLI errors immediately when DANDI_API_KEY is missing."""
     runner = CliRunner()
     env_without_key = {k: v for k, v in os.environ.items() if k != "DANDI_API_KEY"}
     with mock.patch.dict(os.environ, env_without_key, clear=True):
         result = runner.invoke(
             _dandicompute_group,
-            ["archive", "capsule", "--path", _EXAMPLE_CAPSULE_PATH],
+            ["archive", "job", "--path", _EXAMPLE_CAPSULE_PATH],
         )
     assert result.exit_code != 0
     assert "DANDI_API_KEY" in result.output
 
 
 @pytest.mark.ai_generated
-def test_cli_archive_capsule_invokes_move(tmp_path: pathlib.Path) -> None:
-    """dandicompute archive capsule calls move_job_capsule with the provided path."""
+def test_cli_archive_job_invokes_move(tmp_path: pathlib.Path) -> None:
+    """dandicompute archive job calls move_job_capsule with the provided path."""
     runner = CliRunner()
     with (
         mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}),
@@ -283,7 +283,7 @@ def test_cli_archive_capsule_invokes_move(tmp_path: pathlib.Path) -> None:
     ):
         result = runner.invoke(
             _dandicompute_group,
-            ["archive", "capsule", "--path", _EXAMPLE_CAPSULE_PATH],
+            ["archive", "job", "--path", _EXAMPLE_CAPSULE_PATH],
         )
     assert result.exit_code == 0, result.output
     assert "Archived job capsule" in result.output
