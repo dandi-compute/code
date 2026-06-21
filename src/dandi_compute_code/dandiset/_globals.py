@@ -6,6 +6,8 @@ _ATTEMPT_DIR_RE = re.compile(
 )
 _ATTEMPT_SUFFIX_RE = re.compile(r"_attempt-\d+$")
 _SANDBOX_DANDISET_ID = "214527"
+_JOB_CAPSULES_DANDISET_ID = "001697"
+_FAILED_RUNS_ARCHIVE_DANDISET_ID = "001873"
 _SANDBOX_API_URL = "https://api.sandbox.dandiarchive.org/api"
 _CONTENT_ID_TO_USAGE_DANDISET_PATH_URL = (
     "https://raw.githubusercontent.com/dandi-cache/content-id-to-usage-dandiset-path/min/"
