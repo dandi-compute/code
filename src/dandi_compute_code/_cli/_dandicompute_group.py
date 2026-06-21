@@ -10,6 +10,7 @@ from .._configure_logging import _configure_logging
 from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
 from ..dandiset import (
     delete_dandiset_version,
+    move_job_capsule,
     scan_version_directories,
 )
 from ..queue import (
@@ -683,6 +684,59 @@ def _delete_version_command(dandiset_directory: pathlib.Path, version: str, sile
         _styled_echo(text=f"\nDeleted {len(deleted)} version {noun}.", color="green")
 
 
+# dandicompute archive
+@_dandicompute_group.group(name="archive")
+def _archive_group() -> None:
+    """Move job capsules into the permanent archive of failed job runs."""
+    pass
+
+
+# dandicompute archive job [OPTIONS]
+@_archive_group.command(name="job")
+@click.option(
+    "--path",
+    "capsule_path",
+    help="Path of the job capsule folder relative to the source Dandiset root.",
+    required=True,
+    type=str,
+)
+@click.option(
+    "--processing",
+    "processing_directory",
+    help="Directory for the temporary working tree (defaults to the system temporary location).",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--test",
+    "test",
+    help="Preserve the temporary working tree instead of cleaning it up.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
+@click.option(
+    "--silent",
+    help="Suppress informational log output.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
+def _archive_job_command(
+    capsule_path: str,
+    processing_directory: pathlib.Path | None = None,
+    test: bool = False,
+    silent: bool = False,
+) -> None:
+    """Move a job capsule from the job capsules Dandiset to the failed runs archive."""
+    _configure_logging(silent=silent)
+    _require_dandi_api_key()
+    move_job_capsule(capsule_path=capsule_path, processing_directory=processing_directory, test=test)
+    if not silent:
+        _styled_echo(text=f"\nArchived job capsule: {capsule_path}", color="green")
+
+
 # Required for daily tests
 _dandicompute_group.prepare_queue = prepare_queue
 _dandicompute_group.prepare_aind_ephys_job = prepare_aind_ephys_job
@@ -693,3 +747,4 @@ _dandicompute_group.summarize_issues = summarize_issues
 _dandicompute_group.process_queue = process_queue
 _dandicompute_group.has_pending_jobs = has_pending_jobs
 _dandicompute_group.write_queue_state = write_queue_state
+_dandicompute_group.move_job_capsule = move_job_capsule
