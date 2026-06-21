@@ -22,6 +22,7 @@ from ..queue import (
     prepare_queue,
     process_queue,
     summarize_issues,
+    write_archive_state,
     write_queue_state,
 )
 
@@ -290,10 +291,11 @@ def _queue_refresh_command(
     queue_directory: pathlib.Path,
     silent: bool = False,
 ) -> None:
-    """Regenerate state.jsonl from DANDI assets metadata."""
+    """Regenerate state.jsonl and archive_state.jsonl from DANDI assets metadata."""
     _configure_logging(silent=silent)
     try:
         write_queue_state(queue_directory=queue_directory)
+        write_archive_state(queue_directory=queue_directory)
     except FileNotFoundError as error:
         raise click.ClickException(str(error)) from error
 
