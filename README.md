@@ -36,7 +36,6 @@ To archive a failed job capsule by moving it from `001697` to the permanent arch
 dandicompute archive job --path derivatives/dandiset-000409/sub-mouse01/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1
 ```
 
-The capsule subtree is downloaded into a scratch directory, uploaded to `001873`, and only then deleted from `001697`. The scratch directory is cleaned up on success. A failed upload never removes the original.
 
 To check whether there is any queued work before dispatching, use `queue pending`. It exits with code 0 when at least one job is awaiting submission, and code 1 when there is nothing to process. This lets a crontab skip the dispatch entirely when the queue is empty:
 
