@@ -85,8 +85,8 @@ def test_write_archive_state_writes_empty_file_when_no_attempts(tmp_path: pathli
 
 
 @pytest.mark.ai_generated
-def test_cli_archive_refresh_writes_archive_state(tmp_path: pathlib.Path) -> None:
-    """dandicompute archive refresh writes archive_state.jsonl from archive metadata."""
+def test_cli_queue_refresh_also_writes_archive_state(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue refresh writes both state.jsonl and archive_state.jsonl."""
     from click.testing import CliRunner
 
     from dandi_compute_code._cli import _dandicompute_group
@@ -102,26 +102,9 @@ def test_cli_archive_refresh_writes_archive_state(tmp_path: pathlib.Path) -> Non
     ):
         result = runner.invoke(
             _dandicompute_group,
-            ["archive", "refresh", "--queue", str(queue_dir)],
+            ["queue", "refresh", "--queue", str(queue_dir)],
         )
 
     assert result.exit_code == 0, result.output
+    assert (queue_dir / "state.jsonl").exists()
     assert (queue_dir / "archive_state.jsonl").exists()
-
-
-@pytest.mark.ai_generated
-def test_cli_archive_refresh_fails_without_queue_config(tmp_path: pathlib.Path) -> None:
-    """dandicompute archive refresh fails when queue_config.json is missing."""
-    from click.testing import CliRunner
-
-    from dandi_compute_code._cli import _dandicompute_group
-
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    runner = CliRunner()
-    result = runner.invoke(
-        _dandicompute_group,
-        ["archive", "refresh", "--queue", str(queue_dir)],
-    )
-    assert result.exit_code != 0
-    assert "queue_config.json" in result.output

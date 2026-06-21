@@ -36,10 +36,10 @@ To archive a failed job capsule by moving it from `001697` to the permanent arch
 dandicompute archive job --path derivatives/dandiset-000409/sub-mouse01/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1
 ```
 
-To regenerate `archive_state.jsonl` (the archive counterpart to `state.jsonl`, portraying the state of the archive Dandiset `001873`):
+To regenerate the queue state files, run `queue refresh`. This rewrites `state.jsonl` (the job capsules Dandiset `001697`, where jobs run) and, alongside it, `archive_state.jsonl` (the archive counterpart portraying the state of the failed runs archive Dandiset `001873`):
 
 ```bash
-dandicompute archive refresh --queue ./queue/
+dandicompute queue refresh --queue ./queue/
 ```
 
 

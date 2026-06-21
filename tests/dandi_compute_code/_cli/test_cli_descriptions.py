@@ -15,7 +15,7 @@ from dandi_compute_code._cli import _dandicompute_group
         (["prepare", "aind", "--help"], "Prepare an AIND ephys job, or prepare test queue entries with --test."),
         (["submit", "--help"], "Submit a previously prepared pipeline script via sbatch."),
         (["queue", "--help"], "Manage queue ordering, preparation, and execution."),
-        (["queue", "refresh", "--help"], "Regenerate state.jsonl from DANDI assets metadata."),
+        (["queue", "refresh", "--help"], "Regenerate state.jsonl and archive_state.jsonl from DANDI assets metadata."),
         (["queue", "clean", "--help"], "Delete unsubmitted capsules that are no longer present in the queue."),
         (["queue", "stats", "--help"], "Write aggregate queue statistics from state.jsonl and timeline reports."),
         (["queue", "pending", "--help"], "Report whether any queued jobs are awaiting submission."),
@@ -27,10 +27,6 @@ from dandi_compute_code._cli import _dandicompute_group
         (
             ["archive", "job", "--help"],
             "Move a job capsule from the job capsules Dandiset to the failed runs archive.",
-        ),
-        (
-            ["archive", "refresh", "--help"],
-            "Regenerate archive_state.jsonl from the failed runs archive metadata.",
         ),
     ],
 )
