@@ -36,12 +36,6 @@ To archive a failed job capsule by moving it from `001697` to the permanent arch
 dandicompute archive job --path derivatives/dandiset-000409/sub-mouse01/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1
 ```
 
-To regenerate the queue state files, run `queue refresh`. This rewrites `state.jsonl` (the job capsules Dandiset `001697`, where jobs run) and, alongside it, `archive_state.jsonl` (the archive counterpart portraying the state of the failed runs archive Dandiset `001873`):
-
-```bash
-dandicompute queue refresh --queue ./queue/
-```
-
 
 To check whether there is any queued work before dispatching, use `queue pending`. It exits with code 0 when at least one job is awaiting submission, and code 1 when there is nothing to process. This lets a crontab skip the dispatch entirely when the queue is empty:
 
