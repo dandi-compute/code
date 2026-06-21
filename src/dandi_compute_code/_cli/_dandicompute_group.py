@@ -22,7 +22,6 @@ from ..queue import (
     prepare_queue,
     process_queue,
     summarize_issues,
-    write_archive_state,
     write_queue_state,
 )
 
