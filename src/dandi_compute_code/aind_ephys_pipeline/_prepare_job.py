@@ -247,7 +247,11 @@ def prepare_aind_ephys_job(
 
     # TODO: if first run for asset, skip below and add sourcedata
 
-    pipeline_directory = pipeline_directory or dandi_compute_dir / "aind-ephys-pipeline"
+    # Resolve to an absolute path so the rendered submission script stays correct regardless of
+    # the working directory it runs from. The script ``cd``s into a per-job ``logs/`` directory
+    # (for ``.nextflow/`` isolation) before calling ``nextflow run``, so a relative pipeline path
+    # would otherwise be misinterpreted by Nextflow as a remote ``org/repo`` to pull from GitHub.
+    pipeline_directory = (pipeline_directory or dandi_compute_dir / "aind-ephys-pipeline").absolute()
     pipeline_file_path = pipeline_directory / "pipeline" / "main_multi_backend.nf"
     dandi_compute_code_source_dir = dandi_compute_dir / "code"
 
