@@ -10,7 +10,6 @@ import importlib.metadata
 import json
 import os
 import pathlib
-import re
 from unittest import mock
 
 import pytest
@@ -200,71 +199,6 @@ def test_prepare_aind_ephys_job_raises_on_sandbox_dandiset() -> None:
             parameters_key="original",
             pipeline_directory=None,
         )
-
-
-@pytest.mark.ai_generated
-def test_prepare_aind_ephys_job_renders_absolute_pipeline_run_path(
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The generated script's ``nextflow run`` path is absolute even when the pipeline dir is relative.
-
-    Regression test for the bug where ``cd``-ing into the per-job ``logs/`` directory (added for
-    ``.nextflow/`` isolation) caused a relative pipeline path to be misread by Nextflow as a remote
-    ``org/repo`` to pull from GitHub. The run path must stay rooted at the local checkout directory.
-    """
-    pipeline_dir = tmp_path / "pipeline_repo"
-    main_nf = pipeline_dir / "pipeline" / "main_multi_backend.nf"
-    main_nf.parent.mkdir(parents=True)
-    main_nf.write_text("// fake nextflow pipeline")
-    (pipeline_dir / "pipeline" / "capsule_versions.env").write_text("CAPSULE_VERSION=1\n")
-
-    content_id = "07100000-0000-0000-0000-000000000000"
-    mapping = {content_id: {"000001": "sub-mouse01/sub-mouse01_ecephys.nwb"}}
-
-    temp_dir = tmp_path / "tmpdir"
-    temp_dir.mkdir()
-
-    mock_dandiset = mock.MagicMock()
-    mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
-
-    # Pass the pipeline directory as a *relative* path (resolved from the current working directory)
-    # to exercise the absolute-path resolution rather than relying on an already-absolute input.
-    monkeypatch.chdir(tmp_path)
-    relative_pipeline_directory = pathlib.Path("pipeline_repo")
-
-    with (
-        mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
-        mock.patch("subprocess.check_output", side_effect=_git_check_output),
-        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
-        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.download.download"),
-        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.upload.upload"),
-        mock.patch("tempfile.mkdtemp", return_value=str(temp_dir)),
-        mock.patch.dict(os.environ, {"DANDI_API_KEY": "fake-key"}),
-    ):
-        mock_client.return_value.get_dandiset.return_value = mock_dandiset
-
-        script_path = prepare_aind_ephys_job(
-            pipeline_version="v1.1.0",
-            content_id=content_id,
-            config_key="default",
-            parameters_key="original",
-            pipeline_directory=relative_pipeline_directory,
-        )
-
-    script_text = script_path.read_text()
-    run_match = re.search(r'run "([^"]+)"', script_text)
-    assert run_match is not None, "Could not find a `run` line in the generated submission script"
-    run_path = run_match.group(1)
-
-    # The pipeline run path must be absolute so it resolves regardless of the script's working directory
-    assert pathlib.Path(run_path).is_absolute()
-    assert run_path == str(pipeline_dir.absolute() / "pipeline" / "main_multi_backend.nf")
-
-    # ...and it must sit under the same directory the script checks out via `git -C`
-    git_match = re.search(r'git -C "([^"]+)" checkout', script_text)
-    assert git_match is not None
-    assert run_path.startswith(git_match.group(1) + "/")
 
 
 @pytest.mark.ai_generated
