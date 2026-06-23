@@ -91,7 +91,7 @@ def test_write_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.
             return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata=attempt_metadata_by_path),
         ),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata=source_metadata_by_path),
         ),
     ):
@@ -132,7 +132,7 @@ def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pat
             ),
         ),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -191,7 +191,7 @@ def test_write_queue_state_submitted_marker_sets_has_been_submitted(tmp_path: pa
     with (
         mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
@@ -277,7 +277,7 @@ def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_
     with (
         mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
@@ -342,7 +342,7 @@ def test_write_queue_state_with_dandiset_directory_creates_valid_files(tmp_path:
             ),
         ),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -410,7 +410,7 @@ def test_write_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathlib
             ),
         ),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -474,7 +474,7 @@ def test_write_queue_state_writes_resolved_dandi_path_for_root_level_asset(tmp_p
             ),
         ),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -591,7 +591,7 @@ def test_write_queue_state_with_dandiset_directory_includes_only_pending_in_wait
     with (
         mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
@@ -645,7 +645,7 @@ def test_write_queue_state_with_dandiset_directory_excludes_entries_with_submitt
             ),
         ),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -718,7 +718,7 @@ def test_write_queue_state_parses_codebase_field_from_new_format_path(tmp_path: 
     with (
         mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
@@ -767,7 +767,7 @@ def test_write_queue_state_output_paths_empty_when_no_output(tmp_path: pathlib.P
     with (
         mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
@@ -813,7 +813,7 @@ def test_write_queue_state_log_paths_empty_when_no_logs(tmp_path: pathlib.Path) 
     with (
         mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
@@ -870,7 +870,7 @@ def test_write_queue_state_output_paths_maps_asset_paths_to_blob_ids(tmp_path: p
     with (
         mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
@@ -942,7 +942,7 @@ def test_write_queue_state_log_paths_map_asset_paths_to_blob_ids(tmp_path: pathl
     with (
         mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
