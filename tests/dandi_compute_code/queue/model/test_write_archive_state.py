@@ -54,7 +54,7 @@ def test_write_archive_state_writes_adjacent_file_from_archive_dandiset(tmp_path
             load_metadata,
         ),
         mock.patch(
-            "dandi_compute_code.queue._queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
