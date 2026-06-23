@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 
-from dandi_compute_code.queue import QueueState, clean_unsubmitted_capsules
+from dandi_compute_code.queue import JobEntry, clean_unsubmitted_capsules
 
 
 @pytest.fixture
@@ -13,10 +13,6 @@ def _dandi_api_key() -> Iterator[None]:
     """clean_unsubmitted_capsules requires DANDI_API_KEY; provide a dummy value."""
     with mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
         yield
-
-
-def _entries(state_file: pathlib.Path) -> list:
-    return QueueState.from_jsonl(state_file).entries
 
 
 @pytest.mark.ai_generated
@@ -31,14 +27,15 @@ def test_clean_unsubmitted_capsules_raises_without_dandi_api_key(tmp_path: pathl
 def test_clean_unsubmitted_capsules_removes_queued_directories(
     queue_directory: pathlib.Path,
     install_state_file: Callable[..., pathlib.Path],
+    entry_for: Callable[..., JobEntry],
     create_attempt_directory: Callable[..., pathlib.Path],
     tmp_path: pathlib.Path,
     _dandi_api_key: None,
 ) -> None:
     """clean_unsubmitted_capsules removes capsule dirs that are queued (code, no logs, no output)."""
     dandiset_dir = tmp_path / "dandiset"
-    state_file = install_state_file(queue_directory=queue_directory, name="clean_single_queued.jsonl")
-    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=_entries(state_file)[0])
+    install_state_file(queue_directory=queue_directory)
+    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=entry_for("sub-pending"))
 
     with mock.patch("subprocess.run") as mock_run:
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_directory)
@@ -52,14 +49,17 @@ def test_clean_unsubmitted_capsules_removes_queued_directories(
 def test_clean_unsubmitted_capsules_skips_entries_with_output(
     queue_directory: pathlib.Path,
     install_state_file: Callable[..., pathlib.Path],
+    entry_for: Callable[..., JobEntry],
     create_attempt_directory: Callable[..., pathlib.Path],
     tmp_path: pathlib.Path,
     _dandi_api_key: None,
 ) -> None:
     """clean_unsubmitted_capsules does not remove capsules that already have output."""
     dandiset_dir = tmp_path / "dandiset"
-    state_file = install_state_file(queue_directory=queue_directory, name="clean_single_with_output.jsonl")
-    completed_dir = create_attempt_directory(base_dir=dandiset_dir, entry=_entries(state_file)[0], with_output=True)
+    install_state_file(queue_directory=queue_directory)
+    completed_dir = create_attempt_directory(
+        base_dir=dandiset_dir, entry=entry_for("sub-successful"), with_logs=True, with_output=True
+    )
 
     with mock.patch("subprocess.run") as mock_run:
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_directory)
@@ -73,14 +73,15 @@ def test_clean_unsubmitted_capsules_skips_entries_with_output(
 def test_clean_unsubmitted_capsules_skips_entries_with_logs(
     queue_directory: pathlib.Path,
     install_state_file: Callable[..., pathlib.Path],
+    entry_for: Callable[..., JobEntry],
     create_attempt_directory: Callable[..., pathlib.Path],
     tmp_path: pathlib.Path,
     _dandi_api_key: None,
 ) -> None:
     """clean_unsubmitted_capsules does not remove capsules that have logs (already run)."""
     dandiset_dir = tmp_path / "dandiset"
-    state_file = install_state_file(queue_directory=queue_directory, name="clean_single_with_logs.jsonl")
-    failed_dir = create_attempt_directory(base_dir=dandiset_dir, entry=_entries(state_file)[0], with_logs=True)
+    install_state_file(queue_directory=queue_directory)
+    failed_dir = create_attempt_directory(base_dir=dandiset_dir, entry=entry_for("sub-running"), with_logs=True)
 
     with mock.patch("subprocess.run") as mock_run:
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_directory)
@@ -94,14 +95,15 @@ def test_clean_unsubmitted_capsules_skips_entries_with_logs(
 def test_clean_unsubmitted_capsules_ignores_dataset_description_in_logs(
     queue_directory: pathlib.Path,
     install_state_file: Callable[..., pathlib.Path],
+    entry_for: Callable[..., JobEntry],
     create_attempt_directory: Callable[..., pathlib.Path],
     tmp_path: pathlib.Path,
     _dandi_api_key: None,
 ) -> None:
     """A logs/ directory holding only dataset_description.json does not protect a queued capsule."""
     dandiset_dir = tmp_path / "dandiset"
-    state_file = install_state_file(queue_directory=queue_directory, name="clean_single_queued.jsonl")
-    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=_entries(state_file)[0])
+    install_state_file(queue_directory=queue_directory)
+    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=entry_for("sub-pending"))
     logs_dir = queued_dir / "logs"
     logs_dir.mkdir()
     (logs_dir / "dataset_description.json").write_text("{}\n")
@@ -117,14 +119,15 @@ def test_clean_unsubmitted_capsules_ignores_dataset_description_in_logs(
 def test_clean_unsubmitted_capsules_skips_entries_with_submitted_marker(
     queue_directory: pathlib.Path,
     install_state_file: Callable[..., pathlib.Path],
+    entry_for: Callable[..., JobEntry],
     create_attempt_directory: Callable[..., pathlib.Path],
     tmp_path: pathlib.Path,
     _dandi_api_key: None,
 ) -> None:
     """clean_unsubmitted_capsules does not remove capsules with a submitted marker file."""
     dandiset_dir = tmp_path / "dandiset"
-    state_file = install_state_file(queue_directory=queue_directory, name="clean_single_queued.jsonl")
-    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=_entries(state_file)[0], submitted=True)
+    install_state_file(queue_directory=queue_directory)
+    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=entry_for("sub-pending"), submitted=True)
 
     with mock.patch("subprocess.run") as mock_run:
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_directory)
@@ -141,9 +144,9 @@ def test_clean_unsubmitted_capsules_returns_empty_list_when_nothing_queued(
     tmp_path: pathlib.Path,
     _dandi_api_key: None,
 ) -> None:
-    """clean_unsubmitted_capsules returns an empty list when there are no queued capsules."""
+    """clean_unsubmitted_capsules returns an empty list when nothing is materialized on disk."""
     dandiset_dir = tmp_path / "dandiset"
-    install_state_file(queue_directory=queue_directory, name="empty.jsonl")
+    install_state_file(queue_directory=queue_directory)
 
     removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_directory)
 
@@ -154,14 +157,15 @@ def test_clean_unsubmitted_capsules_returns_empty_list_when_nothing_queued(
 def test_clean_unsubmitted_capsules_handles_session_in_path(
     queue_directory: pathlib.Path,
     install_state_file: Callable[..., pathlib.Path],
+    entry_for: Callable[..., JobEntry],
     create_attempt_directory: Callable[..., pathlib.Path],
     tmp_path: pathlib.Path,
     _dandi_api_key: None,
 ) -> None:
     """clean_unsubmitted_capsules correctly handles attempt dirs with a session component."""
     dandiset_dir = tmp_path / "dandiset"
-    state_file = install_state_file(queue_directory=queue_directory, name="clean_single_session.jsonl")
-    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=_entries(state_file)[0])
+    install_state_file(queue_directory=queue_directory)
+    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=entry_for("sub-with-session/ses-recording"))
 
     with mock.patch("subprocess.run"):
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_directory)
@@ -174,14 +178,15 @@ def test_clean_unsubmitted_capsules_handles_session_in_path(
 def test_clean_unsubmitted_capsules_removes_empty_parent_directories(
     queue_directory: pathlib.Path,
     install_state_file: Callable[..., pathlib.Path],
+    entry_for: Callable[..., JobEntry],
     create_attempt_directory: Callable[..., pathlib.Path],
     tmp_path: pathlib.Path,
     _dandi_api_key: None,
 ) -> None:
-    """clean_unsubmitted_capsules removes empty pipeline/version dirs after last capsule removal."""
+    """clean_unsubmitted_capsules removes empty pipeline/session dirs after last capsule removal."""
     dandiset_dir = tmp_path / "dandiset"
-    state_file = install_state_file(queue_directory=queue_directory, name="clean_session_versioned.jsonl")
-    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=_entries(state_file)[0])
+    install_state_file(queue_directory=queue_directory)
+    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=entry_for("sub-sole-attempt/ses-recording"))
     pipeline_dir = queued_dir.parent
     session_dir = pipeline_dir.parent
 
@@ -197,16 +202,18 @@ def test_clean_unsubmitted_capsules_removes_empty_parent_directories(
 def test_clean_unsubmitted_capsules_keeps_non_empty_parent_directories(
     queue_directory: pathlib.Path,
     install_state_file: Callable[..., pathlib.Path],
+    entry_for: Callable[..., JobEntry],
     create_attempt_directory: Callable[..., pathlib.Path],
     tmp_path: pathlib.Path,
     _dandi_api_key: None,
 ) -> None:
     """clean_unsubmitted_capsules keeps pipeline/version dirs when a sibling attempt remains."""
     dandiset_dir = tmp_path / "dandiset"
-    state_file = install_state_file(queue_directory=queue_directory, name="clean_two_attempts.jsonl")
-    queued_entry, completed_entry = _entries(state_file)
-    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=queued_entry)
-    remaining_dir = create_attempt_directory(base_dir=dandiset_dir, entry=completed_entry, with_output=True)
+    install_state_file(queue_directory=queue_directory)
+    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=entry_for("sub-two-attempts", attempt=1))
+    remaining_dir = create_attempt_directory(
+        base_dir=dandiset_dir, entry=entry_for("sub-two-attempts", attempt=2), with_output=True
+    )
     pipeline_dir = queued_dir.parent
 
     with mock.patch("subprocess.run"):
@@ -221,14 +228,17 @@ def test_clean_unsubmitted_capsules_keeps_non_empty_parent_directories(
 def test_clean_unsubmitted_capsules_removes_legacy_nested_layout(
     queue_directory: pathlib.Path,
     install_state_file: Callable[..., pathlib.Path],
+    entry_for: Callable[..., JobEntry],
     create_attempt_directory: Callable[..., pathlib.Path],
     tmp_path: pathlib.Path,
     _dandi_api_key: None,
 ) -> None:
     """clean_unsubmitted_capsules removes queued capsules in the legacy nested layout."""
     dandiset_dir = tmp_path / "dandiset"
-    state_file = install_state_file(queue_directory=queue_directory, name="clean_session_versioned.jsonl")
-    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=_entries(state_file)[0], legacy_nested=True)
+    install_state_file(queue_directory=queue_directory)
+    queued_dir = create_attempt_directory(
+        base_dir=dandiset_dir, entry=entry_for("sub-sole-attempt/ses-recording"), legacy_nested=True
+    )
     version_dir = queued_dir.parent
     pipeline_dir = version_dir.parent
 
@@ -245,16 +255,18 @@ def test_clean_unsubmitted_capsules_removes_legacy_nested_layout(
 def test_clean_unsubmitted_capsules_removes_only_queued_not_submitted(
     queue_directory: pathlib.Path,
     install_state_file: Callable[..., pathlib.Path],
+    entry_for: Callable[..., JobEntry],
     create_attempt_directory: Callable[..., pathlib.Path],
     tmp_path: pathlib.Path,
     _dandi_api_key: None,
 ) -> None:
     """clean_unsubmitted_capsules only removes queued capsules, leaving submitted ones intact."""
     dandiset_dir = tmp_path / "dandiset"
-    state_file = install_state_file(queue_directory=queue_directory, name="clean_two_dandisets_queued.jsonl")
-    queued_entry, submitted_entry = _entries(state_file)
-    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=queued_entry)
-    submitted_dir = create_attempt_directory(base_dir=dandiset_dir, entry=submitted_entry, submitted=True)
+    install_state_file(queue_directory=queue_directory)
+    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=entry_for("sub-pending"))
+    submitted_dir = create_attempt_directory(
+        base_dir=dandiset_dir, entry=entry_for("sub-already-submitted"), submitted=True
+    )
 
     with mock.patch("subprocess.run"):
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_directory)
@@ -273,10 +285,10 @@ def test_clean_unsubmitted_capsules_removed_entry_via_fallback_attempt_resolutio
 ) -> None:
     """clean_unsubmitted_capsules removes queued entry when dandi_path differs from on-disk attempt path."""
     dandiset_dir = tmp_path / "dandiset"
-    install_state_file(queue_directory=queue_directory, name="clean_fallback_sourcedata.jsonl")
+    install_state_file(queue_directory=queue_directory)
 
-    # The on-disk attempt lives under sub-mouse01 while the state dandi_path is "sourcedata",
-    # so it must be located via fallback resolution rather than the recorded path.
+    # The "sourcedata" entry's on-disk attempt lives under sub-mouse01, so it must be
+    # located via fallback resolution rather than the recorded dandi_path.
     attempt_dir = (
         dandiset_dir
         / "derivatives"

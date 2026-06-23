@@ -12,7 +12,7 @@ from collections.abc import Callable
 
 import pytest
 
-from dandi_compute_code.queue import JobEntry
+from dandi_compute_code.queue import JobEntry, QueueState
 
 #: Consolidated queue config used by tests that need a populated queue directory.
 EXAMPLE_QUEUE_CONFIG = {
@@ -27,13 +27,13 @@ EXAMPLE_QUEUE_CONFIG = {
     }
 }
 
-EXAMPLE_STATE_FILES_DIRECTORY = pathlib.Path(__file__).parent / "example_state_files"
+EXAMPLE_STATE_FILE = pathlib.Path(__file__).parent / "example_state_files" / "state.jsonl"
 
 
 @pytest.fixture
-def example_state_files_directory() -> pathlib.Path:
-    """Path to the directory of literal example ``state.jsonl`` files."""
-    return EXAMPLE_STATE_FILES_DIRECTORY
+def example_state_file() -> pathlib.Path:
+    """Path to the single literal example ``state.jsonl`` queue."""
+    return EXAMPLE_STATE_FILE
 
 
 @pytest.fixture
@@ -48,19 +48,38 @@ def queue_directory(tmp_path: pathlib.Path) -> pathlib.Path:
 @pytest.fixture
 def install_state_file() -> Callable[..., pathlib.Path]:
     """
-    Return a helper that copies an example state file into a queue directory.
+    Return a helper that copies the example queue into a queue directory.
 
-    The helper writes the literal contents of
-    ``example_state_files/<name>`` to ``<queue_directory>/state.jsonl`` and
-    returns the written path.
+    The helper writes the literal contents of ``example_state_files/state.jsonl``
+    to ``<queue_directory>/state.jsonl`` and returns the written path.
     """
 
-    def _install(*, queue_directory: pathlib.Path, name: str) -> pathlib.Path:
+    def _install(*, queue_directory: pathlib.Path) -> pathlib.Path:
         destination = queue_directory / "state.jsonl"
-        destination.write_text((EXAMPLE_STATE_FILES_DIRECTORY / name).read_text())
+        destination.write_text(EXAMPLE_STATE_FILE.read_text())
         return destination
 
     return _install
+
+
+@pytest.fixture
+def entry_for() -> Callable[..., JobEntry]:
+    """
+    Return a helper that selects an example entry by its ``dandi_path``.
+
+    Entries are identified by the scenario-naming ``dandi_path`` (and ``attempt``
+    when a scenario uses more than one attempt of the same asset).
+    """
+    queue_state = QueueState.from_jsonl(EXAMPLE_STATE_FILE)
+
+    def _entry_for(dandi_path: str, *, attempt: int = 1) -> JobEntry:
+        for entry in queue_state.entries:
+            if entry.job.dandi_path == dandi_path and entry.job.attempt == attempt:
+                return entry
+        message = f"No example entry with dandi_path={dandi_path!r} and attempt={attempt}"
+        raise KeyError(message)
+
+    return _entry_for
 
 
 @pytest.fixture

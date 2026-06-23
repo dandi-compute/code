@@ -13,8 +13,8 @@ def populated_queue(
     install_state_file: Callable[..., pathlib.Path],
     tmp_path: pathlib.Path,
 ) -> tuple[pathlib.Path, pathlib.Path]:
-    """A queue holding the pending-and-running example state, plus a processing directory."""
-    install_state_file(queue_directory=queue_directory, name="pending_and_running.jsonl")
+    """A queue holding the example state, plus a processing directory."""
+    install_state_file(queue_directory=queue_directory)
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
     return queue_directory, processing_dir

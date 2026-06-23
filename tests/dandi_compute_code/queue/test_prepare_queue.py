@@ -66,9 +66,9 @@ def test_prepare_queue_skips_when_failures_reach_max(
     install_state_file: Callable[..., pathlib.Path],
 ) -> None:
     """prepare_queue skips assets for dandisets whose failure count reaches max_fail_per_dandiset."""
-    # The example state records two failures for dandiset 000001 (== max_fail_per_dandiset)
-    # mapped to asset-aaa, and a non-failure for 000002 mapped to asset-bbb.
-    install_state_file(queue_directory=queue_directory, name="prepare_failures_reaching_max.jsonl")
+    # The example queue records repeated failures for dandiset 000001 (reaching
+    # max_fail_per_dandiset) mapped to asset-aaa, and a fresh asset in 000002 mapped to asset-bbb.
+    install_state_file(queue_directory=queue_directory)
     qualifying_ids = ["asset-aaa", "asset-bbb"]
 
     with (

@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pytest
 
-from dandi_compute_code.queue import QueueState, aggregate_queue_statistics
+from dandi_compute_code.queue import JobEntry, QueueState, aggregate_queue_statistics
 
 _TIMELINE_TWO_STEPS = """<script>
 window.data = {
@@ -29,22 +29,23 @@ window.data = {
 def test_aggregate_queue_statistics_writes_queue_stats_json(
     queue_directory: pathlib.Path,
     install_state_file: Callable[..., pathlib.Path],
+    entry_for: Callable[..., JobEntry],
     create_attempt_directory: Callable[..., pathlib.Path],
     tmp_path: pathlib.Path,
 ) -> None:
     """aggregate_queue_statistics writes queue_stats.json with byte and timeline aggregates."""
-    state_file = install_state_file(queue_directory=queue_directory, name="aggregate_two_attempts.jsonl")
+    state_file = install_state_file(queue_directory=queue_directory)
     dandiset_dir = tmp_path / "dandiset"
 
-    successful_entry = QueueState.from_jsonl(state_file).entries[0]
-    attempt_dir = create_attempt_directory(base_dir=dandiset_dir, entry=successful_entry, with_logs=True)
+    # sub-successful is the only entry with both output and a known source-asset size.
+    attempt_dir = create_attempt_directory(base_dir=dandiset_dir, entry=entry_for("sub-successful"), with_logs=True)
     (attempt_dir / "logs" / "timeline.html").write_text(_TIMELINE_TWO_STEPS)
 
     stats = aggregate_queue_statistics(queue_directory=queue_directory, dandiset_directory=dandiset_dir)
 
     queue_stats_file = queue_directory / "queue_stats.json"
     assert queue_stats_file.exists()
-    assert stats["state_entry_count"] == 2
+    assert stats["state_entry_count"] == len(QueueState.from_jsonl(state_file))
     assert stats["successful_asset_bytes_total"] == 120
     assert stats["timeline_files_processed"] == 1
     assert datetime.fromisoformat(stats["generated_at"])
@@ -57,15 +58,15 @@ def test_aggregate_queue_statistics_writes_queue_stats_json(
 def test_aggregate_queue_statistics_skips_invalid_timeline_html(
     queue_directory: pathlib.Path,
     install_state_file: Callable[..., pathlib.Path],
+    entry_for: Callable[..., JobEntry],
     create_attempt_directory: Callable[..., pathlib.Path],
     tmp_path: pathlib.Path,
 ) -> None:
     """aggregate_queue_statistics ignores timeline files with malformed embedded JSON."""
-    state_file = install_state_file(queue_directory=queue_directory, name="aggregate_single_successful.jsonl")
+    install_state_file(queue_directory=queue_directory)
     dandiset_dir = tmp_path / "dandiset"
 
-    entry = QueueState.from_jsonl(state_file).entries[0]
-    attempt_dir = create_attempt_directory(base_dir=dandiset_dir, entry=entry, with_logs=True)
+    attempt_dir = create_attempt_directory(base_dir=dandiset_dir, entry=entry_for("sub-successful"), with_logs=True)
     (attempt_dir / "logs" / "timeline.html").write_text("<script>window.data = {invalid json};</script>")
 
     stats = aggregate_queue_statistics(queue_directory=queue_directory, dandiset_directory=dandiset_dir)
@@ -81,11 +82,11 @@ def test_aggregate_queue_statistics_found_timeline_via_fallback_attempt_resoluti
     tmp_path: pathlib.Path,
 ) -> None:
     """aggregate_queue_statistics finds timeline files when state dandi_path differs from on-disk attempt path."""
-    install_state_file(queue_directory=queue_directory, name="aggregate_fallback_sourcedata.jsonl")
+    install_state_file(queue_directory=queue_directory)
     dandiset_dir = tmp_path / "dandiset"
 
-    # The on-disk attempt lives under sub-mouse01 while the state dandi_path is "sourcedata",
-    # so the attempt directory must be located via fallback resolution rather than the recorded path.
+    # The "sourcedata" entry's on-disk attempt lives under sub-mouse01, so its timeline
+    # must be located via fallback resolution rather than the recorded dandi_path.
     attempt_dir = (
         dandiset_dir
         / "derivatives"

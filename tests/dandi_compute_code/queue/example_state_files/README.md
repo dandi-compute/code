@@ -1,15 +1,16 @@
-# Example queue state files
+# Example queue state
 
-Each `.jsonl` file in this directory is a literal, committed example of a queue
-`state.jsonl` file. They are the shared ground truth for the queue test suite.
-Reading them here on GitHub shows exactly what input a test starts from, so the
-relationship between input state and expected behavior stays visible without
-having to reconstruct dictionaries inside the tests.
+`state.jsonl` is a single literal, committed example of a queue `state.jsonl`
+file. It is the shared ground truth for the queue test suite. Reading it here on
+GitHub shows exactly what state the tests start from, so the relationship between
+input state and expected behavior stays visible without reconstructing
+dictionaries inside the tests.
 
-Every line is one job capsule, matching the format produced by
-`QueueState.to_file` and consumed by `QueueState.from_jsonl`. Tests load these
-files through the fixtures in `../conftest.py` (`example_state_files_directory`
-and `install_state_file`) rather than building entries inline.
+Each line is one job capsule, matching the format produced by
+`QueueState.to_file` and consumed by `QueueState.from_jsonl`. Tests load the file
+through the fixtures in `../conftest.py` and select the entry they need by its
+`dandi_path`, which is named to describe the scenario it covers. The empty-queue
+case is written inline by the few tests that need it rather than kept as a file.
 
 The attempt lifecycle is encoded by the presence flags:
 
@@ -18,20 +19,15 @@ The attempt lifecycle is encoded by the presence flags:
 - successful: `has_output`
 - failed: `has_code` and `has_logs` and not `has_output`
 
-| File | Contents |
+| `dandi_path` | Scenario |
 | --- | --- |
-| `empty.jsonl` | No entries (nothing has been prepared yet). |
-| `single_pending.jsonl` | One prepared-but-unsubmitted attempt. |
-| `pending_and_running.jsonl` | One pending attempt plus one running attempt. |
-| `aggregate_two_attempts.jsonl` | One successful and one running attempt, each with a known source-asset size. |
-| `aggregate_single_successful.jsonl` | One successful attempt with a known source-asset size. |
-| `aggregate_fallback_sourcedata.jsonl` | A successful attempt whose `dandi_path` differs from the on-disk attempt layout. |
-| `clean_single_queued.jsonl` | One queued (unsubmitted) `aind+ephys` attempt. |
-| `clean_single_with_output.jsonl` | The same attempt, already completed. |
-| `clean_single_with_logs.jsonl` | The same attempt, already run (logs present). |
-| `clean_single_session.jsonl` | A queued attempt under a session subdirectory. |
-| `clean_session_versioned.jsonl` | A queued attempt with a commit-suffixed pipeline version under a session. |
-| `clean_two_attempts.jsonl` | Attempt 1 queued, attempt 2 completed, for one asset. |
-| `clean_two_dandisets_queued.jsonl` | A queued attempt in each of two Dandisets. |
-| `clean_fallback_sourcedata.jsonl` | A queued attempt whose `dandi_path` differs from the on-disk attempt layout. |
-| `prepare_failures_reaching_max.jsonl` | Failure history reaching `max_fail_per_dandiset` for one Dandiset. |
+| `sub-pending` | Prepared but never submitted. |
+| `sub-running` | Logs present, no output yet. |
+| `sub-successful` | Output present, with a known source-asset size (120 bytes). |
+| `sub-failed-repeated` (attempts 1 and 2) | Two failed attempts of one asset, reaching `max_fail_per_dandiset` for Dandiset 000001 (mapped to `asset-aaa`). |
+| `sub-fresh` (Dandiset 000002) | A queued asset in another Dandiset with no failures (mapped to `asset-bbb`). |
+| `sub-with-session/ses-recording` | A queued attempt nested under a session directory. |
+| `sub-sole-attempt/ses-recording` (Dandiset 001371) | The sole attempt in its pipeline/version tree, so empty parents are pruned on removal. Also covers the legacy nested layout. |
+| `sub-two-attempts` (attempts 1 and 2) | Attempt 1 queued, attempt 2 completed, so the shared parent is kept after the queued attempt is removed. |
+| `sub-already-submitted` | Queued in state, but a submitted marker exists on disk, so it is left alone. |
+| `sourcedata` (Dandiset 001849) | A queued attempt whose recorded `dandi_path` differs from the on-disk attempt layout, exercising fallback attempt-directory resolution. |

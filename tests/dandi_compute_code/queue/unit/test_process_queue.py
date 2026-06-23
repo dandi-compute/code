@@ -32,11 +32,10 @@ def test_process_queue_handles_empty_scan_when_waiting_file_missing(
 def test_process_queue_refreshes_state_when_empty(
     queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
-    install_state_file: Callable[..., pathlib.Path],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """process_queue logs and returns when state.jsonl is empty."""
-    install_state_file(queue_directory=queue_directory, name="empty.jsonl")
+    (queue_directory / "state.jsonl").write_text("")
 
     with (
         caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._process_queue"),
@@ -60,7 +59,7 @@ def test_process_queue_rejects_non_positive_max_concurrent_jobs(
     install_state_file: Callable[..., pathlib.Path],
 ) -> None:
     """process_queue raises when max_concurrent_aind_jobs is less than one."""
-    install_state_file(queue_directory=queue_directory, name="single_pending.jsonl")
+    install_state_file(queue_directory=queue_directory)
 
     with pytest.raises(ValueError, match="max_concurrent_aind_jobs must be at least 1"):
         process_queue(
@@ -78,7 +77,7 @@ def test_process_queue_rejects_negative_jitter_seconds(
     install_state_file: Callable[..., pathlib.Path],
 ) -> None:
     """process_queue raises when jitter_seconds is negative."""
-    install_state_file(queue_directory=queue_directory, name="single_pending.jsonl")
+    install_state_file(queue_directory=queue_directory)
 
     with pytest.raises(ValueError, match="jitter_seconds must be non-negative"):
         process_queue(
@@ -92,10 +91,9 @@ def test_process_queue_rejects_negative_jitter_seconds(
 def test_process_queue_skips_sleep_when_jitter_is_zero(
     queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
-    install_state_file: Callable[..., pathlib.Path],
 ) -> None:
     """process_queue does not sleep when jitter_seconds=0."""
-    install_state_file(queue_directory=queue_directory, name="empty.jsonl")
+    (queue_directory / "state.jsonl").write_text("")
 
     with (
         mock.patch("dandi_compute_code.queue._process_queue.time.sleep") as mock_sleep,
@@ -115,10 +113,9 @@ def test_process_queue_skips_sleep_when_jitter_is_zero(
 def test_process_queue_sleeps_within_jitter_range(
     queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
-    install_state_file: Callable[..., pathlib.Path],
 ) -> None:
     """process_queue sleeps a duration in [0, jitter_seconds] when jitter_seconds > 0."""
-    install_state_file(queue_directory=queue_directory, name="empty.jsonl")
+    (queue_directory / "state.jsonl").write_text("")
 
     with (
         mock.patch("dandi_compute_code.queue._process_queue.time.sleep") as mock_sleep,
