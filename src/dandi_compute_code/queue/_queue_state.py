@@ -82,6 +82,19 @@ class JobInfo:
     attempt: int
     codebase: str
 
+    def to_dict(self) -> dict[str, object]:
+        """Serialise the identity fields to a plain dict."""
+        return {
+            "dandiset_id": self.dandiset_id,
+            "dandi_path": self.dandi_path,
+            "pipeline": self.pipeline,
+            "version": self.version,
+            "params": self.params,
+            "config": self.config,
+            "attempt": self.attempt,
+            "codebase": self.codebase,
+        }
+
 
 def _find_segment_index(parts: tuple[str, ...], prefix: str, start: int = 0) -> int | None:
     """Return the index of the first part starting with ``prefix`` at or after ``start``."""
@@ -216,13 +229,7 @@ class _UpstreamMetadataCache:
 
 def _new_attempt_record(job: JobInfo) -> dict[str, object]:
     return {
-        "dandiset_id": job.dandiset_id,
-        "dandi_path": job.dandi_path,
-        "pipeline": job.pipeline,
-        "version": job.version,
-        "params": job.params,
-        "config": job.config,
-        "attempt": job.attempt,
+        **job.to_dict(),
         "has_code": False,
         "has_been_submitted": False,
         "has_output": False,
@@ -230,7 +237,6 @@ def _new_attempt_record(job: JobInfo) -> dict[str, object]:
         "dataset_description_path": {},
         "output_paths": {},
         "log_paths": {},
-        "codebase": job.codebase,
     }
 
 
@@ -672,14 +678,7 @@ class JobEntry:
     def to_dict(self) -> dict:
         """Serialise back to the flat dict format written to ``state.jsonl``."""
         return {
-            "dandiset_id": self.job.dandiset_id,
-            "dandi_path": self.job.dandi_path,
-            "pipeline": self.job.pipeline,
-            "version": self.job.version,
-            "params": self.job.params,
-            "config": self.job.config,
-            "attempt": self.job.attempt,
-            "codebase": self.job.codebase,
+            **self.job.to_dict(),
             "content_id": self.content_id,
             "asset_size_bytes": self.asset_size_bytes,
             "has_code": self.has_code,
