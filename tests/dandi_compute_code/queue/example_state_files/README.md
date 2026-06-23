@@ -1,18 +1,14 @@
 # Example queue state
 
-`state.jsonl` is a single literal, committed example of a queue `state.jsonl`
-file. It is the shared ground truth for the queue test suite. Reading it here on
-GitHub shows exactly what state the tests start from, so the relationship between
-input state and expected behavior stays visible without reconstructing
-dictionaries inside the tests.
+`state.jsonl` is a single static example of a queue `state.jsonl` file.
+It is the shared ground truth for the queue test suite.
 
-Each line is one job capsule, matching the format produced by
-`QueueState.to_file` and consumed by `QueueState.from_jsonl`. Tests load the file
-through the fixtures in `../conftest.py` and select the entry they need by its
-`dandi_path`, which is named to describe the scenario it covers. The empty-queue
-case is written inline by the few tests that need it rather than kept as a file.
+Each line is one job capsule, matching the format produced by `QueueState.to_file` and consumed by `QueueState.from_jsonl`.
+Tests load the file through the fixtures in `../conftest.py` and select the entry they need by its `dandi_path`, which is named to describe the scenario it covers.
 
-The attempt lifecycle is encoded by the presence flags:
+The empty-queue case is written inline by the few tests that need it rather than kept as a file.
+
+The point in the job lifecycle is encoded by the presence flags:
 
 - pending: `has_code` only
 - running: `has_logs` and not `has_output`
