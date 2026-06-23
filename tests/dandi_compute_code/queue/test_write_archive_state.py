@@ -3,11 +3,27 @@ import pathlib
 from unittest import mock
 
 import pytest
-from _process_queue_test_cases import _make_queue_dir, _read_jsonl
 
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.dandiset._globals import _FAILED_RUNS_ARCHIVE_DANDISET_ID
 from dandi_compute_code.queue import write_archive_state
+
+# write_archive_state derives archive_state.jsonl from DANDI assets.jsonld metadata,
+# fetched over the network. That loader is the one external boundary mocked here.
+
+
+def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
+    """A queue directory containing a minimal valid queue_config.json."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(
+        json.dumps({"pipelines": {"test": {"version_priority": ["v1.0"], "params_priority": ["default"]}}})
+    )
+    return queue_dir
+
+
+def _read_jsonl(file_path: pathlib.Path) -> list[dict]:
+    return [json.loads(line) for line in file_path.read_text().splitlines() if line.strip()]
 
 
 @pytest.mark.ai_generated
