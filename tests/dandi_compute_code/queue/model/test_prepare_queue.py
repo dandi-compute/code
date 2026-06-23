@@ -6,7 +6,6 @@ from unittest import mock
 import pytest
 
 from dandi_compute_code.queue import QueueState
-from model.testing_utilities import example_queue_state
 
 # prepare_queue reaches two external boundaries that cannot run in CI: the
 # qualifying-content-ids download (urllib) and the per-asset job preparation
@@ -61,11 +60,13 @@ def test_prepare_queue_calls_prepare_for_each_qualifying_asset(queue_directory: 
 
 
 @pytest.mark.ai_generated
-def test_prepare_queue_skips_when_failures_reach_max(queue_directory: pathlib.Path) -> None:
+def test_prepare_queue_skips_when_failures_reach_max(
+    example_queue_state: QueueState, queue_directory: pathlib.Path
+) -> None:
     """prepare_queue skips assets for dandisets whose failure count reaches max_fail_per_dandiset."""
     # The example queue records repeated failures for dandiset 000001 (reaching
     # max_fail_per_dandiset) mapped to asset-aaa, and a fresh asset in 000002 mapped to asset-bbb.
-    example_queue_state().to_file(queue_directory / "state.jsonl")
+    example_queue_state.to_file(queue_directory / "state.jsonl")
     qualifying_ids = ["asset-aaa", "asset-bbb"]
 
     with (

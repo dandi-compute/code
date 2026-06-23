@@ -25,6 +25,7 @@ import linkml_runtime.processing.referencevalidator
 import linkml_runtime.utils.schemaview
 
 from ._globals import _DURATION_PART_RE, _QUEUE_CONFIG_SCHEMA_PATH
+from ._job_info import JobInfo
 from ..dandiset._load_assets_jsonld_metadata import (
     AssetMetadata,
     AssetsJsonldMetadata,
@@ -44,33 +45,6 @@ _FLAT_ATTEMPT_RE = re.compile(
     r"_attempt-(?P<attempt>\d+)$"
 )
 _NESTED_ATTEMPT_RE = re.compile(r"^params-(?P<params>[^_]+)_config-(?P<config>[^_]+)_attempt-(?P<attempt>\d+)$")
-
-
-@dataclass(frozen=True)
-class JobInfo:
-    """Immutable identity of one attempt capsule."""
-
-    dandiset_id: str
-    dandi_path: str
-    pipeline: str
-    version: str
-    params: str
-    config: str
-    attempt: int
-    codebase: str
-
-    def to_dict(self) -> dict[str, object]:
-        """Serialise the identity fields to a plain dict."""
-        return {
-            "dandiset_id": self.dandiset_id,
-            "dandi_path": self.dandi_path,
-            "pipeline": self.pipeline,
-            "version": self.version,
-            "params": self.params,
-            "config": self.config,
-            "attempt": self.attempt,
-            "codebase": self.codebase,
-        }
 
 
 def _find_segment_index(parts: tuple[str, ...], prefix: str, start: int = 0) -> int | None:

@@ -9,14 +9,7 @@ fixtures (temporary directories, environment and network setup) live in
 
 import pathlib
 
-from dandi_compute_code.queue import JobEntry, QueueState
-
-EXAMPLE_STATE_FILE = pathlib.Path(__file__).parent / "example_state_files" / "state.jsonl"
-
-
-def example_queue_state() -> QueueState:
-    """Load the committed example queue (``example_state_files/state.jsonl``) into a fresh model."""
-    return QueueState.from_jsonl(EXAMPLE_STATE_FILE)
+from dandi_compute_code.queue import JobEntry
 
 
 def create_attempt_directory(
@@ -52,3 +45,29 @@ def create_attempt_directory(
         logs_dir.mkdir()
         (logs_dir / "run.log").write_text("job output\n")
     return attempt_dir
+
+
+def write_attempt_logs(
+    *,
+    dandiset_directory: pathlib.Path,
+    dandiset_id: str,
+    subject: str,
+    attempt: int,
+    nextflow_lines: list[str],
+    slurm_lines_by_file: dict[str, list[str]],
+) -> pathlib.Path:
+    """Materialize an attempt ``logs/`` directory holding a nextflow log and slurm logs."""
+    logs_dir = (
+        dandiset_directory
+        / "derivatives"
+        / f"dandiset-{dandiset_id}"
+        / f"sub-{subject}"
+        / "pipeline-test"
+        / f"version-v1.0_params-default_config-abc123_attempt-{attempt}"
+        / "logs"
+    )
+    logs_dir.mkdir(parents=True)
+    (logs_dir / "nextflow.log").write_text("\n".join(nextflow_lines) + "\n")
+    for file_name, lines in slurm_lines_by_file.items():
+        (logs_dir / file_name).write_text("\n".join(lines) + "\n")
+    return logs_dir

@@ -33,8 +33,8 @@ from typing import Literal
 import yaml
 
 from ._globals import _AIND_EPHYS_PARAMS_REGISTRY
+from ._job_info import JobInfo
 from ._queue_utils import (
-    JobInfo,
     _collect_attempts,
     _duration_string_to_seconds,
     _extract_error_lines,
