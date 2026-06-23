@@ -2,7 +2,7 @@ import pathlib
 from unittest import mock
 
 import pytest
-from _example_queue import copy_state_file
+from testing_utilities import copy_state_file
 
 from dandi_compute_code.queue._process_queue import process_queue
 

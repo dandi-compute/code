@@ -3,7 +3,7 @@ import pathlib
 from datetime import datetime
 
 import pytest
-from _example_queue import copy_state_file, create_attempt_directory, entry_for
+from testing_utilities import copy_state_file, create_attempt_directory, entry_for
 
 from dandi_compute_code.queue import QueueState, aggregate_queue_statistics
 

@@ -2,7 +2,7 @@
 Shared fixtures for the queue test suite.
 
 The literal example queue lives in ``example_state_files/state.jsonl`` and is
-loaded and materialized by the plain helpers in ``_example_queue.py``. These
+loaded and materialized by the plain helpers in ``testing_utilities.py``. These
 fixtures provide only what genuinely needs pytest: temporary directories and
 environment or network setup.
 """
