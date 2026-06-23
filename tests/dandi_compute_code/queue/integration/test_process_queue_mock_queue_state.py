@@ -1,23 +1,9 @@
 import pathlib
-from collections.abc import Callable
 from unittest import mock
 
 import pytest
 
 from dandi_compute_code.queue._process_queue import process_queue
-
-
-@pytest.fixture
-def populated_queue(
-    queue_directory: pathlib.Path,
-    install_state_file: Callable[..., pathlib.Path],
-    tmp_path: pathlib.Path,
-) -> tuple[pathlib.Path, pathlib.Path]:
-    """A queue holding the example state, plus a processing directory."""
-    install_state_file(queue_directory=queue_directory)
-    processing_dir = tmp_path / "processing"
-    processing_dir.mkdir()
-    return queue_directory, processing_dir
 
 
 @pytest.mark.ai_generated

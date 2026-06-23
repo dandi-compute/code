@@ -63,12 +63,12 @@ def test_prepare_queue_calls_prepare_for_each_qualifying_asset(queue_directory: 
 @pytest.mark.ai_generated
 def test_prepare_queue_skips_when_failures_reach_max(
     queue_directory: pathlib.Path,
-    install_state_file: Callable[..., pathlib.Path],
+    copy_state_file: Callable[..., pathlib.Path],
 ) -> None:
     """prepare_queue skips assets for dandisets whose failure count reaches max_fail_per_dandiset."""
     # The example queue records repeated failures for dandiset 000001 (reaching
     # max_fail_per_dandiset) mapped to asset-aaa, and a fresh asset in 000002 mapped to asset-bbb.
-    install_state_file(queue_directory=queue_directory)
+    copy_state_file(queue_directory=queue_directory)
     qualifying_ids = ["asset-aaa", "asset-bbb"]
 
     with (

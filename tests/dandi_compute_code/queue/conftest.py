@@ -7,8 +7,10 @@ and install those files; the content itself stays in the files.
 """
 
 import json
+import os
 import pathlib
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from unittest import mock
 
 import pytest
 
@@ -46,20 +48,49 @@ def queue_directory(tmp_path: pathlib.Path) -> pathlib.Path:
 
 
 @pytest.fixture
-def install_state_file() -> Callable[..., pathlib.Path]:
+def processing_directory(tmp_path: pathlib.Path) -> pathlib.Path:
+    """A directory for the temporary per-job working trees used during submission."""
+    directory = tmp_path / "processing"
+    directory.mkdir()
+    return directory
+
+
+@pytest.fixture
+def copy_state_file() -> Callable[..., pathlib.Path]:
     """
     Return a helper that copies the example queue into a queue directory.
 
-    The helper writes the literal contents of ``example_state_files/state.jsonl``
-    to ``<queue_directory>/state.jsonl`` and returns the written path.
+    The queue functions locate state by ``queue_directory/state.jsonl`` and never
+    mutate it, so the helper copies the literal contents of
+    ``example_state_files/state.jsonl`` into a temporary ``<queue_directory>`` and
+    returns the written path. The copy keeps any sibling outputs (such as
+    ``queue_stats.json``) out of the committed example directory.
     """
 
-    def _install(*, queue_directory: pathlib.Path) -> pathlib.Path:
+    def _copy(*, queue_directory: pathlib.Path) -> pathlib.Path:
         destination = queue_directory / "state.jsonl"
         destination.write_text(EXAMPLE_STATE_FILE.read_text())
         return destination
 
-    return _install
+    return _copy
+
+
+@pytest.fixture
+def populated_queue(
+    queue_directory: pathlib.Path,
+    processing_directory: pathlib.Path,
+    copy_state_file: Callable[..., pathlib.Path],
+) -> tuple[pathlib.Path, pathlib.Path]:
+    """A queue directory holding the example state, paired with a processing directory."""
+    copy_state_file(queue_directory=queue_directory)
+    return queue_directory, processing_directory
+
+
+@pytest.fixture
+def _dandi_api_key() -> Iterator[None]:
+    """Provide a dummy DANDI_API_KEY for helpers that require it to be set."""
+    with mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        yield
 
 
 @pytest.fixture

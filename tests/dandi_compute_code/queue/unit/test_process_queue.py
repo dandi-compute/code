@@ -8,13 +8,6 @@ import pytest
 from dandi_compute_code.queue._process_queue import process_queue
 
 
-@pytest.fixture
-def processing_directory(tmp_path: pathlib.Path) -> pathlib.Path:
-    directory = tmp_path / "processing"
-    directory.mkdir()
-    return directory
-
-
 @pytest.mark.ai_generated
 def test_process_queue_handles_empty_scan_when_waiting_file_missing(
     queue_directory: pathlib.Path, processing_directory: pathlib.Path
@@ -56,10 +49,10 @@ def test_process_queue_refreshes_state_when_empty(
 def test_process_queue_rejects_non_positive_max_concurrent_jobs(
     queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
-    install_state_file: Callable[..., pathlib.Path],
+    copy_state_file: Callable[..., pathlib.Path],
 ) -> None:
     """process_queue raises when max_concurrent_aind_jobs is less than one."""
-    install_state_file(queue_directory=queue_directory)
+    copy_state_file(queue_directory=queue_directory)
 
     with pytest.raises(ValueError, match="max_concurrent_aind_jobs must be at least 1"):
         process_queue(
@@ -74,10 +67,10 @@ def test_process_queue_rejects_non_positive_max_concurrent_jobs(
 def test_process_queue_rejects_negative_jitter_seconds(
     queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
-    install_state_file: Callable[..., pathlib.Path],
+    copy_state_file: Callable[..., pathlib.Path],
 ) -> None:
     """process_queue raises when jitter_seconds is negative."""
-    install_state_file(queue_directory=queue_directory)
+    copy_state_file(queue_directory=queue_directory)
 
     with pytest.raises(ValueError, match="jitter_seconds must be non-negative"):
         process_queue(
