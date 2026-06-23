@@ -66,7 +66,7 @@ def test_has_pending_jobs(paths: list[str], expected: bool) -> None:
     """has_pending_jobs reflects whether any submit.sh lacks a submitted marker."""
     metadata = _build_metadata(paths)
     with mock.patch(
-        "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
+        "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
         return_value=metadata,
     ):
         result = has_pending_jobs()

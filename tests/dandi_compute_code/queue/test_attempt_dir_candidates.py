@@ -2,8 +2,6 @@
 import importlib.util as _importlib_util
 import pathlib as _pathlib
 
-from dandi_compute_code.queue import JobEntry
-
 _spec = _importlib_util.spec_from_file_location(
     "_process_queue_test_cases",
     _pathlib.Path(__file__).with_name("_process_queue_test_cases.py"),
@@ -39,20 +37,18 @@ def test_attempt_dir_candidates_constructs_both_layouts(
     relative_prefix: pathlib.Path,
     tmp_path: pathlib.Path,
 ) -> None:
-    """JobEntry.attempt_dir_candidates returns both flat and legacy attempt directory paths."""
-    entry = JobEntry.from_dict(
-        _make_state_entry(
-            dandiset_id="000001",
-            dandi_path=dandi_path,
-            pipeline="test",
-            version="v1.0",
-            params="abc1234",
-            config="def5678",
-            attempt=2,
-        )
+    """_attempt_dir_candidates returns both flat and legacy attempt directory paths."""
+    entry = _make_state_entry(
+        dandiset_id="000001",
+        dandi_path=dandi_path,
+        pipeline="test",
+        version="v1.0",
+        params="abc1234",
+        config="def5678",
+        attempt=2,
     )
 
-    flat_path, legacy_path = entry.attempt_dir_candidates(tmp_path)
+    flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
 
     assert (
         flat_path == tmp_path / relative_prefix / "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-2"
@@ -61,41 +57,63 @@ def test_attempt_dir_candidates_constructs_both_layouts(
 
 
 @pytest.mark.ai_generated
-def test_attempt_dir_candidates_requires_non_empty_dandi_path(tmp_path: pathlib.Path) -> None:
-    """JobEntry.attempt_dir_candidates rejects an empty dandi_path value."""
-    entry = JobEntry.from_dict(
-        {
-            "dandiset_id": "000001",
-            "dandi_path": "",
-            "pipeline": "test",
-            "version": "v1.0",
-            "params": "abc1234",
-            "config": "def5678",
-            "codebase": "v0.3.0",
-            "attempt": 2,
-        }
-    )
-
-    with pytest.raises(ValueError, match=r"Entry has invalid dandi_path field \(empty\)"):
-        entry.attempt_dir_candidates(tmp_path)
+@pytest.mark.parametrize(
+    ("entry", "expected_exception", "expected_message"),
+    [
+        (
+            {
+                "dandiset_id": "000001",
+                "subject": "mouse01",
+                "session": "01",
+                "pipeline": "test",
+                "version": "v1.0",
+                "params": "abc1234",
+                "config": "def5678",
+                "attempt": 2,
+            },
+            ValueError,
+            r"Entry has invalid dandi_path field \(missing\)",
+        ),
+        (
+            {
+                "dandiset_id": "000001",
+                "dandi_path": "",
+                "pipeline": "test",
+                "version": "v1.0",
+                "params": "abc1234",
+                "config": "def5678",
+                "attempt": 2,
+            },
+            ValueError,
+            r"Entry has invalid dandi_path field \(empty\)",
+        ),
+    ],
+)
+def test_attempt_dir_candidates_requires_valid_dandi_path(
+    entry: dict,
+    expected_exception: type[Exception],
+    expected_message: str,
+    tmp_path: pathlib.Path,
+) -> None:
+    """_attempt_dir_candidates requires a valid dandi_path value."""
+    with pytest.raises(expected_exception, match=expected_message):
+        _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
 
 
 @pytest.mark.ai_generated
 def test_attempt_dir_candidates_includes_codebase_in_flat_path(tmp_path: pathlib.Path) -> None:
-    """attempt_dir_candidates includes the _codebase- segment in the flat path."""
-    entry = JobEntry.from_dict(
-        _make_state_entry(
-            dandiset_id="000001",
-            dandi_path="sub-mouse01",
-            pipeline="test",
-            version="v1.1.1",
-            params="4af6a25",
-            config="0d4bf36",
-            codebase="v0.3.17",
-            attempt=1,
-        )
+    """_attempt_dir_candidates includes the _codebase- segment in the flat path when the entry has a codebase field."""
+    entry = _make_state_entry(
+        dandiset_id="000001",
+        dandi_path="sub-mouse01",
+        pipeline="test",
+        version="v1.1.1",
+        params="4af6a25",
+        config="0d4bf36",
+        codebase="v0.3.17",
+        attempt=1,
     )
-    flat_path, legacy_path = entry.attempt_dir_candidates(tmp_path)
+    flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
 
     expected_prefix = tmp_path / "derivatives" / "dandiset-000001" / "sub-mouse01" / "pipeline-test"
     assert flat_path == expected_prefix / "version-v1.1.1_codebase-v0.3.17_params-4af6a25_config-0d4bf36_attempt-1"

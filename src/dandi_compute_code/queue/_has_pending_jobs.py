@@ -1,4 +1,8 @@
-from ._queue_state import QueueState
+import logging
+
+from ._find_pending_entries import _find_pending_entries
+
+_log = logging.getLogger(__name__)
 
 
 def has_pending_jobs() -> bool:
@@ -15,4 +19,7 @@ def has_pending_jobs() -> bool:
     bool
         ``True`` when at least one job is awaiting submission, ``False`` otherwise.
     """
-    return QueueState.has_pending_jobs()
+    pending_entries = _find_pending_entries()
+    pending = len(pending_entries) > 0
+    _log.info("Found %d pending queue entries", len(pending_entries))
+    return pending

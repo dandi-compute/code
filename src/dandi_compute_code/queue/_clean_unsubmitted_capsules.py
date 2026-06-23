@@ -3,7 +3,8 @@ import pathlib
 import shutil
 import subprocess
 
-from ._queue_state import QueueState
+from ._read_state_entries import _read_state_entries
+from ._resolve_unsubmitted_attempt_dir import _resolve_unsubmitted_attempt_dir
 
 
 # TODO: refactor this to not use try/except pattern (shouldn't be necessary)
@@ -77,12 +78,12 @@ def clean_unsubmitted_capsules(
         message = "`DANDI_API_KEY` environment variable is not set or is blank."
         raise RuntimeError(message)
 
-    queue_state = QueueState.from_jsonl(queue_directory / "state.jsonl")
+    state_entries = _read_state_entries(queue_directory / "state.jsonl")
 
     cleanable_attempt_dirs = [
         attempt_dir
-        for entry in queue_state
-        if (attempt_dir := entry.resolve_unsubmitted_attempt_dir(dandiset_directory)) is not None
+        for entry in state_entries
+        if (attempt_dir := _resolve_unsubmitted_attempt_dir(base_dir=dandiset_directory, entry=entry)) is not None
     ]
 
     removed: list[pathlib.Path] = []

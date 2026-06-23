@@ -7,7 +7,6 @@ import urllib.request
 
 from ._load_queue_config import _load_queue_config
 from ._order_content_ids_for_uniform_dandiset_sampling import _order_content_ids_for_uniform_dandiset_sampling
-from ._queue_state import QueueState
 from ..aind_ephys_pipeline import UnmappedContentIDError, prepare_aind_ephys_job
 
 _log = logging.getLogger(__name__)
@@ -71,12 +70,26 @@ def prepare_queue(
         content_ids = _order_content_ids_for_uniform_dandiset_sampling(content_ids=fetched_content_ids)
 
     state_file = queue_directory / "state.jsonl"
-    queue_state = QueueState.from_jsonl(state_file) if state_file.exists() else QueueState(entries=[])
+    state_entries = (
+        [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
+        if state_file.exists()
+        else []
+    )
 
     # Build from all known state entries. A content ID is expected to map to a
     # stable source dandiset in normal operation; ambiguous mappings are handled
     # conservatively below by skipping max-failure enforcement for that asset.
-    content_id_to_dandiset_ids = queue_state.content_id_to_dandiset_ids()
+    content_id_to_dandiset_ids: dict[str, set[str]] = {}
+    for entry in state_entries:
+        content_id = entry.get("content_id")
+        dandiset_id = entry.get("dandiset_id")
+        if content_id and dandiset_id:
+            content_id_to_dandiset_ids.setdefault(content_id, set()).add(dandiset_id)
+    failure_entries = [
+        entry
+        for entry in state_entries
+        if entry.get("has_code") and entry.get("has_logs") and not entry.get("has_output")
+    ]
 
     prepared_count = 0
     for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
@@ -93,9 +106,13 @@ def prepare_queue(
                 max_fail = pipeline_cfg.get("max_fail_per_dandiset")
                 failure_count_by_dandiset: collections.defaultdict[str, int] = collections.defaultdict(int)
                 if max_fail is not None:
-                    for entry in queue_state.failures_for(pipeline=pipeline_name, version=version):
-                        if entry.job.dandiset_id:
-                            failure_count_by_dandiset[entry.job.dandiset_id] += 1
+                    for entry in failure_entries:
+                        if entry.get("pipeline") != pipeline_name or entry.get("version", "") != version:
+                            continue
+                        dandiset_id = entry.get("dandiset_id")
+                        if not dandiset_id:
+                            continue
+                        failure_count_by_dandiset[dandiset_id] += 1
 
                 for content_id in content_ids:
                     if limit is not None and prepared_count >= limit:

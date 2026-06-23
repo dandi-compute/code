@@ -5,7 +5,7 @@ import pathlib
 
 from ._duration_string_to_seconds import _duration_string_to_seconds
 from ._extract_nextflow_timeline_data import _extract_nextflow_timeline_data
-from ._queue_state import QueueState
+from ._resolve_attempt_dir import _resolve_attempt_dir
 
 
 def aggregate_queue_statistics(
@@ -16,14 +16,24 @@ def aggregate_queue_statistics(
 ) -> dict:
     """Write aggregate queue statistics JSON and return the written payload."""
     state_file = queue_directory / "state.jsonl"
-    queue_state = QueueState.from_jsonl(state_file) if state_file.exists() else QueueState(entries=[])
+    state_entries = (
+        [json.loads(line.strip()) for line in state_file.read_text().splitlines() if line.strip()]
+        if state_file.exists()
+        else []
+    )
 
-    successful_asset_bytes_total = queue_state.successful_asset_bytes_total
+    successful_asset_bytes_total = sum(
+        entry["asset_size_bytes"]
+        for entry in state_entries
+        if entry.get("has_output")
+        and isinstance(entry.get("asset_size_bytes"), int)
+        and not isinstance(entry.get("asset_size_bytes"), bool)
+    )
 
     job_step_wall_time_seconds: collections.defaultdict[str, float] = collections.defaultdict(float)
     timeline_files_processed = 0
-    for entry in queue_state:
-        attempt_dir = entry.resolve_attempt_dir(dandiset_directory)
+    for entry in state_entries:
+        attempt_dir = _resolve_attempt_dir(base_dir=dandiset_directory, entry=entry)
         timeline_file = attempt_dir / "logs" / "timeline.html"
         if not timeline_file.is_file():
             continue
@@ -60,7 +70,7 @@ def aggregate_queue_statistics(
 
     statistics = {
         "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "state_entry_count": len(queue_state),
+        "state_entry_count": len(state_entries),
         "successful_asset_bytes_total": successful_asset_bytes_total,
         "timeline_files_processed": timeline_files_processed,
         "job_step_wall_time_seconds": {
