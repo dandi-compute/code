@@ -7,22 +7,9 @@ import pytest
 from dandi_compute_code.queue import QueueState
 from model.testing_utilities import create_attempt_directory
 
-_TIMELINE_TWO_STEPS = """<script>
-window.data = {
-  "processes": [
-    {"label": "step_one (step-one)", "times": [{"label": "1m 5s / 1 GB"}]},
-    {"label": "step_two (step-two)", "times": [{"label": "30s / 500 MB"}, {"label": "2m / 1 GB"}]}
-  ]
-};
-</script>"""
-
-_TIMELINE_ONE_STEP = """<script>
-window.data = {
-  "processes": [
-    {"label": "step_one (step-one)", "times": [{"label": "1s / 1 GB"}]}
-  ]
-};
-</script>"""
+_EXAMPLE_TIMELINE_REPORTS = pathlib.Path(__file__).parent / "example_timeline_reports"
+_TIMELINE_TWO_STEPS = (_EXAMPLE_TIMELINE_REPORTS / "two_steps.html").read_text()
+_TIMELINE_ONE_STEP = (_EXAMPLE_TIMELINE_REPORTS / "one_step.html").read_text()
 
 
 @pytest.mark.ai_generated
