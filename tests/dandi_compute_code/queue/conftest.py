@@ -14,6 +14,7 @@ from unittest import mock
 
 import pytest
 
+from dandi_compute_code.dandiset import AssetsJsonldMetadata
 from dandi_compute_code.queue import JobEntry, QueueState
 
 #: Consolidated queue config used by tests that need a populated queue directory.
@@ -30,6 +31,28 @@ EXAMPLE_QUEUE_CONFIG = {
 }
 
 EXAMPLE_STATE_FILE = pathlib.Path(__file__).parent / "example_state_files" / "state.jsonl"
+
+
+@pytest.fixture(autouse=True)
+def _no_real_dandi_fetch() -> Iterator[None]:
+    """
+    Default the DANDI ``assets.jsonld`` loaders to empty so no test hits the network.
+
+    ``write_queue_state`` (and therefore ``queue refresh``) fetches assets metadata
+    from the DANDI archive. This guard makes that return empty by default. Tests
+    that need specific metadata override these with their own ``mock.patch``.
+    """
+    empty_metadata = AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={})
+    with (
+        mock.patch(
+            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=empty_metadata
+        ),
+        mock.patch(
+            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            return_value=empty_metadata,
+        ),
+    ):
+        yield
 
 
 @pytest.fixture
