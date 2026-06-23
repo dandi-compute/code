@@ -1,24 +1,17 @@
-# ruff: noqa: F821
-import importlib.util as _importlib_util
-import pathlib as _pathlib
+import logging
+import pathlib
 import re
+from unittest import mock
 
-_spec = _importlib_util.spec_from_file_location(
-    "_process_queue_test_cases",
-    _pathlib.Path(__file__).with_name("_process_queue_test_cases.py"),
-)
-assert _spec is not None
-assert _spec.loader is not None
-_support = _importlib_util.module_from_spec(_spec)
-_spec.loader.exec_module(_support)
+import pytest
 
-globals().update(
-    {
-        name: value
-        for name, value in vars(_support).items()
-        if not name.startswith("__") and not name.startswith("test_")
-    }
-)
+from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
+from dandi_compute_code.queue._submit_next import _submit_next
+
+# _submit_next reaches three external boundaries that cannot run in CI: the
+# assets.jsonld metadata loader (network), the dandi/sbatch subprocess calls, and
+# the temporary working directory. All are mocked; the metadata built below is the
+# ground-truth input describing which capsules are pending.
 
 
 def _make_metadata_with_submit_sh(*code_dir_paths: str) -> AssetsJsonldMetadata:

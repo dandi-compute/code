@@ -1,23 +1,21 @@
-# ruff: noqa: F821
-import importlib.util as _importlib_util
-import pathlib as _pathlib
+import json
+import pathlib
 
-_spec = _importlib_util.spec_from_file_location(
-    "_process_queue_test_cases",
-    _pathlib.Path(__file__).with_name("_process_queue_test_cases.py"),
-)
-assert _spec is not None
-assert _spec.loader is not None
-_support = _importlib_util.module_from_spec(_spec)
-_spec.loader.exec_module(_support)
+import pytest
 
-globals().update(
-    {
-        name: value
-        for name, value in vars(_support).items()
-        if not name.startswith("__") and not name.startswith("test_")
+from dandi_compute_code.queue._load_queue_config import _load_queue_config
+
+_ISSUE_EXAMPLE_QUEUE_CONFIG = {
+    "pipelines": {
+        "aind+ephys": {
+            "version_priority": ["v1.1.1"],
+            "params_priority": ["default"],
+            "max_attempts_per_asset": 1,
+            "asset_overrides": {"048d1ee9-83b7-491f-8f02-1ca615b1d455": None},
+            "max_fail_per_dandiset": 10,
+        }
     }
-)
+}
 
 
 @pytest.mark.ai_generated

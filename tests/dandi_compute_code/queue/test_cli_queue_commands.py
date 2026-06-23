@@ -1,23 +1,25 @@
-# ruff: noqa: F821
-import importlib.util as _importlib_util
-import pathlib as _pathlib
+import json
+import pathlib
+from unittest import mock
 
-_spec = _importlib_util.spec_from_file_location(
-    "_process_queue_test_cases",
-    _pathlib.Path(__file__).with_name("_process_queue_test_cases.py"),
-)
-assert _spec is not None
-assert _spec.loader is not None
-_support = _importlib_util.module_from_spec(_spec)
-_spec.loader.exec_module(_support)
+import pytest
+from click.testing import CliRunner
 
-globals().update(
-    {
-        name: value
-        for name, value in vars(_support).items()
-        if not name.startswith("__") and not name.startswith("test_")
-    }
-)
+from dandi_compute_code._cli import _dandicompute_group
+from dandi_compute_code.queue import TEST_QUEUE_CONTENT_ID
+
+# These tests exercise CLI argument wiring; each command's implementation is mocked
+# so only the delegation (option parsing and forwarded kwargs) is under test.
+
+
+def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
+    """A queue directory containing a minimal valid queue_config.json."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(
+        json.dumps({"pipelines": {"test": {"version_priority": ["v1.0"], "params_priority": ["default"]}}})
+    )
+    return queue_dir
 
 
 @pytest.mark.ai_generated

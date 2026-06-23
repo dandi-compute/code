@@ -1,0 +1,104 @@
+"""
+Shared fixtures for the queue test suite.
+
+The literal example ``state.jsonl`` files live in ``example_state_files/`` so the
+input each test starts from is readable on its own. These fixtures only locate
+and install those files; the content itself stays in the files.
+"""
+
+import json
+import pathlib
+from collections.abc import Callable
+
+import pytest
+
+from dandi_compute_code.queue import JobEntry
+
+#: Consolidated queue config used by tests that need a populated queue directory.
+EXAMPLE_QUEUE_CONFIG = {
+    "pipelines": {
+        "test": {
+            "version_priority": ["v1.0"],
+            "params_priority": ["default"],
+            "max_attempts_per_asset": 2,
+            "asset_overrides": {"asset-aaa": 1},
+            "max_fail_per_dandiset": 2,
+        }
+    }
+}
+
+EXAMPLE_STATE_FILES_DIRECTORY = pathlib.Path(__file__).parent / "example_state_files"
+
+
+@pytest.fixture
+def example_state_files_directory() -> pathlib.Path:
+    """Path to the directory of literal example ``state.jsonl`` files."""
+    return EXAMPLE_STATE_FILES_DIRECTORY
+
+
+@pytest.fixture
+def queue_directory(tmp_path: pathlib.Path) -> pathlib.Path:
+    """A queue directory containing the example ``queue_config.json``."""
+    directory = tmp_path / "queue"
+    directory.mkdir()
+    (directory / "queue_config.json").write_text(json.dumps(EXAMPLE_QUEUE_CONFIG))
+    return directory
+
+
+@pytest.fixture
+def install_state_file() -> Callable[..., pathlib.Path]:
+    """
+    Return a helper that copies an example state file into a queue directory.
+
+    The helper writes the literal contents of
+    ``example_state_files/<name>`` to ``<queue_directory>/state.jsonl`` and
+    returns the written path.
+    """
+
+    def _install(*, queue_directory: pathlib.Path, name: str) -> pathlib.Path:
+        destination = queue_directory / "state.jsonl"
+        destination.write_text((EXAMPLE_STATE_FILES_DIRECTORY / name).read_text())
+        return destination
+
+    return _install
+
+
+@pytest.fixture
+def create_attempt_directory() -> Callable[..., pathlib.Path]:
+    """
+    Return a helper that materializes an attempt directory for a state entry.
+
+    The on-disk layout is derived from the entry itself (via the public
+    ``JobEntry.attempt_dir_candidates``) so the directory tree always matches the
+    ground-truth example state file rather than a separately specified set of
+    coordinates.
+    """
+
+    def _create(
+        *,
+        base_dir: pathlib.Path,
+        entry: JobEntry,
+        with_code: bool = True,
+        with_output: bool = False,
+        with_logs: bool = False,
+        submitted: bool = False,
+        legacy_nested: bool = False,
+    ) -> pathlib.Path:
+        flat_attempt_dir, nested_attempt_dir = entry.attempt_dir_candidates(base_dir)
+        attempt_dir = nested_attempt_dir if legacy_nested else flat_attempt_dir
+        attempt_dir.mkdir(parents=True)
+        if with_code:
+            code_dir = attempt_dir / "code"
+            code_dir.mkdir()
+            (code_dir / "submit.sh").write_text("#!/bin/bash\necho hello\n")
+            if submitted:
+                (code_dir / "submitted_date-date-2025+01+01_time-00+00+00").touch()
+        if with_output:
+            (attempt_dir / "derivatives").mkdir()
+        if with_logs:
+            logs_dir = attempt_dir / "logs"
+            logs_dir.mkdir()
+            (logs_dir / "run.log").write_text("job output\n")
+        return attempt_dir
+
+    return _create

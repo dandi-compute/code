@@ -4,10 +4,27 @@ from collections.abc import Iterator
 from unittest import mock
 
 import pytest
-from _process_queue_test_cases import _make_queue_dir, _read_jsonl
 
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.queue import QueueState, write_queue_state
+
+# write_queue_state derives state.jsonl from DANDI assets.jsonld metadata, which is
+# fetched over the network. That metadata loader is the one external boundary these
+# tests mock; the assets metadata itself is the ground-truth input under test.
+
+
+def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
+    """A queue directory containing a minimal valid queue_config.json."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    (queue_dir / "queue_config.json").write_text(
+        json.dumps({"pipelines": {"test": {"version_priority": ["v1.0"], "params_priority": ["default"]}}})
+    )
+    return queue_dir
+
+
+def _read_jsonl(file_path: pathlib.Path) -> list[dict]:
+    return [json.loads(line) for line in file_path.read_text().splitlines() if line.strip()]
 
 
 @pytest.fixture(autouse=True)
