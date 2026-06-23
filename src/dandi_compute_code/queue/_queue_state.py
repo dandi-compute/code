@@ -13,9 +13,13 @@ fields by string key.  This module adds a thin typed layer on top:
 
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import pathlib
+import shutil
+import subprocess
+import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
@@ -36,6 +40,9 @@ from ..dandiset._load_assets_jsonld_metadata import (
 )
 
 _log = logging.getLogger(__name__)
+
+#: Dandiset whose assets back the pending/submission queries (the job capsules Dandiset).
+_DANDISET_ID = "001697"
 
 
 @dataclass
@@ -338,6 +345,110 @@ class QueueState:
         pending_entries = cls.pending_code_dirs()
         _log.info("Found %d pending queue entries", len(pending_entries))
         return len(pending_entries) > 0
+
+    @classmethod
+    def submit_next(
+        cls,
+        *,
+        processing_directory: pathlib.Path,
+        max_submissions: int = 2,
+        test: bool = False,
+    ) -> bool:
+        """
+        Submit the next eligible pending entries from the DANDI assets metadata.
+
+        Identifies all attempt directories that contain a ``code/submit.sh`` asset
+        but no adjacent submitted-marker asset (see :meth:`pending_code_dirs`). For
+        each candidate (up to *max_submissions*), a temporary working directory is
+        created inside *processing_directory*, the ``code/`` tree is downloaded via
+        ``dandi download --preserve-tree``, the submission script is executed via
+        ``sbatch``, a submitted marker is written adjacent to ``submit.sh``, the
+        marker is pushed back to the archive via ``dandi upload --allow-any-path``,
+        and the temporary directory is removed on success.
+
+        :param processing_directory: Directory in which temporary per-job working
+            trees are created.
+        :type processing_directory: pathlib.Path
+        :param max_submissions: Maximum number of pending jobs to submit.
+        :type max_submissions: int
+        :param test: When ``True``, leave temporary working directories on disk
+            after successful submission for debugging.
+        :type test: bool
+        :returns: ``True`` if at least one job was submitted, ``False`` otherwise.
+        :rtype: bool
+        :raises RuntimeError: If ``dandi download``, ``sbatch``, or ``dandi upload``
+            returns a non-zero exit code for any candidate.
+        """
+        if max_submissions < 1:
+            return False
+
+        candidates = cls.pending_code_dirs()
+
+        if not candidates:
+            _log.info("No eligible pending entries available for submission")
+            return False
+
+        for code_dir_path in candidates[:max_submissions]:
+            dandi_url = f"dandi://dandi/{_DANDISET_ID}/{code_dir_path}/"
+            # Temporary directory is intentionally left on disk when any step fails
+            # so that it can be inspected for debugging.
+            temp_dir = pathlib.Path(tempfile.mkdtemp(dir=processing_directory, prefix="submit-next-"))
+            _log.info("Submitting job run for %s in %s", code_dir_path, temp_dir)
+
+            result = subprocess.run(
+                ["dandi", "download", "--preserve-tree", dandi_url],
+                capture_output=True,
+                text=True,
+                cwd=temp_dir,
+            )
+            _log.info("dandi download returned code %d for %s", result.returncode, dandi_url)
+            _log.debug("dandi download stdout: %s\nstderr: %s", result.stdout, result.stderr)
+            if result.returncode != 0:
+                _log.warning("dandi download stdout: %s\nstderr: %s", result.stdout, result.stderr)
+                message = f"dandi download failed for {dandi_url}"
+                raise RuntimeError(message)
+
+            dandiset_directory = temp_dir / _DANDISET_ID
+            submit_sh_path = dandiset_directory / code_dir_path / "submit.sh"
+            result = subprocess.run(
+                ["sbatch", str(submit_sh_path.absolute())],
+                capture_output=True,
+                text=True,
+            )
+            _log.info("sbatch returned code %d; stdout %s", result.returncode, result.stdout)
+            _log.debug("sbatch stdout: %s\nstderr: %s", result.stdout, result.stderr)
+            if result.returncode != 0:
+                _log.warning("sbatch stdout: %s\nstderr: %s", result.stdout, result.stderr)
+                message = "sbatch submission failed - please check the logs to see more details."
+                raise RuntimeError(message)
+
+            now = datetime.datetime.now()
+            submitted_marker = submit_sh_path.parent / (
+                f"submitted_date-{now.year:04d}+{now.month:02d}+{now.day:02d}"
+                f"_time-{now.hour:02d}+{now.minute:02d}+{now.second:02d}"
+            )
+            submitted_marker.write_bytes(b"1")
+            _log.info("Created `submitted` file at: %s", submitted_marker.absolute())
+
+            result = subprocess.run(
+                ["dandi", "upload", "--allow-any-path"],
+                capture_output=True,
+                text=True,
+                cwd=dandiset_directory,
+            )
+            _log.info("dandi upload returned code %d", result.returncode)
+            _log.debug("dandi upload stdout: %s\nstderr: %s", result.stdout, result.stderr)
+            if result.returncode != 0:
+                _log.warning("dandi upload stdout: %s\nstderr: %s", result.stdout, result.stderr)
+                message = "dandi upload failed - please check the logs to see more details."
+                raise RuntimeError(message)
+
+            if test:
+                _log.info("Leaving temporary directory in place for test mode: %s", temp_dir)
+            else:
+                shutil.rmtree(temp_dir)
+
+        return True
 
     @classmethod
     def from_jsonl(cls, file_path: pathlib.Path, /) -> QueueState:
