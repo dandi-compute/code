@@ -94,7 +94,7 @@ def test_submit_next_returns_false_and_logs_when_no_eligible_entries(
     with (
         caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._submit_next"),
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
         ),
     ):
@@ -117,7 +117,7 @@ def test_submit_next_returns_false_when_all_submit_sh_have_submitted_marker(
     with (
         caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._submit_next"),
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
     ):
@@ -139,7 +139,7 @@ def test_submit_next_calls_dandi_download_for_unsubmitted_candidate(tmp_path: pa
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
@@ -171,7 +171,7 @@ def test_submit_next_calls_sbatch_with_submit_sh_path(tmp_path: pathlib.Path) ->
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
@@ -204,7 +204,7 @@ def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(
     with (
         caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._submit_next"),
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
@@ -242,7 +242,7 @@ def test_submit_next_calls_dandi_upload_with_allow_any_path(tmp_path: pathlib.Pa
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
@@ -272,7 +272,7 @@ def test_submit_next_cleans_up_temp_dir_on_success(tmp_path: pathlib.Path) -> No
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
@@ -305,7 +305,7 @@ def test_submit_next_does_not_clean_up_temp_dir_on_download_failure(tmp_path: pa
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
@@ -333,7 +333,7 @@ def test_submit_next_does_not_clean_up_temp_dir_in_test_mode(tmp_path: pathlib.P
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
@@ -373,7 +373,7 @@ def test_submit_next_submits_up_to_max_submissions(tmp_path: pathlib.Path) -> No
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
@@ -421,7 +421,7 @@ def test_submit_next_skips_candidates_with_submitted_in_metadata(tmp_path: pathl
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(

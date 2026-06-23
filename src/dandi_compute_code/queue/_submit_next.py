@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 
-from ._find_pending_entries import _find_pending_entries
+from ._queue_state import QueueState
 
 _log = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ def _submit_next(
     if max_submissions < 1:
         return False
 
-    candidates = _find_pending_entries()
+    candidates = QueueState.pending_code_dirs()
 
     if not candidates:
         _log.info("No eligible pending entries available for submission")
