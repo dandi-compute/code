@@ -1,11 +1,11 @@
 import json
 import pathlib
-from collections.abc import Callable
 from datetime import datetime
 
 import pytest
+from _example_queue import copy_state_file, create_attempt_directory, entry_for
 
-from dandi_compute_code.queue import JobEntry, QueueState, aggregate_queue_statistics
+from dandi_compute_code.queue import QueueState, aggregate_queue_statistics
 
 _TIMELINE_TWO_STEPS = """<script>
 window.data = {
@@ -27,14 +27,10 @@ window.data = {
 
 @pytest.mark.ai_generated
 def test_aggregate_queue_statistics_writes_queue_stats_json(
-    queue_directory: pathlib.Path,
-    copy_state_file: Callable[..., pathlib.Path],
-    entry_for: Callable[..., JobEntry],
-    create_attempt_directory: Callable[..., pathlib.Path],
-    tmp_path: pathlib.Path,
+    queue_directory: pathlib.Path, tmp_path: pathlib.Path
 ) -> None:
     """aggregate_queue_statistics writes queue_stats.json with byte and timeline aggregates."""
-    state_file = copy_state_file(queue_directory=queue_directory)
+    state_file = copy_state_file(queue_directory)
     dandiset_dir = tmp_path / "dandiset"
 
     # sub-successful is the only entry with both output and a known source-asset size.
@@ -56,14 +52,10 @@ def test_aggregate_queue_statistics_writes_queue_stats_json(
 
 @pytest.mark.ai_generated
 def test_aggregate_queue_statistics_skips_invalid_timeline_html(
-    queue_directory: pathlib.Path,
-    copy_state_file: Callable[..., pathlib.Path],
-    entry_for: Callable[..., JobEntry],
-    create_attempt_directory: Callable[..., pathlib.Path],
-    tmp_path: pathlib.Path,
+    queue_directory: pathlib.Path, tmp_path: pathlib.Path
 ) -> None:
     """aggregate_queue_statistics ignores timeline files with malformed embedded JSON."""
-    copy_state_file(queue_directory=queue_directory)
+    copy_state_file(queue_directory)
     dandiset_dir = tmp_path / "dandiset"
 
     attempt_dir = create_attempt_directory(base_dir=dandiset_dir, entry=entry_for("sub-successful"), with_logs=True)
@@ -77,12 +69,10 @@ def test_aggregate_queue_statistics_skips_invalid_timeline_html(
 
 @pytest.mark.ai_generated
 def test_aggregate_queue_statistics_found_timeline_via_fallback_attempt_resolution(
-    queue_directory: pathlib.Path,
-    copy_state_file: Callable[..., pathlib.Path],
-    tmp_path: pathlib.Path,
+    queue_directory: pathlib.Path, tmp_path: pathlib.Path
 ) -> None:
     """aggregate_queue_statistics finds timeline files when state dandi_path differs from on-disk attempt path."""
-    copy_state_file(queue_directory=queue_directory)
+    copy_state_file(queue_directory)
     dandiset_dir = tmp_path / "dandiset"
 
     # The "sourcedata" entry's on-disk attempt lives under sub-mouse01, so its timeline
