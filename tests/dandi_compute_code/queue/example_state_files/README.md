@@ -6,7 +6,7 @@ Reading them here on GitHub shows exactly what input a test starts from, so the
 relationship between input state and expected behavior stays visible without
 having to reconstruct dictionaries inside the tests.
 
-Every line is one attempt capsule, matching the format produced by
+Every line is one job capsule, matching the format produced by
 `QueueState.to_file` and consumed by `QueueState.from_jsonl`. Tests load these
 files through the fixtures in `../conftest.py` (`example_state_files_directory`
 and `install_state_file`) rather than building entries inline.
