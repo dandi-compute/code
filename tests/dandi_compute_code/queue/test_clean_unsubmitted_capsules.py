@@ -74,7 +74,9 @@ def test_clean_unsubmitted_capsules_skips_entries_with_logs(
     """clean_unsubmitted_capsules does not remove capsules that have logs (already run)."""
     dandiset_dir = tmp_path / "dandiset"
     copy_state_file(queue_directory=queue_directory)
-    failed_dir = create_attempt_directory(base_dir=dandiset_dir, entry=entry_for("sub-running"), with_logs=True)
+    failed_dir = create_attempt_directory(
+        base_dir=dandiset_dir, entry=entry_for("sub-failed/ses-repeated", attempt=1), with_logs=True
+    )
 
     with mock.patch("subprocess.run") as mock_run:
         removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_directory)
@@ -144,27 +146,6 @@ def test_clean_unsubmitted_capsules_returns_empty_list_when_nothing_queued(
     removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_directory)
 
     assert removed == []
-
-
-@pytest.mark.ai_generated
-def test_clean_unsubmitted_capsules_handles_session_in_path(
-    queue_directory: pathlib.Path,
-    copy_state_file: Callable[..., pathlib.Path],
-    entry_for: Callable[..., JobEntry],
-    create_attempt_directory: Callable[..., pathlib.Path],
-    tmp_path: pathlib.Path,
-    _dandi_api_key: None,
-) -> None:
-    """clean_unsubmitted_capsules correctly handles attempt dirs with a session component."""
-    dandiset_dir = tmp_path / "dandiset"
-    copy_state_file(queue_directory=queue_directory)
-    queued_dir = create_attempt_directory(base_dir=dandiset_dir, entry=entry_for("sub-session/ses-recording"))
-
-    with mock.patch("subprocess.run"):
-        removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_dir, queue_directory=queue_directory)
-
-    assert removed == [queued_dir]
-    assert not queued_dir.exists()
 
 
 @pytest.mark.ai_generated

@@ -99,14 +99,13 @@ def copy_state_file() -> Callable[..., pathlib.Path]:
 
 
 @pytest.fixture
-def populated_queue(
+def populated_queue_directory(
     queue_directory: pathlib.Path,
-    processing_directory: pathlib.Path,
     copy_state_file: Callable[..., pathlib.Path],
-) -> tuple[pathlib.Path, pathlib.Path]:
-    """A queue directory holding the example state, paired with a processing directory."""
+) -> pathlib.Path:
+    """A queue directory with the example ``state.jsonl`` already copied in."""
     copy_state_file(queue_directory=queue_directory)
-    return queue_directory, processing_directory
+    return queue_directory
 
 
 @pytest.fixture
