@@ -104,6 +104,66 @@ def test_oop_success_skips_fallback_and_does_not_log(tmp_path: pathlib.Path, fai
 
 
 @pytest.mark.ai_generated
+@pytest.mark.parametrize("disable_value", ["1", "true", "yes", "on", "TRUE"])
+def test_kill_switch_skips_oop_and_runs_fallback(
+    tmp_path: pathlib.Path, failsafe_log: pathlib.Path, disable_value: str
+) -> None:
+    """The kill-switch env var bypasses the OOP path without attempting or logging it."""
+    queue_dir = _make_queue_dir(tmp_path)
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    runner = CliRunner()
+
+    with (
+        mock.patch(f"{_GROUP}.QueueState.process_queue") as mock_oop,
+        mock.patch(f"{_GROUP}.process_queue", return_value="submitted") as mock_fallback,
+    ):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["queue", "process", "--queue", str(queue_dir), "--processing", str(processing_dir)],
+            env={
+                "DANDI_API_KEY": "test-key",
+                "DANDI_DEVEL": "1",
+                "DANDICOMPUTE_DISABLE_OOP": disable_value,
+                "DANDICOMPUTE_OOP_FAILSAFE_LOG": str(failsafe_log),
+            },
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_oop.assert_not_called()
+    mock_fallback.assert_called_once()
+    assert not failsafe_log.exists()
+
+
+@pytest.mark.ai_generated
+def test_kill_switch_unset_still_attempts_oop(tmp_path: pathlib.Path, failsafe_log: pathlib.Path) -> None:
+    """A blank or absent kill-switch leaves the OOP path as the primary route."""
+    queue_dir = _make_queue_dir(tmp_path)
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+    runner = CliRunner()
+
+    with (
+        mock.patch(f"{_GROUP}.QueueState.process_queue", return_value="submitted") as mock_oop,
+        mock.patch(f"{_GROUP}.process_queue") as mock_fallback,
+    ):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["queue", "process", "--queue", str(queue_dir), "--processing", str(processing_dir)],
+            env={
+                "DANDI_API_KEY": "test-key",
+                "DANDI_DEVEL": "1",
+                "DANDICOMPUTE_DISABLE_OOP": "",
+                "DANDICOMPUTE_OOP_FAILSAFE_LOG": str(failsafe_log),
+            },
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_oop.assert_called_once()
+    mock_fallback.assert_not_called()
+
+
+@pytest.mark.ai_generated
 def test_failure_log_appends_across_invocations(tmp_path: pathlib.Path, failsafe_log: pathlib.Path) -> None:
     """Repeated OOP failures append, leaving an investigable record per invocation."""
     runner = CliRunner()

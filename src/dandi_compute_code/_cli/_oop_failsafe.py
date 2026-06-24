@@ -25,8 +25,19 @@ _ResultT = TypeVar("_ResultT")
 #: Environment variable that overrides the failsafe log location.
 _OOP_FAILSAFE_LOG_ENV_VAR = "DANDICOMPUTE_OOP_FAILSAFE_LOG"
 
+#: Environment variable kill-switch that disables the new OOP path entirely.
+_OOP_DISABLE_ENV_VAR = "DANDICOMPUTE_DISABLE_OOP"
+
 #: Default failsafe log file used when the override variable is unset.
 _DEFAULT_OOP_FAILSAFE_LOG = pathlib.Path.home() / ".dandicompute" / "oop_failsafe.jsonl"
+
+#: Values of the kill-switch variable that count as "disabled".
+_TRUTHY_DISABLE_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+def _oop_path_is_disabled() -> bool:
+    """Report whether the OOP kill-switch environment variable is set to a truthy value."""
+    return os.environ.get(_OOP_DISABLE_ENV_VAR, "").strip().lower() in _TRUTHY_DISABLE_VALUES
 
 
 def _resolve_oop_failsafe_log_path() -> pathlib.Path:
@@ -70,6 +81,11 @@ def run_with_oop_failsafe(
     *fallback_path* is invoked to preserve the current runtime behavior. The
     result of whichever path completes is returned.
 
+    The OOP path can be disabled outright for the duration of the soft rollout by
+    setting the ``DANDICOMPUTE_DISABLE_OOP`` environment variable to a truthy
+    value (``1``, ``true``, ``yes``, or ``on``); the command then runs
+    *fallback_path* directly without attempting (or logging) the OOP path.
+
     Parameters
     ----------
     command : str
@@ -80,6 +96,10 @@ def run_with_oop_failsafe(
     fallback_path : callable
         Zero-argument callable invoking the current free-function behavior.
     """
+    if _oop_path_is_disabled():
+        _log.info("OOP path disabled via %s; running current behavior for '%s'.", _OOP_DISABLE_ENV_VAR, command)
+        return fallback_path()
+
     try:
         oop_result = oop_path()
         return oop_result
