@@ -36,7 +36,7 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
     runner = CliRunner()
     with (
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -50,7 +50,7 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
             ),
         ),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
