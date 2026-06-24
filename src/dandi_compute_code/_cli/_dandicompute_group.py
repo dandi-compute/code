@@ -5,6 +5,7 @@ import pathlib
 import click
 
 from ._clean_work_directory import clean_work_directory
+from ._oop_failsafe import run_with_oop_failsafe
 from ._styled_echo import _styled_echo
 from .._configure_logging import _configure_logging
 from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
@@ -15,6 +16,7 @@ from ..dandiset import (
 )
 from ..queue import (
     TEST_QUEUE_CONTENT_ID,
+    QueueState,
     aggregate_queue_statistics,
     clean_unsubmitted_capsules,
     dump_issues,
@@ -224,11 +226,27 @@ def _prepare_aind_command(
     if test:
         if queue_directory is None:
             raise click.UsageError("--queue is required when using --test.")
-        prepare_queue(
-            queue_directory=queue_directory,
-            content_ids=[TEST_QUEUE_CONTENT_ID],
-            pipeline_directory=pipeline_directory,
-            config_key=config_key,
+
+        def _prepare_test_oop() -> None:
+            QueueState.prepare(
+                queue_directory=queue_directory,
+                content_ids=[TEST_QUEUE_CONTENT_ID],
+                pipeline_directory=pipeline_directory,
+                config_key=config_key,
+            )
+
+        def _prepare_test_fallback() -> None:
+            prepare_queue(
+                queue_directory=queue_directory,
+                content_ids=[TEST_QUEUE_CONTENT_ID],
+                pipeline_directory=pipeline_directory,
+                config_key=config_key,
+            )
+
+        run_with_oop_failsafe(
+            command="prepare aind --test",
+            oop_path=_prepare_test_oop,
+            fallback_path=_prepare_test_fallback,
         )
         return
 
@@ -293,9 +311,17 @@ def _queue_refresh_command(
 ) -> None:
     """Regenerate state.jsonl and archive_state.jsonl from DANDI assets metadata."""
     _configure_logging(silent=silent)
-    try:
+
+    def _refresh_oop() -> None:
+        QueueState.write_state(queue_directory=queue_directory)
+        QueueState.write_archive_state(queue_directory=queue_directory)
+
+    def _refresh_fallback() -> None:
         write_queue_state(queue_directory=queue_directory)
         write_archive_state(queue_directory=queue_directory)
+
+    try:
+        run_with_oop_failsafe(command="queue refresh", oop_path=_refresh_oop, fallback_path=_refresh_fallback)
     except FileNotFoundError as error:
         raise click.ClickException(str(error)) from error
 
@@ -331,7 +357,15 @@ def _queue_clean_command(
     """Delete unsubmitted capsules that are no longer present in the queue."""
     _configure_logging(silent=silent)
     _require_dandi_api_key()
-    removed = clean_unsubmitted_capsules(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
+
+    def _clean_oop() -> list[pathlib.Path]:
+        state = QueueState.from_jsonl(queue_directory / "state.jsonl")
+        return state.clean_unsubmitted_capsules(dandiset_directory=dandiset_directory)
+
+    def _clean_fallback() -> list[pathlib.Path]:
+        return clean_unsubmitted_capsules(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
+
+    removed = run_with_oop_failsafe(command="queue clean", oop_path=_clean_oop, fallback_path=_clean_fallback)
     if removed:
         if not silent:
             for path in removed:
@@ -382,11 +416,23 @@ def _queue_stats_command(
 ) -> None:
     """Write aggregate queue statistics from state.jsonl and timeline reports."""
     _configure_logging(silent=silent)
-    aggregate_queue_statistics(
-        queue_directory=queue_directory,
-        dandiset_directory=dandiset_directory,
-        output_file_name=output_file_name,
-    )
+
+    def _stats_oop() -> dict:
+        state = QueueState.from_jsonl(queue_directory / "state.jsonl")
+        return state.aggregate_statistics(
+            queue_directory=queue_directory,
+            dandiset_directory=dandiset_directory,
+            output_file_name=output_file_name,
+        )
+
+    def _stats_fallback() -> dict:
+        return aggregate_queue_statistics(
+            queue_directory=queue_directory,
+            dandiset_directory=dandiset_directory,
+            output_file_name=output_file_name,
+        )
+
+    run_with_oop_failsafe(command="queue stats", oop_path=_stats_oop, fallback_path=_stats_fallback)
     if not silent:
         _styled_echo(text=f"\nWrote queue aggregate statistics: {queue_directory / output_file_name}", color="green")
 
@@ -411,7 +457,11 @@ def _queue_pending_command(context: click.Context, silent: bool = False) -> None
         dandicompute queue pending --silent && dandicompute queue process ...
     """
     _configure_logging(silent=silent)
-    pending = has_pending_jobs()
+    pending = run_with_oop_failsafe(
+        command="queue pending",
+        oop_path=QueueState.has_pending_jobs,
+        fallback_path=has_pending_jobs,
+    )
     if not silent:
         _styled_echo(text="true" if pending else "false", color="green" if pending else "yellow")
     context.exit(0 if pending else 1)
@@ -478,12 +528,29 @@ def _queue_process_command(
     _configure_logging(silent=silent)
     _require_dandi_api_key()
     _require_dandi_devel()
-    queue_status = process_queue(
-        queue_directory=queue_directory,
-        processing_directory=processing_directory,
-        max_concurrent_aind_jobs=max_concurrent_aind_jobs,
-        jitter_seconds=jitter_seconds,
-        test=test,
+
+    def _process_oop() -> str:
+        return QueueState.process_queue(
+            queue_directory=queue_directory,
+            processing_directory=processing_directory,
+            max_concurrent_aind_jobs=max_concurrent_aind_jobs,
+            jitter_seconds=jitter_seconds,
+            test=test,
+        )
+
+    def _process_fallback() -> str:
+        return process_queue(
+            queue_directory=queue_directory,
+            processing_directory=processing_directory,
+            max_concurrent_aind_jobs=max_concurrent_aind_jobs,
+            jitter_seconds=jitter_seconds,
+            test=test,
+        )
+
+    queue_status = run_with_oop_failsafe(
+        command="queue process",
+        oop_path=_process_oop,
+        fallback_path=_process_fallback,
     )
     if not silent and queue_status == "no-pending":
         _styled_echo(text="\nNo jobs were found waiting to be submitted.", color="yellow")
@@ -540,12 +607,24 @@ def _queue_prepare_command(
     _configure_logging(silent=silent)
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
-    prepare_queue(
-        queue_directory=queue_directory,
-        pipeline_directory=pipeline_directory,
-        config_key=config_key,
-        limit=limit,
-    )
+
+    def _prepare_oop() -> None:
+        QueueState.prepare(
+            queue_directory=queue_directory,
+            pipeline_directory=pipeline_directory,
+            config_key=config_key,
+            limit=limit,
+        )
+
+    def _prepare_fallback() -> None:
+        prepare_queue(
+            queue_directory=queue_directory,
+            pipeline_directory=pipeline_directory,
+            config_key=config_key,
+            limit=limit,
+        )
+
+    run_with_oop_failsafe(command="queue prepare", oop_path=_prepare_oop, fallback_path=_prepare_fallback)
 
 
 # dandicompute issues
@@ -585,7 +664,14 @@ def _issues_dump_command(
 ) -> None:
     """Scan nextflow and slurm logs and write per-capsule issue records."""
     _configure_logging(silent=silent)
-    dump_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
+
+    def _dump_oop() -> list[dict]:
+        return QueueState.dump_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
+
+    def _dump_fallback() -> list[dict]:
+        return dump_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
+
+    run_with_oop_failsafe(command="issues dump", oop_path=_dump_oop, fallback_path=_dump_fallback)
     if not silent:
         _styled_echo(text=f"\nWrote issue dump: {queue_directory / 'issues_dump.json'}", color="green")
 
@@ -620,7 +706,14 @@ def _issues_summarize_command(
 ) -> None:
     """Summarize discovered issue lines by descending occurrence count."""
     _configure_logging(silent=silent)
-    summarize_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
+
+    def _summarize_oop() -> dict[str, list[str]]:
+        return QueueState.summarize_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
+
+    def _summarize_fallback() -> dict[str, list[str]]:
+        return summarize_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
+
+    run_with_oop_failsafe(command="issues summarize", oop_path=_summarize_oop, fallback_path=_summarize_fallback)
     if not silent:
         _styled_echo(text=f"\nWrote issue summary: {queue_directory / 'issues_summary.json'}", color="green")
 
