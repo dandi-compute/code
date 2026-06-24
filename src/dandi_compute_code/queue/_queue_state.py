@@ -13,25 +13,42 @@ fields by string key.  This module adds a thin typed layer on top:
 
 from __future__ import annotations
 
+import collections
 import datetime
+import gzip
 import json
 import logging
+import os
 import pathlib
+import random
 import shutil
 import subprocess
 import tempfile
+import time
+import urllib.request
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from typing import Literal
 
 import yaml
 
-from ._write_queue_state import (
-    JobInfo,
+from ._globals import _AIND_EPHYS_PARAMS_REGISTRY
+from ._job_info import JobInfo
+from ._queue_utils import (
     _collect_attempts,
+    _duration_string_to_seconds,
+    _extract_error_lines,
+    _extract_nextflow_timeline_data,
     _finalize_attempt_records,
+    _list_capsule_log_directories,
+    _load_queue_config,
+    _order_content_ids_for_uniform_dandiset_sampling,
+    _remove_empty_parents,
     _sort_key,
     _UpstreamMetadataCache,
 )
+from ..aind_ephys_pipeline import UnmappedContentIDError, prepare_aind_ephys_job
+from ..dandiset._globals import _FAILED_RUNS_ARCHIVE_DANDISET_ID, _JOB_CAPSULES_DANDISET_ID
 from ..dandiset._load_assets_jsonld_metadata import (
     AssetMetadata,
     AssetsJsonldMetadata,
@@ -42,7 +59,7 @@ from ..dandiset._load_assets_jsonld_metadata import (
 _log = logging.getLogger(__name__)
 
 #: Dandiset whose assets back the pending/submission queries (the job capsules Dandiset).
-_DANDISET_ID = "001697"
+_DANDISET_ID = _JOB_CAPSULES_DANDISET_ID
 
 
 @dataclass
@@ -212,14 +229,7 @@ class JobEntry:
     def to_dict(self) -> dict:
         """Serialise back to the flat dict format written to ``state.jsonl``."""
         return {
-            "dandiset_id": self.job.dandiset_id,
-            "dandi_path": self.job.dandi_path,
-            "pipeline": self.job.pipeline,
-            "version": self.job.version,
-            "params": self.job.params,
-            "config": self.job.config,
-            "attempt": self.job.attempt,
-            "codebase": self.job.codebase,
+            **self.job.to_dict(),
             "content_id": self.content_id,
             "asset_size_bytes": self.asset_size_bytes,
             "has_code": self.has_code,
@@ -300,6 +310,21 @@ class QueueState:
     def failures_for(self, *, pipeline: str, version: str) -> list[JobEntry]:
         """Failed entries matching a given pipeline and version."""
         return [e for e in self.failed if e.job.pipeline == pipeline and e.job.version == version]
+
+    def entry_for(self, *, dandi_path: str, attempt: int = 1) -> JobEntry:
+        """
+        Return the entry with the given ``dandi_path`` (and ``attempt``).
+
+        :param dandi_path: The ``dandi_path`` recorded on the target entry.
+        :param attempt: Disambiguates scenarios that use more than one attempt of
+            the same asset.
+        :raises KeyError: If no entry matches *dandi_path* and *attempt*.
+        """
+        for entry in self.entries:
+            if entry.job.dandi_path == dandi_path and entry.job.attempt == attempt:
+                return entry
+        message = f"No entry with dandi_path={dandi_path!r} and attempt={attempt}"
+        raise KeyError(message)
 
     @staticmethod
     def pending_code_dirs() -> list[str]:
@@ -449,6 +474,455 @@ class QueueState:
                 shutil.rmtree(temp_dir)
 
         return True
+
+    @staticmethod
+    def count_running_aind_ephys_pipeline_jobs() -> int:
+        """
+        Count currently running AIND Ephys pipeline jobs via the SLURM scheduler.
+
+        Calls ``squeue --me --format=%j`` and counts jobs whose name is exactly
+        ``AIND-Ephys-Pipeline``.
+
+        :raises RuntimeError: If the ``squeue`` invocation exits non-zero and writes
+            to standard error.
+        """
+        command = ["squeue", "--me", "--format=%j"]
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0 and result.stderr:
+            message = f"command: {command}\nstdout: {result.stdout}\nstderr: {result.stderr}"
+            raise RuntimeError(message)
+        if result.stderr:
+            _log.warning(result.stderr)
+        return sum(1 for line in result.stdout.splitlines() if line.strip() == "AIND-Ephys-Pipeline")
+
+    @staticmethod
+    def load_queue_config(*, queue_directory: pathlib.Path) -> dict:
+        """
+        Read and validate ``queue_config.json`` under *queue_directory*.
+
+        :raises FileNotFoundError: If ``queue_config.json`` is not found.
+        :raises ValueError: If the queue configuration fails LinkML validation.
+        """
+        return _load_queue_config(queue_directory=queue_directory)
+
+    @staticmethod
+    def resolve_params_key_to_id(pipeline: str, params_key: str) -> str:
+        """
+        Resolve a human-readable parameters key to its 7-character hash ID.
+
+        For the ``aind+ephys`` pipeline the lookup is performed against the
+        registered params registry. For any other pipeline, or if the key is not
+        found, *params_key* is returned unchanged so callers that already store raw
+        hash IDs continue to work.
+        """
+        if pipeline == "aind+ephys":
+            entry = _AIND_EPHYS_PARAMS_REGISTRY.get(params_key)
+            if entry:
+                return entry["md5"][:7]
+        return params_key
+
+    @classmethod
+    def from_assets(cls, *, dandiset_id: str = _JOB_CAPSULES_DANDISET_ID) -> QueueState:
+        """
+        Build a queue state from a Dandiset's DANDI ``assets.jsonld`` metadata.
+
+        Each entry represents one attempt capsule inferred from the
+        ``derivatives/dandiset-*/.../pipeline-*/..._attempt-*`` path structure, with
+        ``content_id`` / ``asset_size_bytes`` resolved from the upstream source
+        Dandiset's ``assets.jsonld``.
+
+        :param dandiset_id: The Dandiset whose ``assets.jsonld`` is read. Defaults to
+            the job capsules Dandiset (``001697``).
+        :type dandiset_id: str
+        """
+        local_metadata = load_assets_jsonld_metadata(dandiset_id=dandiset_id)
+        collection = _collect_attempts(local_metadata)
+        upstream_cache = _UpstreamMetadataCache()
+        records = _finalize_attempt_records(collection=collection, upstream_cache=upstream_cache)
+        records.sort(key=_sort_key)
+        return cls(entries=[JobEntry.from_dict(record) for record in records])
+
+    @classmethod
+    def write_state(
+        cls,
+        *,
+        queue_directory: pathlib.Path,
+        dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
+        state_file_name: str = "state.jsonl",
+    ) -> None:
+        """
+        Write a queue state file from DANDI ``assets.jsonld`` metadata.
+
+        Validates ``queue_config.json`` under *queue_directory*, builds the state via
+        :meth:`from_assets`, and writes it to ``queue_directory/state_file_name``.
+
+        :param queue_directory: Path to the queue root directory.
+        :type queue_directory: pathlib.Path
+        :param dandiset_id: The Dandiset whose ``assets.jsonld`` portrays the state.
+        :type dandiset_id: str
+        :param state_file_name: Name of the state file written under *queue_directory*.
+        :type state_file_name: str
+        :raises FileNotFoundError: If ``queue_config.json`` is not found.
+        :raises ValueError: If the queue configuration fails LinkML validation.
+        """
+        _load_queue_config(queue_directory=queue_directory)
+        state = cls.from_assets(dandiset_id=dandiset_id)
+        state.to_file(queue_directory / state_file_name)
+
+    @classmethod
+    def write_archive_state(cls, *, queue_directory: pathlib.Path) -> None:
+        """
+        Write ``archive_state.jsonl`` from the failed runs archive ``assets.jsonld``.
+
+        The archive counterpart to :meth:`write_state`; produces an identically
+        structured state file adjacent to ``state.jsonl`` portraying the failed runs
+        archive Dandiset (``001873``) rather than the job capsules Dandiset.
+
+        :param queue_directory: Path to the queue root directory.
+        :type queue_directory: pathlib.Path
+        """
+        cls.write_state(
+            queue_directory=queue_directory,
+            dandiset_id=_FAILED_RUNS_ARCHIVE_DANDISET_ID,
+            state_file_name="archive_state.jsonl",
+        )
+
+    def aggregate_statistics(
+        self,
+        *,
+        queue_directory: pathlib.Path,
+        dandiset_directory: pathlib.Path,
+        output_file_name: str = "queue_stats.json",
+    ) -> dict:
+        """Write aggregate queue statistics JSON and return the written payload."""
+        job_step_wall_time_seconds: collections.defaultdict[str, float] = collections.defaultdict(float)
+        timeline_files_processed = 0
+        for entry in self.entries:
+            attempt_dir = entry.resolve_attempt_dir(dandiset_directory)
+            timeline_file = attempt_dir / "logs" / "timeline.html"
+            if not timeline_file.is_file():
+                continue
+
+            timeline_data = _extract_nextflow_timeline_data(timeline_html=timeline_file.read_text())
+            if timeline_data is None:
+                continue
+
+            processes = timeline_data.get("processes")
+            if not isinstance(processes, list):
+                continue
+            timeline_files_processed += 1
+
+            for process in processes:
+                if not isinstance(process, dict):
+                    continue
+                process_label = process.get("label")
+                if not isinstance(process_label, str):
+                    continue
+                step_name = process_label.split(" (", 1)[0]
+                times = process.get("times")
+                if not isinstance(times, list):
+                    continue
+                for step in times:
+                    if not isinstance(step, dict):
+                        continue
+                    duration_label = step.get("label")
+                    if not isinstance(duration_label, str):
+                        continue
+                    duration_string = duration_label.split("/", 1)[0].strip()
+                    duration_seconds = _duration_string_to_seconds(duration_string)
+                    if duration_seconds > 0:
+                        job_step_wall_time_seconds[step_name] += duration_seconds
+
+        statistics = {
+            "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "state_entry_count": len(self.entries),
+            "successful_asset_bytes_total": self.successful_asset_bytes_total,
+            "timeline_files_processed": timeline_files_processed,
+            "job_step_wall_time_seconds": {
+                key: value for key, value in sorted(job_step_wall_time_seconds.items(), key=lambda item: item[0])
+            },
+        }
+
+        output_file = queue_directory / output_file_name
+        output_file.write_text(json.dumps(statistics, indent=2, sort_keys=True) + "\n")
+        return statistics
+
+    def clean_unsubmitted_capsules(self, *, dandiset_directory: pathlib.Path) -> list[pathlib.Path]:
+        """
+        Remove all queued (unsubmitted) capsule directories from the dandiset tree.
+
+        A capsule is *queued* when its attempt directory has a ``code/`` subdirectory
+        but no ``logs/`` or ``derivatives/`` content and no submitted marker. Each
+        matching attempt directory is deleted from the DANDI archive (via ``dandi
+        delete``) and the local filesystem.
+
+        :param dandiset_directory: Local clone of the dandiset used to resolve and
+            delete matching attempt directories.
+        :type dandiset_directory: pathlib.Path
+        :returns: Attempt directory paths that were deleted.
+        :rtype: list[pathlib.Path]
+        :raises RuntimeError: If ``DANDI_API_KEY`` is not set or is blank.
+        """
+        if not os.environ.get("DANDI_API_KEY", "").strip():
+            message = "`DANDI_API_KEY` environment variable is not set or is blank."
+            raise RuntimeError(message)
+
+        cleanable_attempt_dirs = [
+            attempt_dir
+            for entry in self.entries
+            if (attempt_dir := entry.resolve_unsubmitted_attempt_dir(dandiset_directory)) is not None
+        ]
+
+        removed: list[pathlib.Path] = []
+        for attempt_dir in cleanable_attempt_dirs:
+            if attempt_dir.is_dir():
+                parent_dir = attempt_dir.parent
+                subprocess.run(
+                    ["dandi", "delete", str(attempt_dir)],
+                    input=b"y\n",
+                    check=True,
+                )
+                shutil.rmtree(attempt_dir)
+                _remove_empty_parents(start=parent_dir, stop=dandiset_directory / "derivatives")
+                removed.append(attempt_dir)
+
+        return removed
+
+    @classmethod
+    def process_queue(
+        cls,
+        *,
+        queue_directory: pathlib.Path,
+        processing_directory: pathlib.Path,
+        max_concurrent_aind_jobs: int = 2,
+        jitter_seconds: float = 30.0,
+        test: bool = False,
+    ) -> Literal["submitted", "no-pending", "slots-unavailable"]:
+        """
+        Submit jobs from ``state.jsonl`` up to ``max_concurrent_aind_jobs`` total
+        running ``AIND-Ephys-Pipeline`` SLURM jobs.
+
+        :param queue_directory: Path to the queue root directory.
+        :param processing_directory: Directory for temporary working trees during submission.
+        :param max_concurrent_aind_jobs: Maximum concurrent ``AIND-Ephys-Pipeline`` jobs.
+        :param jitter_seconds: Maximum random delay (seconds) before processing; ``0`` disables.
+        :param test: If ``True``, preserve temporary processing directories on success.
+        :raises FileNotFoundError: If ``state.jsonl`` is not found in *queue_directory*.
+        :raises ValueError: If *jitter_seconds* is negative or *max_concurrent_aind_jobs* < 1.
+        """
+        if jitter_seconds < 0:
+            message = "jitter_seconds must be non-negative"
+            raise ValueError(message)
+        if jitter_seconds > 0:
+            delay = random.uniform(0, jitter_seconds)
+            _log.info("Sleeping %.2f seconds (jitter) before processing queue", delay)
+            time.sleep(delay)
+
+        state_file = queue_directory / "state.jsonl"
+        if not state_file.exists():
+            message = f"State file not found: {state_file}"
+            raise FileNotFoundError(message)
+        if max_concurrent_aind_jobs < 1:
+            message = "max_concurrent_aind_jobs must be at least 1"
+            raise ValueError(message)
+        if not state_file.read_text().strip():
+            _log.info(f"No entries in {state_file}")
+            return "no-pending"
+
+        running_count = cls.count_running_aind_ephys_pipeline_jobs()
+        available_slots = max(0, max_concurrent_aind_jobs - running_count)
+        if available_slots < 1:
+            return "slots-unavailable"
+
+        submitted_any = cls.submit_next(
+            processing_directory=processing_directory,
+            max_submissions=available_slots,
+            test=test,
+        )
+        return "submitted" if submitted_any else "no-pending"
+
+    @classmethod
+    def prepare(
+        cls,
+        *,
+        queue_directory: pathlib.Path,
+        pipeline_directory: pathlib.Path | None = None,
+        config_key: str = "default",
+        content_ids: list[str] | None = None,
+        limit: int | None = None,
+    ) -> None:
+        """
+        En-masse preparation of qualifying assets based on the current queue config.
+
+        For every pipeline/version/params combination declared in
+        ``queue_config.json`` this determines which content IDs to prepare and calls
+        :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job` for
+        each asset. The per-pipeline failure cap (``max_fail_per_dandiset``) is
+        enforced by reading the existing ``state.jsonl`` under *queue_directory*.
+
+        :param queue_directory: Path to the queue root directory.
+        :param pipeline_directory: Local path to the AIND pipeline repository.
+        :param config_key: Key for a registered job configuration.
+        :param content_ids: Explicit content IDs to prepare; when provided, the
+            qualifying list is not fetched from the network.
+        :param limit: If provided, stop after preparing *limit* assets in total.
+        """
+        queue_config = _load_queue_config(queue_directory=queue_directory)
+
+        if content_ids is None:
+            qualifying_aind_content_ids_url = (
+                "https://raw.githubusercontent.com/dandi-cache/qualifying-aind-content-ids/dist/"
+                "derivatives/qualifying_aind_content_ids.jsonl.gz"
+            )
+            with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
+                decompressed = gzip.decompress(response.read()).decode()
+                fetched_content_ids = [json.loads(line) for line in decompressed.splitlines() if line.strip()]
+            content_ids = _order_content_ids_for_uniform_dandiset_sampling(content_ids=fetched_content_ids)
+
+        state_file = queue_directory / "state.jsonl"
+        state = cls.from_jsonl(state_file) if state_file.exists() else cls(entries=[])
+        content_id_to_dandiset_ids = state.content_id_to_dandiset_ids()
+
+        prepared_count = 0
+        for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
+            if limit is not None and prepared_count >= limit:
+                break
+            for version in pipeline_data.get("version_priority", []):
+                if limit is not None and prepared_count >= limit:
+                    break
+                for params in pipeline_data.get("params_priority", []):
+                    if limit is not None and prepared_count >= limit:
+                        break
+                    pipeline_cfg = queue_config["pipelines"][pipeline_name]
+
+                    max_fail = pipeline_cfg.get("max_fail_per_dandiset")
+                    failure_count_by_dandiset: collections.defaultdict[str, int] = collections.defaultdict(int)
+                    if max_fail is not None:
+                        for entry in state.failures_for(pipeline=pipeline_name, version=version):
+                            dandiset_id = entry.job.dandiset_id
+                            if not dandiset_id:
+                                continue
+                            failure_count_by_dandiset[dandiset_id] += 1
+
+                    for content_id in content_ids:
+                        if limit is not None and prepared_count >= limit:
+                            break
+                        if max_fail is not None:
+                            dandiset_ids = content_id_to_dandiset_ids.get(content_id, set())
+                            if len(dandiset_ids) == 1:
+                                dandiset_id = next(iter(dandiset_ids))
+                                failure_count = failure_count_by_dandiset.get(dandiset_id, 0)
+                                if failure_count >= max_fail:
+                                    _log.info(
+                                        f"Skipping preparation for {pipeline_name}/{version}/{params}/{content_id}: "
+                                        f"failure count ({failure_count}) for dandiset-{dandiset_id} has reached "
+                                        f"max_fail_per_dandiset ({max_fail})."
+                                    )
+                                    continue
+                            else:
+                                mapped_dandisets = ", ".join(sorted(dandiset_ids)) if dandiset_ids else "<none>"
+                                _log.info(
+                                    f"Preparing {content_id} without max_fail_per_dandiset enforcement for "
+                                    f"{pipeline_name}/{version}/{params}: expected exactly 1 mapped dandiset but "
+                                    f"found {len(dandiset_ids)} ({mapped_dandisets})."
+                                )
+
+                        _log.info(f"Preparing content ID: {content_id}")
+                        try:
+                            prepare_aind_ephys_job(
+                                content_id=content_id,
+                                parameters_key=params,
+                                pipeline_version=version,
+                                pipeline_directory=pipeline_directory,
+                                config_key=config_key,
+                                silent=True,
+                            )
+                        except UnmappedContentIDError as error:
+                            _log.warning(
+                                f"Skipping preparation for {pipeline_name}/{version}/{params}/{content_id}: {error}"
+                            )
+                            continue
+                        prepared_count += 1
+
+    @staticmethod
+    def dump_issues(
+        *,
+        dandiset_directory: pathlib.Path,
+        queue_directory: pathlib.Path,
+        output_file_name: str = "issues_dump.json",
+    ) -> list[dict]:
+        """Scan nextflow/slurm logs and write per-capsule error lines under *queue_directory*."""
+        records: list[dict] = []
+        for logs_dir in _list_capsule_log_directories(dandiset_directory=dandiset_directory):
+            nextflow_log = logs_dir / "nextflow.log"
+            slurm_logs = sorted(path for path in logs_dir.glob("*slurm.log") if path.is_file())
+
+            nextflow_errors = _extract_error_lines(log_file=nextflow_log)
+            slurm_errors = {log_file.name: _extract_error_lines(log_file=log_file) for log_file in slurm_logs}
+            slurm_errors = {key: value for key, value in slurm_errors.items() if value}
+            if not nextflow_errors and not slurm_errors:
+                continue
+
+            records.append(
+                {
+                    "capsule_path": logs_dir.parent.relative_to(dandiset_directory).as_posix(),
+                    "nextflow_log": (
+                        nextflow_log.relative_to(dandiset_directory).as_posix() if nextflow_log.is_file() else None
+                    ),
+                    "nextflow_errors": nextflow_errors,
+                    "slurm_errors": {
+                        log_name: errors for log_name, errors in sorted(slurm_errors.items(), key=lambda item: item[0])
+                    },
+                }
+            )
+
+        payload = {
+            "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "capsule_count": len(records),
+            "records": records,
+        }
+        (queue_directory / output_file_name).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        return records
+
+    @staticmethod
+    def summarize_issues(
+        *,
+        dandiset_directory: pathlib.Path,
+        queue_directory: pathlib.Path,
+        dump_output_file_name: str = "issues_dump.json",
+        output_file_name: str = "issues_summary.json",
+    ) -> dict[str, list[str]]:
+        """Write descending error-frequency summary where keys are counts and values are error strings."""
+        records = QueueState.dump_issues(
+            dandiset_directory=dandiset_directory,
+            queue_directory=queue_directory,
+            output_file_name=dump_output_file_name,
+        )
+
+        counts: collections.Counter[str] = collections.Counter()
+        for record in records:
+            counts.update(record.get("nextflow_errors", []))
+            for errors in record.get("slurm_errors", {}).values():
+                counts.update(errors)
+
+        errors_by_count: dict[str, list[str]] = collections.defaultdict(list)
+        for message, count in sorted(counts.items(), key=lambda message_count: (-message_count[1], message_count[0])):
+            errors_by_count[str(count)].append(message)
+
+        summary = {
+            count: messages
+            for count, messages in sorted(
+                errors_by_count.items(),
+                key=lambda count_messages: int(count_messages[0]),
+                reverse=True,
+            )
+        }
+        output_payload = {
+            "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "summary": summary,
+        }
+        (queue_directory / output_file_name).write_text(json.dumps(output_payload, indent=2, sort_keys=True) + "\n")
+        return summary
 
     @classmethod
     def from_jsonl(cls, file_path: pathlib.Path, /) -> QueueState:
