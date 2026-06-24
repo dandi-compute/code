@@ -8,13 +8,23 @@ from dandi_compute_code.queue import QueueState
 from model.testing_utilities import create_attempt_directory
 
 _EXAMPLE_TIMELINE_REPORTS = pathlib.Path(__file__).parent / "example_timeline_reports"
-_TIMELINE_TWO_STEPS = (_EXAMPLE_TIMELINE_REPORTS / "two_steps.html").read_text()
-_TIMELINE_ONE_STEP = (_EXAMPLE_TIMELINE_REPORTS / "one_step.html").read_text()
+
+
+@pytest.fixture
+def timeline_two_steps() -> str:
+    """Nextflow timeline report with two process steps."""
+    return (_EXAMPLE_TIMELINE_REPORTS / "two_steps.html").read_text()
+
+
+@pytest.fixture
+def timeline_one_step() -> str:
+    """Nextflow timeline report with a single process step."""
+    return (_EXAMPLE_TIMELINE_REPORTS / "one_step.html").read_text()
 
 
 @pytest.mark.ai_generated
 def test_aggregate_queue_statistics_writes_queue_stats_json(
-    example_queue_state: QueueState, queue_directory: pathlib.Path, tmp_path: pathlib.Path
+    example_queue_state: QueueState, queue_directory: pathlib.Path, tmp_path: pathlib.Path, timeline_two_steps: str
 ) -> None:
     """aggregate_queue_statistics writes queue_stats.json with byte and timeline aggregates."""
     dandiset_dir = tmp_path / "dandiset"
@@ -23,7 +33,7 @@ def test_aggregate_queue_statistics_writes_queue_stats_json(
     attempt_dir = create_attempt_directory(
         base_dir=dandiset_dir, entry=example_queue_state.entry_for(dandi_path="sub-successful"), with_logs=True
     )
-    (attempt_dir / "logs" / "timeline.html").write_text(_TIMELINE_TWO_STEPS)
+    (attempt_dir / "logs" / "timeline.html").write_text(timeline_two_steps)
 
     stats = example_queue_state.aggregate_statistics(queue_directory=queue_directory, dandiset_directory=dandiset_dir)
 
@@ -58,7 +68,7 @@ def test_aggregate_queue_statistics_skips_invalid_timeline_html(
 
 @pytest.mark.ai_generated
 def test_aggregate_queue_statistics_found_timeline_via_fallback_attempt_resolution(
-    example_queue_state: QueueState, queue_directory: pathlib.Path, tmp_path: pathlib.Path
+    example_queue_state: QueueState, queue_directory: pathlib.Path, tmp_path: pathlib.Path, timeline_one_step: str
 ) -> None:
     """aggregate_queue_statistics finds timeline files when state dandi_path differs from on-disk attempt path."""
     dandiset_dir = tmp_path / "dandiset"
@@ -75,7 +85,7 @@ def test_aggregate_queue_statistics_found_timeline_via_fallback_attempt_resoluti
     )
     logs_dir = attempt_dir / "logs"
     logs_dir.mkdir(parents=True)
-    (logs_dir / "timeline.html").write_text(_TIMELINE_ONE_STEP)
+    (logs_dir / "timeline.html").write_text(timeline_one_step)
 
     stats = example_queue_state.aggregate_statistics(queue_directory=queue_directory, dandiset_directory=dandiset_dir)
 
