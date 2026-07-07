@@ -204,10 +204,12 @@ def prepare_aind_ephys_job(
     )
     with urllib.request.urlopen(url=content_id_to_usage_dandiset_path_url) as response:
         decoded = response.read().decode()
-    content_id_to_usage_dandiset_path = {}
-    for line in decoded.splitlines():
-        if line.strip():
-            content_id_to_usage_dandiset_path.update(json.loads(line))
+    content_id_to_usage_dandiset_path = {
+        content_id_key: dandiset_path
+        for line in decoded.splitlines()
+        if line.strip()
+        for content_id_key, dandiset_path in json.loads(line).items()
+    }
 
     if content_id not in content_id_to_usage_dandiset_path:
         message = (

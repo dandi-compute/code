@@ -23,11 +23,12 @@ def _load_content_id_to_usage_dandiset_path() -> dict[str, dict[str, str]]:
     try:
         with urllib.request.urlopen(url=_CONTENT_ID_TO_USAGE_DANDISET_PATH_URL) as response:
             decoded = response.read().decode()
-        content_id_to_usage_dandiset_path: dict[str, dict[str, str]] = {}
-        for line in decoded.splitlines():
-            if line.strip():
-                content_id_to_usage_dandiset_path.update(json.loads(line))
-        return content_id_to_usage_dandiset_path
+        return {
+            content_id: dandiset_path
+            for line in decoded.splitlines()
+            if line.strip()
+            for content_id, dandiset_path in json.loads(line).items()
+        }
     except Exception as exception:
         message = (
             "Unable to load content-id-to-usage-dandiset-path mapping from " f"{_CONTENT_ID_TO_USAGE_DANDISET_PATH_URL}"
