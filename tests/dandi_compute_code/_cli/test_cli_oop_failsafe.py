@@ -2,12 +2,14 @@
 Tests for the soft-rollout failsafe shared by the queue CLI commands.
 
 Each command first attempts the new ``QueueState`` OOP model and, on any failure,
-records the failure to a log file and falls back to the current free-function
-behavior. These tests drive that path through the public CLI surface.
+records the failure to a timestamped log file inside the failsafe log directory
+and falls back to the current free-function behavior. These tests drive that
+path through the public CLI surface.
 """
 
 import json
 import pathlib
+import re
 from unittest import mock
 
 import pytest
@@ -17,11 +19,22 @@ from dandi_compute_code._cli import _dandicompute_group
 
 _GROUP = "dandi_compute_code._cli._dandicompute_group"
 
+_LOG_FILE_NAME_PATTERN = re.compile(r"^oop_failsafe_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z\.jsonl$")
+
 
 @pytest.fixture
-def failsafe_log(tmp_path: pathlib.Path) -> pathlib.Path:
-    """A temporary failsafe log path wired through the override environment variable."""
-    return tmp_path / "oop_failsafe.jsonl"
+def failsafe_log_directory(tmp_path: pathlib.Path) -> pathlib.Path:
+    """A temporary failsafe log directory wired through the override environment variable."""
+    return tmp_path / "oop_failsafe_logs"
+
+
+def _read_failsafe_records(log_directory: pathlib.Path) -> list[dict]:
+    """Read all failure records from every timestamped log file in the failsafe directory."""
+    records = []
+    for log_path in sorted(log_directory.glob("*.jsonl")):
+        assert _LOG_FILE_NAME_PATTERN.match(log_path.name), log_path.name
+        records.extend(json.loads(line) for line in log_path.read_text().splitlines() if line.strip())
+    return records
 
 
 def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
@@ -34,7 +47,7 @@ def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
 
 
 @pytest.mark.ai_generated
-def test_oop_failure_falls_back_and_logs(tmp_path: pathlib.Path, failsafe_log: pathlib.Path) -> None:
+def test_oop_failure_falls_back_and_logs(tmp_path: pathlib.Path, failsafe_log_directory: pathlib.Path) -> None:
     """When the OOP path raises, the command logs the failure and runs the fallback."""
     queue_dir = _make_queue_dir(tmp_path)
     processing_dir = tmp_path / "processing"
@@ -51,7 +64,7 @@ def test_oop_failure_falls_back_and_logs(tmp_path: pathlib.Path, failsafe_log: p
             env={
                 "DANDI_API_KEY": "test-key",
                 "DANDI_DEVEL": "1",
-                "DANDICOMPUTE_OOP_FAILSAFE_LOG": str(failsafe_log),
+                "DANDICOMPUTE_OOP_FAILSAFE_LOG": str(failsafe_log_directory),
             },
         )
 
@@ -65,8 +78,8 @@ def test_oop_failure_falls_back_and_logs(tmp_path: pathlib.Path, failsafe_log: p
         test=False,
     )
 
-    assert failsafe_log.exists()
-    records = [json.loads(line) for line in failsafe_log.read_text().splitlines() if line.strip()]
+    assert failsafe_log_directory.is_dir()
+    records = _read_failsafe_records(failsafe_log_directory)
     assert len(records) == 1
     assert records[0]["command"] == "queue process"
     assert records[0]["error_type"] == "RuntimeError"
@@ -76,7 +89,9 @@ def test_oop_failure_falls_back_and_logs(tmp_path: pathlib.Path, failsafe_log: p
 
 
 @pytest.mark.ai_generated
-def test_oop_success_skips_fallback_and_does_not_log(tmp_path: pathlib.Path, failsafe_log: pathlib.Path) -> None:
+def test_oop_success_skips_fallback_and_does_not_log(
+    tmp_path: pathlib.Path, failsafe_log_directory: pathlib.Path
+) -> None:
     """When the OOP path succeeds, the fallback is not used and nothing is logged."""
     queue_dir = _make_queue_dir(tmp_path)
     processing_dir = tmp_path / "processing"
@@ -93,20 +108,20 @@ def test_oop_success_skips_fallback_and_does_not_log(tmp_path: pathlib.Path, fai
             env={
                 "DANDI_API_KEY": "test-key",
                 "DANDI_DEVEL": "1",
-                "DANDICOMPUTE_OOP_FAILSAFE_LOG": str(failsafe_log),
+                "DANDICOMPUTE_OOP_FAILSAFE_LOG": str(failsafe_log_directory),
             },
         )
 
     assert result.exit_code == 0, result.output
     mock_oop.assert_called_once()
     mock_fallback.assert_not_called()
-    assert not failsafe_log.exists()
+    assert not failsafe_log_directory.exists()
 
 
 @pytest.mark.ai_generated
 @pytest.mark.parametrize("disable_value", ["1", "true", "yes", "on", "TRUE"])
 def test_kill_switch_skips_oop_and_runs_fallback(
-    tmp_path: pathlib.Path, failsafe_log: pathlib.Path, disable_value: str
+    tmp_path: pathlib.Path, failsafe_log_directory: pathlib.Path, disable_value: str
 ) -> None:
     """The kill-switch env var bypasses the OOP path without attempting or logging it."""
     queue_dir = _make_queue_dir(tmp_path)
@@ -125,18 +140,18 @@ def test_kill_switch_skips_oop_and_runs_fallback(
                 "DANDI_API_KEY": "test-key",
                 "DANDI_DEVEL": "1",
                 "DANDICOMPUTE_DISABLE_OOP": disable_value,
-                "DANDICOMPUTE_OOP_FAILSAFE_LOG": str(failsafe_log),
+                "DANDICOMPUTE_OOP_FAILSAFE_LOG": str(failsafe_log_directory),
             },
         )
 
     assert result.exit_code == 0, result.output
     mock_oop.assert_not_called()
     mock_fallback.assert_called_once()
-    assert not failsafe_log.exists()
+    assert not failsafe_log_directory.exists()
 
 
 @pytest.mark.ai_generated
-def test_kill_switch_unset_still_attempts_oop(tmp_path: pathlib.Path, failsafe_log: pathlib.Path) -> None:
+def test_kill_switch_unset_still_attempts_oop(tmp_path: pathlib.Path, failsafe_log_directory: pathlib.Path) -> None:
     """A blank or absent kill-switch leaves the OOP path as the primary route."""
     queue_dir = _make_queue_dir(tmp_path)
     processing_dir = tmp_path / "processing"
@@ -154,7 +169,7 @@ def test_kill_switch_unset_still_attempts_oop(tmp_path: pathlib.Path, failsafe_l
                 "DANDI_API_KEY": "test-key",
                 "DANDI_DEVEL": "1",
                 "DANDICOMPUTE_DISABLE_OOP": "",
-                "DANDICOMPUTE_OOP_FAILSAFE_LOG": str(failsafe_log),
+                "DANDICOMPUTE_OOP_FAILSAFE_LOG": str(failsafe_log_directory),
             },
         )
 
@@ -164,10 +179,12 @@ def test_kill_switch_unset_still_attempts_oop(tmp_path: pathlib.Path, failsafe_l
 
 
 @pytest.mark.ai_generated
-def test_failure_log_appends_across_invocations(tmp_path: pathlib.Path, failsafe_log: pathlib.Path) -> None:
-    """Repeated OOP failures append, leaving an investigable record per invocation."""
+def test_failure_log_accumulates_across_invocations(
+    tmp_path: pathlib.Path, failsafe_log_directory: pathlib.Path
+) -> None:
+    """Repeated OOP failures accumulate, leaving an investigable record per invocation."""
     runner = CliRunner()
-    env = {"DANDICOMPUTE_OOP_FAILSAFE_LOG": str(failsafe_log)}
+    env = {"DANDICOMPUTE_OOP_FAILSAFE_LOG": str(failsafe_log_directory)}
 
     for _ in range(2):
         with (
@@ -177,7 +194,7 @@ def test_failure_log_appends_across_invocations(tmp_path: pathlib.Path, failsafe
             result = runner.invoke(_dandicompute_group, ["queue", "pending"], env=env)
         assert result.exit_code == 0, result.output
 
-    records = [json.loads(line) for line in failsafe_log.read_text().splitlines() if line.strip()]
+    records = _read_failsafe_records(failsafe_log_directory)
     assert len(records) == 2
     assert all(record["command"] == "queue pending" for record in records)
     assert all(record["error_type"] == "ValueError" for record in records)
@@ -200,7 +217,7 @@ def test_failure_log_appends_across_invocations(tmp_path: pathlib.Path, failsafe
 )
 def test_each_command_records_its_own_label(
     tmp_path: pathlib.Path,
-    failsafe_log: pathlib.Path,
+    failsafe_log_directory: pathlib.Path,
     command: str,
     oop_target: str,
     fallback_target: str,
@@ -226,11 +243,11 @@ def test_each_command_records_its_own_label(
         result = runner.invoke(
             _dandicompute_group,
             args_by_command[command],
-            env={"DANDICOMPUTE_OOP_FAILSAFE_LOG": str(failsafe_log)},
+            env={"DANDICOMPUTE_OOP_FAILSAFE_LOG": str(failsafe_log_directory)},
         )
 
     assert result.exit_code in (0, 1), result.output
     mock_fallback.assert_called_once()
-    records = [json.loads(line) for line in failsafe_log.read_text().splitlines() if line.strip()]
+    records = _read_failsafe_records(failsafe_log_directory)
     assert len(records) == 1
     assert records[0]["command"] == expected_command_label
