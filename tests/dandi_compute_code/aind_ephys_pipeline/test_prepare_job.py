@@ -5,7 +5,6 @@ Tests focus on BIDS entity parsing from Dandiset path components, which is the
 logic that resolves the ``sub-`` label used in the output directory hierarchy.
 """
 
-import gzip
 import importlib.metadata
 import json
 import os
@@ -24,8 +23,12 @@ _FAKE_COMMIT_HASH = "a" * 40
 
 
 def _make_urlopen_mock(mapping: dict) -> mock.MagicMock:
-    """Build an ``urllib.request.urlopen`` mock that returns a gzip-compressed JSON mapping."""
-    payload = gzip.compress(json.dumps(mapping).encode())
+    """Build an ``urllib.request.urlopen`` mock returning the mapping as JSON Lines.
+
+    Each content ID becomes its own single-entry ``{content_id: {...}}`` line,
+    matching the remote content-id-to-usage-dandiset-path cache format.
+    """
+    payload = "\n".join(json.dumps({content_id: value}) for content_id, value in mapping.items()).encode()
     response = mock.MagicMock()
     response.read.return_value = payload
     response.__enter__ = lambda s: s
