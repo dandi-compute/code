@@ -565,7 +565,8 @@ class QueueState:
                 continue
             try:
                 content_id, metadata = _build_asset_metadata(asset)
-            except ValueError:
+            except ValueError as exception:
+                _log.debug("Skipping malformed asset in %s: %s", file_path, exception)
                 continue
             content_id_to_asset[content_id] = asset
             path_to_asset_metadata[metadata.path] = metadata
