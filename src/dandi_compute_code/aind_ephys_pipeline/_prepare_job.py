@@ -1,5 +1,4 @@
 import contextlib
-import gzip
 import hashlib
 import importlib.metadata
 import io
@@ -200,11 +199,15 @@ def prepare_aind_ephys_job(
 
     dandi_compute_dir = pathlib.Path("/orcd/data/dandi/001/dandi-compute")
     content_id_to_usage_dandiset_path_url = (
-        "https://raw.githubusercontent.com/dandi-cache/content-id-to-usage-dandiset-path/min/"
-        "derivatives/content_id_to_usage_dandiset_path.min.json.gz"
+        "https://raw.githubusercontent.com/dandi-cache/content-id-to-usage-dandiset-path/derivatives/"
+        "derivatives/content_id_to_usage_dandiset_path.jsonl"
     )
     with urllib.request.urlopen(url=content_id_to_usage_dandiset_path_url) as response:
-        content_id_to_usage_dandiset_path = json.loads(gzip.decompress(response.read()))
+        decoded = response.read().decode()
+    content_id_to_usage_dandiset_path = {}
+    for line in decoded.splitlines():
+        if line.strip():
+            content_id_to_usage_dandiset_path.update(json.loads(line))
 
     if content_id not in content_id_to_usage_dandiset_path:
         message = (
