@@ -39,7 +39,7 @@ def mock_dandi_assets_metadata() -> Iterator[None]:
     """
     Default the DANDI ``assets.jsonld`` loaders to empty so no test hits the network.
 
-    ``QueueState.write_state`` (and ``from_assets_jsonld`` / ``pending_code_dirs``) fetch
+    ``QueueState.write_state`` (and ``from_dandi`` / ``pending_code_dirs``) fetch
     assets metadata from the DANDI archive via the ``_queue_state`` binding. This
     guard makes that return empty by default. Tests that need specific metadata
     override these with their own ``mock.patch``.

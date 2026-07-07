@@ -520,64 +520,75 @@ class QueueState:
         return params_key
 
     @classmethod
-    def from_assets_jsonld(
-        cls,
-        *,
-        file_path: pathlib.Path | None = None,
-        dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
-    ) -> QueueState:
+    def from_metadata(cls, metadata: AssetsJsonldMetadata, /) -> QueueState:
         """
-        Build a queue state from a Dandiset's DANDI ``assets.jsonld`` metadata.
+        Build a queue state from indexed DANDI assets metadata.
 
         Each entry represents one attempt capsule inferred from the
         ``derivatives/dandiset-*/.../pipeline-*/..._attempt-*`` path structure, with
         ``content_id`` / ``asset_size_bytes`` resolved from the upstream source
         Dandiset's ``assets.jsonld``.
 
-        When *file_path* is ``None`` the ``assets.jsonld`` file is fetched from
-        the DANDI S3 bucket over the network.  When a path is provided the file
-        is read locally; the file should be a JSON file whose content is a list
-        of asset dicts with ``path``, ``contentSize``, ``dateModified``, and
-        ``contentUrl`` fields (matching the ``assets.jsonld`` layout from
-        DANDI).  The ``.jsonld`` file is preferred over its ``assets.yaml``
-        counterpart at the same S3 location because JSON parsing is many
-        times faster than YAML for identical content.
-
-        :param file_path: Optional path to a local assets JSON-LD file.  Pass
-            ``None`` to fetch from the network.
-        :type file_path: pathlib.Path, optional
-        :param dandiset_id: The Dandiset whose ``assets.jsonld`` is read when
-            fetching from the network. Defaults to the job capsules Dandiset
-            (``001697``). Ignored when *file_path* is provided.
-        :type dandiset_id: str
+        :param metadata: Indexed assets metadata, as produced by
+            :meth:`from_jsonld` or :meth:`from_dandi`.
+        :type metadata: AssetsJsonldMetadata
         """
-        if file_path is None:
-            local_metadata = load_assets_jsonld_metadata(dandiset_id=dandiset_id)
-        else:
-            raw = json.loads(file_path.read_text())
-            if not isinstance(raw, list):
-                raise ValueError(f"Expected a JSON array in {file_path}, got {type(raw).__name__}")
-            content_id_to_asset: dict[str, dict] = {}
-            path_to_asset_metadata: dict[str, AssetMetadata] = {}
-            for asset in raw:
-                if not isinstance(asset, dict):
-                    continue
-                try:
-                    content_id, metadata = _build_asset_metadata(asset)
-                except ValueError:
-                    continue
-                content_id_to_asset[content_id] = asset
-                path_to_asset_metadata[metadata.path] = metadata
-            local_metadata = AssetsJsonldMetadata(
-                content_id_to_asset=content_id_to_asset,
-                path_to_asset_metadata=path_to_asset_metadata,
-            )
-
-        collection = _collect_attempts(local_metadata)
+        collection = _collect_attempts(metadata)
         upstream_cache = _UpstreamMetadataCache()
         records = _finalize_attempt_records(collection=collection, upstream_cache=upstream_cache)
         records.sort(key=_sort_key)
         return cls(entries=[JobEntry.from_dict(record) for record in records])
+
+    @classmethod
+    def from_jsonld(cls, *, file_path: pathlib.Path) -> QueueState:
+        """
+        Build a queue state from a local DANDI ``assets.jsonld`` file.
+
+        The file should be a JSON file whose content is a list of asset dicts
+        with ``path``, ``contentSize``, ``dateModified``, and ``contentUrl``
+        fields (matching the ``assets.jsonld`` layout from DANDI).  The
+        ``.jsonld`` file is preferred over its ``assets.yaml`` counterpart at
+        the same S3 location because JSON parsing is many times faster than
+        YAML for identical content.
+
+        :param file_path: Path to a local assets JSON-LD file.
+        :type file_path: pathlib.Path
+        :raises ValueError: If the file content is not a JSON array.
+        """
+        raw = json.loads(file_path.read_text())
+        if not isinstance(raw, list):
+            raise ValueError(f"Expected a JSON array in {file_path}, got {type(raw).__name__}")
+        content_id_to_asset: dict[str, dict] = {}
+        path_to_asset_metadata: dict[str, AssetMetadata] = {}
+        for asset in raw:
+            if not isinstance(asset, dict):
+                continue
+            try:
+                content_id, metadata = _build_asset_metadata(asset)
+            except ValueError:
+                continue
+            content_id_to_asset[content_id] = asset
+            path_to_asset_metadata[metadata.path] = metadata
+        return cls.from_metadata(
+            AssetsJsonldMetadata(
+                content_id_to_asset=content_id_to_asset,
+                path_to_asset_metadata=path_to_asset_metadata,
+            )
+        )
+
+    @classmethod
+    def from_dandi(cls, *, dandiset_id: str = _JOB_CAPSULES_DANDISET_ID) -> QueueState:
+        """
+        Build a queue state from a Dandiset's remote ``assets.jsonld`` metadata.
+
+        Fetches ``assets.jsonld`` for *dandiset_id* from the DANDI S3 bucket
+        over the network.
+
+        :param dandiset_id: The Dandiset whose ``assets.jsonld`` is read.
+            Defaults to the job capsules Dandiset (``001697``).
+        :type dandiset_id: str
+        """
+        return cls.from_metadata(load_assets_jsonld_metadata(dandiset_id=dandiset_id))
 
     @classmethod
     def write_state(
@@ -591,7 +602,7 @@ class QueueState:
         Write a queue state file from DANDI ``assets.jsonld`` metadata.
 
         Validates ``queue_config.json`` under *queue_directory*, builds the state via
-        :meth:`from_assets_jsonld`, and writes it to ``queue_directory/state_file_name``.
+        :meth:`from_dandi`, and writes it to ``queue_directory/state_file_name``.
 
         :param queue_directory: Path to the queue root directory.
         :type queue_directory: pathlib.Path
@@ -603,7 +614,7 @@ class QueueState:
         :raises ValueError: If the queue configuration fails LinkML validation.
         """
         _load_queue_config(queue_directory=queue_directory)
-        state = cls.from_assets_jsonld(dandiset_id=dandiset_id)
+        state = cls.from_dandi(dandiset_id=dandiset_id)
         state.to_file(queue_directory / state_file_name)
 
     @classmethod
