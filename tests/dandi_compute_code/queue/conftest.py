@@ -60,9 +60,9 @@ def mock_dandi_assets_metadata() -> Iterator[None]:
 
 @pytest.fixture(autouse=True)
 def redirect_oop_failsafe_log(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
-    """Redirect the OOP-failsafe log to a temporary file so tests never write under ``$HOME``."""
-    log_path = tmp_path_factory.mktemp("oop_failsafe") / "oop_failsafe.jsonl"
-    with mock.patch.dict(os.environ, {"DANDICOMPUTE_OOP_FAILSAFE_LOG": str(log_path)}):
+    """Redirect the OOP-failsafe log directory to a temporary one so tests never write under ``$HOME``."""
+    log_directory = tmp_path_factory.mktemp("oop_failsafe")
+    with mock.patch.dict(os.environ, {"DANDICOMPUTE_OOP_FAILSAFE_LOG": str(log_directory)}):
         yield
 
 

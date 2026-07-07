@@ -2,7 +2,8 @@
 Soft-rollout failsafe for the new ``QueueState`` OOP model.
 
 Each queue-related CLI command first attempts the new OOP code path. If that
-path raises for any reason, the failure is recorded to a failsafe log file (so
+path raises for any reason, the failure is recorded to a timestamped file in the
+failsafe log directory (so
 it can be investigated and fixed later) and the command falls back to the
 current free-function runtime behavior. This keeps the rollout safe: a defect in
 the new model never regresses a user-facing command, but every divergence is
@@ -22,14 +23,14 @@ _log = logging.getLogger(__name__)
 
 _ResultT = TypeVar("_ResultT")
 
-#: Environment variable that overrides the failsafe log location.
+#: Environment variable that overrides the failsafe log directory.
 _OOP_FAILSAFE_LOG_ENV_VAR = "DANDICOMPUTE_OOP_FAILSAFE_LOG"
 
 #: Environment variable kill-switch that disables the new OOP path entirely.
 _OOP_DISABLE_ENV_VAR = "DANDICOMPUTE_DISABLE_OOP"
 
-#: Default failsafe log file used when the override variable is unset.
-_DEFAULT_OOP_FAILSAFE_LOG = pathlib.Path.home() / ".dandicompute" / "oop_failsafe.jsonl"
+#: Default failsafe log directory used when the override variable is unset.
+_DEFAULT_OOP_FAILSAFE_LOG_DIRECTORY = pathlib.Path.home() / ".dandicompute" / "oop_failsafe"
 
 #: Values of the kill-switch variable that count as "disabled".
 _TRUTHY_DISABLE_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -40,27 +41,30 @@ def _oop_path_is_disabled() -> bool:
     return os.environ.get(_OOP_DISABLE_ENV_VAR, "").strip().lower() in _TRUTHY_DISABLE_VALUES
 
 
-def _resolve_oop_failsafe_log_path() -> pathlib.Path:
-    """Resolve the failsafe log path, honoring the override environment variable."""
+def _resolve_oop_failsafe_log_directory() -> pathlib.Path:
+    """Resolve the failsafe log directory, honoring the override environment variable."""
     override = os.environ.get(_OOP_FAILSAFE_LOG_ENV_VAR, "").strip()
-    log_path = pathlib.Path(override) if override else _DEFAULT_OOP_FAILSAFE_LOG
-    return log_path
+    log_directory = pathlib.Path(override) if override else _DEFAULT_OOP_FAILSAFE_LOG_DIRECTORY
+    return log_directory
 
 
 def _record_oop_failure(*, command: str, error: BaseException) -> None:
-    """Append a structured record of an OOP-path failure to the failsafe log file."""
+    """Append a structured record of an OOP-path failure to a timestamped failsafe log file."""
+    logged_at = datetime.datetime.now(datetime.timezone.utc)
     formatted_traceback = "".join(traceback.format_exception(type(error), error, error.__traceback__))
     record = {
-        "logged_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "logged_at": logged_at.isoformat(),
         "command": command,
         "error_type": type(error).__name__,
         "error_message": str(error),
         "traceback": formatted_traceback,
     }
 
-    log_path = _resolve_oop_failsafe_log_path()
+    # Second-level resolution keeps names filesystem-safe; same-second failures append to the same file.
+    log_directory = _resolve_oop_failsafe_log_directory()
+    log_path = log_directory / f"oop_failsafe_{logged_at.strftime('%Y-%m-%dT%H-%M-%SZ')}.jsonl"
     try:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_directory.mkdir(parents=True, exist_ok=True)
         with log_path.open(mode="a") as log_stream:
             log_stream.write(json.dumps(record) + "\n")
     except OSError as log_error:
@@ -77,7 +81,9 @@ def run_with_oop_failsafe(
     Attempt the new OOP ``QueueState`` code path, falling back to current behavior.
 
     The *oop_path* callable is attempted first. If it raises any exception, the
-    failure is recorded to the failsafe log file for later investigation and
+    failure is recorded to a timestamped file in the failsafe log directory
+    (``DANDICOMPUTE_OOP_FAILSAFE_LOG``, defaulting to
+    ``~/.dandicompute/oop_failsafe/``) for later investigation and
     *fallback_path* is invoked to preserve the current runtime behavior. The
     result of whichever path completes is returned.
 
