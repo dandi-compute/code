@@ -522,9 +522,8 @@ class QueueState:
     @classmethod
     def from_assets_jsonld(
         cls,
-        file_path: pathlib.Path | None = None,
-        /,
         *,
+        file_path: pathlib.Path | None = None,
         dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
     ) -> QueueState:
         """
