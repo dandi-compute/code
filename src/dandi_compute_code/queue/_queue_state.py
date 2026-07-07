@@ -30,8 +30,6 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Literal
 
-import yaml
-
 from ._globals import _AIND_EPHYS_PARAMS_REGISTRY
 from ._job_info import JobInfo
 from ._queue_utils import (
@@ -941,26 +939,29 @@ class QueueState:
         return cls(entries=entries)
 
     @classmethod
-    def from_assets_yaml(cls, file_path: pathlib.Path | None = None, /) -> QueueState:
+    def from_assets_jsonld(cls, file_path: pathlib.Path | None = None, /) -> QueueState:
         """
         Build from DANDI assets metadata.
 
         When *file_path* is ``None`` the metadata is fetched from the DANDI
         S3 bucket over the network.  When a path is provided the file is read
-        locally; the file should be a YAML file whose content is a list of
+        locally; the file should be a JSON file whose content is a list of
         asset dicts with ``path``, ``contentSize``, ``dateModified``, and
-        ``contentUrl`` fields (matching the ``assets.yaml`` layout from DANDI).
+        ``contentUrl`` fields (matching the ``assets.jsonld`` layout from
+        DANDI).  The ``.jsonld`` file is preferred over its ``assets.yaml``
+        counterpart at the same S3 location because JSON parsing is many
+        times faster than YAML for identical content.
 
-        :param file_path: Optional path to a local assets YAML file.  Pass
+        :param file_path: Optional path to a local assets JSON-LD file.  Pass
             ``None`` to fetch from the network.
         :type file_path: pathlib.Path, optional
         """
         if file_path is None:
             local_metadata = load_assets_jsonld_metadata()
         else:
-            raw = yaml.safe_load(file_path.read_text())
+            raw = json.loads(file_path.read_text())
             if not isinstance(raw, list):
-                raise ValueError(f"Expected a YAML list in {file_path}, got {type(raw).__name__}")
+                raise ValueError(f"Expected a JSON array in {file_path}, got {type(raw).__name__}")
             content_id_to_asset: dict[str, dict] = {}
             path_to_asset_metadata: dict[str, AssetMetadata] = {}
             for asset in raw:
