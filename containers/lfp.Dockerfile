@@ -23,8 +23,8 @@ ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 
 COPY pyproject.toml README.md LICENSE.txt /tmp/build/
 COPY src /tmp/build/src
-COPY containers/requirements.txt /tmp/requirements.txt
-RUN pip install /tmp/build --requirement /tmp/requirements.txt \
-    && rm -rf /tmp/build /tmp/requirements.txt
+COPY envs/pyproject.toml /tmp/env/pyproject.toml
+RUN pip install /tmp/build /tmp/env \
+    && rm -rf /tmp/build /tmp/env
 
 CMD ["python", "-c", "import dandi_compute_code.lfp_pipeline; print('DANDI Compute LFP pipeline runtime ready')"]
