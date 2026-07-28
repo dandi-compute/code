@@ -25,19 +25,6 @@ dependencies = [
 ]
 
 
-[project.optional-dependencies]
-# Runtime dependencies for the LFP pipeline. These are intentionally kept out of
-# the base install and are provided by the pipeline container (see containers/)
-# or installed locally with `pip install .[lfp]`.
-lfp = [
-    "spikeinterface",
-    "neuroconv",
-    "pynwb",
-    "numpy",
-    "jsonschema",
-]
-
-
 [project.scripts]
 dandicompute = "dandi_compute_code._cli:_dandicompute_group"
 

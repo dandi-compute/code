@@ -3,7 +3,7 @@
 FROM neurodebian:trixie
 
 LABEL org.opencontainers.image.source="https://github.com/dandi-compute/code"
-LABEL org.opencontainers.image.description="Pinned runtime environment for the DANDI Compute LFP extraction pipeline (dandi_compute_code.lfp_pipeline)."
+LABEL org.opencontainers.image.description="Runtime environment for the DANDI Compute LFP extraction pipeline (dandi_compute_code.lfp_pipeline)."
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -23,7 +23,8 @@ ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 
 COPY pyproject.toml README.md LICENSE.txt /tmp/build/
 COPY src /tmp/build/src
-RUN pip install "/tmp/build[lfp]" \
-    && rm -rf /tmp/build
+COPY containers/requirements.txt /tmp/requirements.txt
+RUN pip install /tmp/build --requirement /tmp/requirements.txt \
+    && rm -rf /tmp/build /tmp/requirements.txt
 
 CMD ["python", "-c", "import dandi_compute_code.lfp_pipeline; print('DANDI Compute LFP pipeline runtime ready')"]
