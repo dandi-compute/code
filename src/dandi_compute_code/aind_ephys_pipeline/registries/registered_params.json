@@ -41,12 +41,12 @@
   },
   "deterministic-v1.2.4": {
     "path": "name-original_version-1+2+4.json",
-    "md5": "",
+    "md5": "53903329f81a8ac4a137200458100807",
     "description": "Same as the `name-original_version-1+2+2.json`, but all the proportion of bad channels to not skip is raised to 1 (no skipping)."
   }
   "default": {
     "path": "name-original_version-1+2+4.json",
-    "md5": "",
+    "md5": "53903329f81a8ac4a137200458100807",
     "description": "The current recommended default parameter set."
   }
 }
