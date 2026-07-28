@@ -22,11 +22,19 @@ dependencies = [
     "click",  # rich-click did not work well on Engaging
     "dandi",
     "linkml-runtime>=1.10.0,<1.11",
+]
+
+
+[project.optional-dependencies]
+# Runtime dependencies for the LFP pipeline. These are intentionally kept out of
+# the base install and are provided by the pipeline container (see containers/)
+# or installed locally with `pip install .[lfp]`.
+lfp = [
     "spikeinterface",
-    "numpy",
-    "jsonschema",
     "neuroconv",
     "pynwb",
+    "numpy",
+    "jsonschema",
 ]
 
 

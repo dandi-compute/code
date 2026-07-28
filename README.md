@@ -83,3 +83,5 @@ Non-code files for the LFP pipeline are organized under the following subdirecto
   The short name can then be passed via the `parameters_key` argument of `load_lfp_parameters`.
 
 - **`registries/`** — JSON registry files mapping short names to resource paths and checksums (e.g., `registered_params.json`).
+
+The LFP pipeline depends on heavy scientific packages (SpikeInterface, neuroconv, pynwb). These are deliberately kept out of the base install. To run the LFP pipeline, either install the extra locally with `pip install .[lfp]` or use the pinned runtime container built from `containers/lfp.Dockerfile`. The container image is built and pushed to the GitHub Container Registry by the manually dispatched `Build and upload LFP container image` workflow.
