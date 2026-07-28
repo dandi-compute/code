@@ -4,7 +4,6 @@ name: Build and upload LFP container image
 # is triggered manually rather than on every push. Run it from the Actions tab or
 # with `gh workflow run "Build and upload LFP container image"`.
 on:
-  push:
   workflow_dispatch:
     inputs:
       dockerfile:
