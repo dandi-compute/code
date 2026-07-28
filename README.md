@@ -71,3 +71,15 @@ Non-code files for the AIND ephys pipeline are organized under the following sub
   1. Add the `[environment].config` file to this directory.
   2. Register it in `registries/registered_configs.json` by adding an entry with the short name as the key, and its relative `path` and full MD5 `md5` as values.
   Use `--config` / `config_key` to select a registered config (default: `default`).
+
+Non-code files for the LFP pipeline are organized under the following subdirectories of `src/dandi_compute_code/lfp_pipeline/`:
+
+- **`parameter_schema.json`** — the JSON Schema that defines and constrains the exposed LFP parameters.
+
+- **`params/`** — JSON parameter files (e.g., `name-default.json`).
+  To add a new parameters file:
+  1. Add the `name-[id].json` file to this directory.
+  2. Register it in `registries/registered_params.json` by adding an entry with the short name as the key, and its relative `path` and full MD5 `md5` as values.
+  The short name can then be passed via the `parameters_key` argument of `load_lfp_parameters`.
+
+- **`registries/`** — JSON registry files mapping short names to resource paths and checksums (e.g., `registered_params.json`).

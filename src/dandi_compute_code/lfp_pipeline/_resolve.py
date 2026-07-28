@@ -1,33 +1,27 @@
-import pydantic
-
-from ._parameters import LFPParameters
-
 _DIRECTION_TO_SPIKEINTERFACE = {"causal": "forward", "zero-phase": "forward-backward"}
 
 
-@pydantic.validate_call
-def resolve_filter_kwargs(parameters: LFPParameters, /) -> dict:
+def resolve_filter_kwargs(parameters, /) -> dict:
     """
     Translate the filter parameters into keyword arguments for ``spikeinterface.bandpass_filter``.
 
-    :param parameters: The resolved LFP parameters.
-    :type parameters: LFPParameters
+    :param parameters: The validated LFP parameters.
+    :type parameters: dict
     :return: Keyword arguments for ``spikeinterface.bandpass_filter``.
     :rtype: dict
     """
-    freq_min, freq_max = parameters.filter_band
+    freq_min, freq_max = parameters["filter_band"]
     filter_kwargs = {
         "freq_min": freq_min,
         "freq_max": freq_max,
-        "filter_order": parameters.filter_order,
-        "ftype": parameters.filter_family,
-        "direction": _DIRECTION_TO_SPIKEINTERFACE[parameters.filter_direction],
+        "filter_order": parameters["filter_order"],
+        "ftype": parameters["filter_family"],
+        "direction": _DIRECTION_TO_SPIKEINTERFACE[parameters["filter_direction"]],
     }
     return filter_kwargs
 
 
-@pydantic.validate_call
-def resolve_reference_spec(parameters: LFPParameters, /) -> dict:
+def resolve_reference_spec(parameters, /) -> dict:
     """
     Translate the reference scheme into a specification for ``spikeinterface.common_reference``.
 
@@ -35,14 +29,15 @@ def resolve_reference_spec(parameters: LFPParameters, /) -> dict:
     it is ``True``, ``operator`` is the median operator and ``per_shank`` selects
     between a global reference and one computed within each shank group.
 
-    :param parameters: The resolved LFP parameters.
-    :type parameters: LFPParameters
+    :param parameters: The validated LFP parameters.
+    :type parameters: dict
     :return: A specification with ``apply``, ``operator``, and ``per_shank`` keys.
     :rtype: dict
     """
-    if parameters.reference_scheme == "none":
+    reference_scheme = parameters["reference_scheme"]
+    if reference_scheme == "none":
         reference_spec = {"apply": False, "operator": None, "per_shank": False}
-    elif parameters.reference_scheme == "CMR":
+    elif reference_scheme == "CMR":
         reference_spec = {"apply": True, "operator": "median", "per_shank": False}
     else:
         reference_spec = {"apply": True, "operator": "median", "per_shank": True}

@@ -1,0 +1,10 @@
+{
+    "filter_family": "butter",
+    "filter_band": [1, 400],
+    "filter_order": 4,
+    "filter_direction": "zero-phase",
+    "reference_scheme": "CMR",
+    "resample_target_fs": 1250,
+    "spatial_factor": 1,
+    "bad_channel_method": "coherence+psd"
+}

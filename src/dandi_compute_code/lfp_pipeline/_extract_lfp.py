@@ -1,6 +1,9 @@
 import logging
 
-from ._parameters import LFPParameters
+import numpy
+import spikeinterface.full
+
+from ._load_parameters import load_lfp_parameters
 from ._resolve import resolve_filter_kwargs, resolve_reference_spec
 
 _log = logging.getLogger(__name__)
@@ -19,8 +22,6 @@ def _shank_groups(recording, /) -> list[list]:
 
 def _decimate_channel_ids(recording, *, factor: int) -> list:
     """Select every ``factor``-th channel id ordered by increasing depth."""
-    import numpy
-
     locations = recording.get_channel_locations()
     channel_ids = recording.channel_ids
     depth_order = numpy.argsort(locations[:, 1])
@@ -28,7 +29,7 @@ def _decimate_channel_ids(recording, *, factor: int) -> list:
     return kept_channel_ids
 
 
-def extract_lfp(*, recording, parameters: LFPParameters | None = None):
+def extract_lfp(*, recording, parameters: dict | None = None):
     """
     Extract an LFP recording from a raw SpikeInterface recording.
 
@@ -37,43 +38,42 @@ def extract_lfp(*, recording, parameters: LFPParameters | None = None):
     filtering, re-referencing, resampling, and spatial decimation. Any step
     whose parameter selects "none" or an identity value is skipped.
 
-    SpikeInterface is imported lazily so that the rest of the package can be
-    imported in environments where SpikeInterface is not installed.
-
     :param recording: The raw SpikeInterface recording to process.
-    :param parameters: The resolved LFP parameters. Defaults to
-        :class:`.LFPParameters` with its default values.
-    :type parameters: LFPParameters, optional
+    :param parameters: The validated LFP parameters. Defaults to the registered
+        ``default`` parameters loaded via :func:`.load_lfp_parameters`.
+    :type parameters: dict, optional
     :return: The processed LFP SpikeInterface recording.
     """
-    import spikeinterface.full as si
-
-    parameters = parameters or LFPParameters()
+    parameters = parameters if parameters is not None else load_lfp_parameters()
 
     processed_recording = recording
-    if parameters.bad_channel_method != "none":
-        bad_channel_ids, _ = si.detect_bad_channels(processed_recording, method=parameters.bad_channel_method)
-        _log.info(f"Removing {len(bad_channel_ids)} bad channels detected via '{parameters.bad_channel_method}'.")
+    if parameters["bad_channel_method"] != "none":
+        bad_channel_ids, _ = spikeinterface.full.detect_bad_channels(
+            processed_recording, method=parameters["bad_channel_method"]
+        )
+        _log.info(f"Removing {len(bad_channel_ids)} bad channels detected via '{parameters['bad_channel_method']}'.")
         processed_recording = processed_recording.remove_channels(bad_channel_ids)
 
     filter_kwargs = resolve_filter_kwargs(parameters)
-    _log.info(f"Applying {parameters.filter_family} bandpass filter over {parameters.filter_band} Hz.")
-    processed_recording = si.bandpass_filter(processed_recording, **filter_kwargs)
+    _log.info(f"Applying {parameters['filter_family']} bandpass filter over {tuple(parameters['filter_band'])} Hz.")
+    processed_recording = spikeinterface.full.bandpass_filter(processed_recording, **filter_kwargs)
 
     reference_spec = resolve_reference_spec(parameters)
     if reference_spec["apply"]:
         groups = _shank_groups(processed_recording) if reference_spec["per_shank"] else None
-        _log.info(f"Applying '{parameters.reference_scheme}' reference.")
-        processed_recording = si.common_reference(
+        _log.info(f"Applying '{parameters['reference_scheme']}' reference.")
+        processed_recording = spikeinterface.full.common_reference(
             processed_recording, reference="global", operator=reference_spec["operator"], groups=groups
         )
 
-    _log.info(f"Resampling to {parameters.resample_target_fs} Hz.")
-    processed_recording = si.resample(processed_recording, resample_rate=parameters.resample_target_fs)
+    _log.info(f"Resampling to {parameters['resample_target_fs']} Hz.")
+    processed_recording = spikeinterface.full.resample(
+        processed_recording, resample_rate=parameters["resample_target_fs"]
+    )
 
-    if parameters.spatial_factor != 1:
-        kept_channel_ids = _decimate_channel_ids(processed_recording, factor=parameters.spatial_factor)
-        _log.info(f"Spatially decimating by {parameters.spatial_factor} to {len(kept_channel_ids)} channels.")
+    if parameters["spatial_factor"] != 1:
+        kept_channel_ids = _decimate_channel_ids(processed_recording, factor=parameters["spatial_factor"])
+        _log.info(f"Spatially decimating by {parameters['spatial_factor']} to {len(kept_channel_ids)} channels.")
         processed_recording = processed_recording.channel_slice(channel_ids=kept_channel_ids)
 
     return processed_recording

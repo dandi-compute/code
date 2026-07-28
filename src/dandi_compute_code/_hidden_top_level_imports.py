@@ -7,7 +7,7 @@ But we only want the imports to trigger, not for them to actually be exposed.
 import importlib.metadata
 
 from .aind_ephys_pipeline import prepare_aind_ephys_job
-from .lfp_pipeline import LFPParameters, extract_lfp
+from .lfp_pipeline import extract_lfp, load_lfp_parameters, run_lfp_pipeline
 
 try:
     __version__ = importlib.metadata.version(distribution_name="dandi-compute-code")
