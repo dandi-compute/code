@@ -47,14 +47,15 @@ jobs:
       - name: Resolve lowercase image reference
         id: reference
         run: |
-          repository=$(echo "ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}" | tr '[:upper:]' '[:lower:]')
+          image="${{ inputs.image || 'dandi-compute-lfp' }}"
+          repository=$(echo "ghcr.io/${{ github.repository_owner }}/${image}" | tr '[:upper:]' '[:lower:]')
           echo "repository=${repository}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ${{ inputs.context }}
-          file: ${{ inputs.dockerfile }}
+          context: ${{ inputs.context || '.' }}
+          file: ${{ inputs.dockerfile || 'containers/lfp.Dockerfile' }}
           push: true
           tags: |
             ${{ steps.reference.outputs.repository }}:latest
