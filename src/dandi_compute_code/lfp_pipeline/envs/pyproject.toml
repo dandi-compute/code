@@ -1,0 +1,14 @@
+[project]
+name = "dandi-compute-lfp-env"
+version = "0.1.0"
+requires-python = ">=3.10"
+# Runtime dependencies for the LFP pipeline (dandi_compute_code.lfp_pipeline).
+# Installed into the pipeline container by containers/lfp.Dockerfile. Kept
+# separate from the base package so that `import dandi_compute_code` stays light.
+dependencies = [
+    "spikeinterface",
+    "neuroconv",
+    "pynwb",
+    "numpy",
+    "jsonschema",
+]

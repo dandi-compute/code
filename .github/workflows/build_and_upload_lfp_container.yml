@@ -1,0 +1,64 @@
+name: Build and upload LFP container image
+
+# Building the pipeline container is expensive and rarely needs to happen, so it
+# is triggered manually rather than on every push. Run it from the Actions tab or
+# with `gh workflow run "Build and upload LFP container image"`.
+on:
+  workflow_dispatch:
+    inputs:
+      dockerfile:
+        description: "Path to the Dockerfile to build."
+        required: true
+        default: "src/dandi_compute_code/lfp_pipeline/containers/lfp.Dockerfile"
+      context:
+        description: "Build context directory."
+        required: true
+        default: "."
+      image:
+        description: "Image name to publish under ghcr.io/<owner>/."
+        required: true
+        default: "dandi-compute-lfp"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  BuildAndPush:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve lowercase image reference
+        id: reference
+        run: |
+          image="${{ inputs.image || 'dandi-compute-lfp' }}"
+          repository=$(echo "ghcr.io/${{ github.repository_owner }}/${image}" | tr '[:upper:]' '[:lower:]')
+          echo "repository=${repository}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context || '.' }}
+          file: ${{ inputs.dockerfile || 'src/dandi_compute_code/lfp_pipeline/containers/lfp.Dockerfile' }}
+          push: true
+          tags: |
+            ${{ steps.reference.outputs.repository }}:latest
+            ${{ steps.reference.outputs.repository }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

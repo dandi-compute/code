@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import collections
 import datetime
-import gzip
 import json
 import logging
 import os
@@ -25,13 +24,13 @@ import shutil
 import subprocess
 import tempfile
 import time
-import urllib.request
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Literal
 
 from ._globals import _AIND_EPHYS_PARAMS_REGISTRY
 from ._job_info import JobInfo
+from ._qualifying_content_ids import _fetch_qualifying_content_ids
 from ._queue_utils import (
     _collect_attempts,
     _duration_string_to_seconds,
@@ -53,6 +52,7 @@ from ..dandiset._load_assets_jsonld_metadata import (
     _build_asset_metadata,
     load_assets_jsonld_metadata,
 )
+from ..lfp_pipeline import prepare_lfp_job
 
 _log = logging.getLogger(__name__)
 
@@ -799,6 +799,7 @@ class QueueState:
         config_key: str = "default",
         content_ids: list[str] | None = None,
         limit: int | None = None,
+        only_pipeline: str | None = None,
     ) -> None:
         """
         En-masse preparation of qualifying assets based on the current queue config.
@@ -815,27 +816,34 @@ class QueueState:
         :param content_ids: Explicit content IDs to prepare; when provided, the
             qualifying list is not fetched from the network.
         :param limit: If provided, stop after preparing *limit* assets in total.
+        :param only_pipeline: If provided, prepare only this pipeline instead of
+            every pipeline in the queue config. Raises if the name is not configured.
         """
         queue_config = _load_queue_config(queue_directory=queue_directory)
-
-        if content_ids is None:
-            qualifying_aind_content_ids_url = (
-                "https://raw.githubusercontent.com/dandi-cache/qualifying-aind-content-ids/dist/"
-                "derivatives/qualifying_aind_content_ids.jsonl.gz"
+        pipelines = queue_config.get("pipelines", {})
+        if only_pipeline is not None and only_pipeline not in pipelines:
+            message = (
+                f"Pipeline '{only_pipeline}' is not configured. " f"Configured pipelines are: {list(pipelines.keys())}."
             )
-            with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
-                decompressed = gzip.decompress(response.read()).decode()
-                fetched_content_ids = [json.loads(line) for line in decompressed.splitlines() if line.strip()]
-            content_ids = _order_content_ids_for_uniform_dandiset_sampling(content_ids=fetched_content_ids)
+            raise ValueError(message)
 
         state_file = queue_directory / "state.jsonl"
         state = cls.from_jsonl(state_file) if state_file.exists() else cls(entries=[])
         content_id_to_dandiset_ids = state.content_id_to_dandiset_ids()
 
         prepared_count = 0
-        for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
+        for pipeline_name, pipeline_data in pipelines.items():
+            if only_pipeline is not None and pipeline_name != only_pipeline:
+                continue
             if limit is not None and prepared_count >= limit:
                 break
+            pipeline_content_ids = (
+                content_ids
+                if content_ids is not None
+                else _order_content_ids_for_uniform_dandiset_sampling(
+                    content_ids=_fetch_qualifying_content_ids(pipeline_name)
+                )
+            )
             for version in pipeline_data.get("version_priority", []):
                 if limit is not None and prepared_count >= limit:
                     break
@@ -853,7 +861,7 @@ class QueueState:
                                 continue
                             failure_count_by_dandiset[dandiset_id] += 1
 
-                    for content_id in content_ids:
+                    for content_id in pipeline_content_ids:
                         if limit is not None and prepared_count >= limit:
                             break
                         if max_fail is not None:
@@ -878,20 +886,29 @@ class QueueState:
 
                         _log.info(f"Preparing content ID: {content_id}")
                         try:
-                            prepare_aind_ephys_job(
-                                content_id=content_id,
-                                parameters_key=params,
-                                pipeline_version=version,
-                                pipeline_directory=pipeline_directory,
-                                config_key=config_key,
-                                silent=True,
-                            )
+                            if pipeline_name == "lfp":
+                                prepared = prepare_lfp_job(
+                                    content_id=content_id,
+                                    parameters_key=params,
+                                    pipeline_version=version,
+                                    silent=True,
+                                )
+                            else:
+                                prepared = prepare_aind_ephys_job(
+                                    content_id=content_id,
+                                    parameters_key=params,
+                                    pipeline_version=version,
+                                    pipeline_directory=pipeline_directory,
+                                    config_key=config_key,
+                                    silent=True,
+                                )
                         except UnmappedContentIDError as error:
                             _log.warning(
                                 f"Skipping preparation for {pipeline_name}/{version}/{params}/{content_id}: {error}"
                             )
                             continue
-                        prepared_count += 1
+                        if prepared is not None:
+                            prepared_count += 1
 
     @staticmethod
     def dump_issues(

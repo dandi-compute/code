@@ -1,0 +1,38 @@
+#!/bin/bash
+#SBATCH --job-name=DANDI-Compute-LFP
+#SBATCH --output={{ log_directory }}/job-%j_slurm.log
+#SBATCH --mem=16GB
+#SBATCH --cpus-per-task=1
+#SBATCH --partition=mit_preemptable
+#SBATCH --time=48:00:00
+
+set -euo pipefail
+
+source /etc/profile.d/modules.sh
+module load miniforge
+module load apptainer
+
+conda activate {{ environment_directory }}
+
+cd "{{ dataset_directory }}"
+
+# Register the LFP runtime container from the GitHub Container Registry. This is
+# idempotent, so it is a no-op once the container is known to this dataset.
+if ! datalad containers-list | awk '{print $1}' | grep -qx "{{ container_name }}"; then
+    datalad containers-add "{{ container_name }}" \
+        --url "docker://{{ container_image }}" \
+        --call-fmt 'apptainer exec --cleanenv {img} {cmd}'
+fi
+
+# Run the LFP pipeline inside the container on a local NWB file (the input path
+# is a valid NWB file even though it has no .nwb suffix). The call is wrapped
+# with duct to capture resource usage.
+duct --output-prefix "{{ log_directory }}/duct_" \
+    datalad containers-run \
+        --container-name "{{ container_name }}" \
+        --message "LFP pipeline on {{ nwb_file_path }}" \
+        --input "{{ nwb_file_path }}" \
+        --output "{{ output_nwb_file_path }}" \
+        "python -m dandi_compute_code.lfp_pipeline --input '{{ nwb_file_path }}' --output '{{ output_nwb_file_path }}' --params '{{ parameters_key }}'"
+
+echo "{{ temp_name }}" >> {{ done_tracker_file_path }}
