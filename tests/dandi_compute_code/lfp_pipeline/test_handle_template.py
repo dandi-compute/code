@@ -26,7 +26,7 @@ def test_rendered_script_has_sbatch_header(tmp_path) -> None:
     script = _render(tmp_path)
 
     assert script.startswith("#!/bin/bash")
-    assert "#SBATCH --job-name=LFP-Pipeline" in script
+    assert "#SBATCH --job-name=DANDI-Compute-LFP" in script
     assert "#SBATCH --output=/logs/job-%j_slurm.log" in script
 
 
