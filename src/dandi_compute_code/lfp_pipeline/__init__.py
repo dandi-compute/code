@@ -1,16 +1,27 @@
-from ._load_parameters import load_lfp_parameters, validate_lfp_parameters
-from ._resolve import resolve_filter_kwargs, resolve_reference_spec
-from ._extract_lfp import extract_lfp
-from ._write_nwb import add_lfp_to_nwbfile, run_lfp_pipeline
 from ._handle_template import generate_lfp_submission_script
+from ._prepare_job import build_lfp_output_path_base, prepare_lfp_job
+from ._resolve import resolve_filter_kwargs, resolve_reference_spec
+
+# The runtime processing modules require the LFP container environment
+# (SpikeInterface, neuroconv, pynwb, jsonschema). Keep them optional so the
+# orchestration side (queue preparation) can import this package in the base
+# environment without that heavy stack installed.
+try:
+    from ._load_parameters import load_lfp_parameters, validate_lfp_parameters
+    from ._extract_lfp import extract_lfp
+    from ._write_nwb import add_lfp_to_nwbfile, run_lfp_pipeline
+except ImportError:
+    pass
 
 __all__ = [
-    "load_lfp_parameters",
-    "validate_lfp_parameters",
+    "generate_lfp_submission_script",
+    "prepare_lfp_job",
+    "build_lfp_output_path_base",
     "resolve_filter_kwargs",
     "resolve_reference_spec",
+    "load_lfp_parameters",
+    "validate_lfp_parameters",
     "extract_lfp",
     "add_lfp_to_nwbfile",
     "run_lfp_pipeline",
-    "generate_lfp_submission_script",
 ]
