@@ -9,7 +9,7 @@ on:
       dockerfile:
         description: "Path to the Dockerfile to build."
         required: true
-        default: "containers/lfp.Dockerfile"
+        default: "src/dandi_compute_code/lfp_pipeline/containers/lfp.Dockerfile"
       context:
         description: "Build context directory."
         required: true
@@ -55,7 +55,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ${{ inputs.context || '.' }}
-          file: ${{ inputs.dockerfile || 'containers/lfp.Dockerfile' }}
+          file: ${{ inputs.dockerfile || 'src/dandi_compute_code/lfp_pipeline/containers/lfp.Dockerfile' }}
           push: true
           tags: |
             ${{ steps.reference.outputs.repository }}:latest
