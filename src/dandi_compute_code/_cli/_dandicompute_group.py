@@ -567,10 +567,10 @@ def _queue_process_command(
 )
 @click.option(
     "--pipeline",
-    "pipeline_directory",
-    help="Local path to the AIND pipeline repository.",
+    "only_pipeline",
+    help="Prepare only the named pipeline (e.g. 'lfp' or 'aind+ephys'). Defaults to all configured pipelines.",
     required=False,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    type=str,
     default=None,
 )
 @click.option(
@@ -598,12 +598,12 @@ def _queue_process_command(
 )
 def _queue_prepare_command(
     queue_directory: pathlib.Path,
-    pipeline_directory: pathlib.Path | None = None,
+    only_pipeline: str | None = None,
     config_key: str = "default",
     limit: int | None = None,
     silent: bool = False,
 ) -> None:
-    """Prepare queued jobs across configured pipelines without submitting them."""
+    """Prepare queued jobs without submitting them, optionally for a single pipeline."""
     _configure_logging(silent=silent)
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
@@ -611,17 +611,17 @@ def _queue_prepare_command(
     def _prepare_oop() -> None:
         QueueState.prepare(
             queue_directory=queue_directory,
-            pipeline_directory=pipeline_directory,
             config_key=config_key,
             limit=limit,
+            only_pipeline=only_pipeline,
         )
 
     def _prepare_fallback() -> None:
         prepare_queue(
             queue_directory=queue_directory,
-            pipeline_directory=pipeline_directory,
             config_key=config_key,
             limit=limit,
+            only_pipeline=only_pipeline,
         )
 
     run_with_oop_failsafe(command="queue prepare", oop_path=_prepare_oop, fallback_path=_prepare_fallback)

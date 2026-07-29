@@ -218,3 +218,35 @@ def test_prepare_queue_lfp_skip_does_not_count_toward_limit(tmp_path: pathlib.Pa
         QueueState.prepare(queue_directory=queue_dir, content_ids=["asset-1", "asset-2", "asset-3"], limit=2)
 
     assert mock_lfp.call_count == 3
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_only_pipeline_prepares_just_that_pipeline(tmp_path: pathlib.Path) -> None:
+    """only_pipeline restricts preparation to the named pipeline."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    config = {
+        "pipelines": {
+            "aind+ephys": {"version_priority": ["v1.0"], "params_priority": ["default"]},
+            "lfp": {"version_priority": ["v0.4.0"], "params_priority": ["default"]},
+        }
+    }
+    (queue_dir / "queue_config.json").write_text(json.dumps(config))
+
+    with (
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_lfp_job") as mock_lfp,
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_aind_ephys_job") as mock_aind,
+    ):
+        QueueState.prepare(queue_directory=queue_dir, content_ids=["asset-1"], only_pipeline="lfp")
+
+    assert mock_aind.call_count == 0
+    assert mock_lfp.call_count == 1
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_only_pipeline_unknown_raises(tmp_path: pathlib.Path) -> None:
+    """only_pipeline that is not configured raises a clear error."""
+    queue_dir = _lfp_queue_directory(tmp_path)
+
+    with pytest.raises(ValueError, match="is not configured"):
+        QueueState.prepare(queue_directory=queue_dir, content_ids=["asset-1"], only_pipeline="does-not-exist")

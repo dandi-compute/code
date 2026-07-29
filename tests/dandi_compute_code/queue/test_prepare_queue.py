@@ -200,3 +200,26 @@ def test_prepare_queue_dispatches_lfp_to_prepare_lfp_job(tmp_path: pathlib.Path)
     assert mock_aind.call_count == 0
     assert mock_lfp.call_count == 2
     assert {call.kwargs["content_id"] for call in mock_lfp.call_args_list} == {"asset-1", "asset-2"}
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_only_pipeline_prepares_just_that_pipeline(tmp_path: pathlib.Path) -> None:
+    """only_pipeline restricts preparation to the named pipeline."""
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    config = {
+        "pipelines": {
+            "aind+ephys": {"version_priority": ["v1.0"], "params_priority": ["default"]},
+            "lfp": {"version_priority": ["v0.4.0"], "params_priority": ["default"]},
+        }
+    }
+    (queue_dir / "queue_config.json").write_text(json.dumps(config))
+
+    with (
+        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_lfp_job") as mock_lfp,
+        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_aind,
+    ):
+        prepare_queue(queue_directory=queue_dir, content_ids=["asset-1"], only_pipeline="lfp")
+
+    assert mock_aind.call_count == 0
+    assert mock_lfp.call_count == 1

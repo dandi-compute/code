@@ -21,6 +21,7 @@ def prepare_queue(
     config_key: str = "default",
     content_ids: list[str] | None = None,
     limit: int | None = None,
+    only_pipeline: str | None = None,
 ) -> None:
     """
     En-masse preparation of qualifying assets based on the current queue config.
@@ -56,8 +57,15 @@ def prepare_queue(
         automatically, they are randomized in round-robin order across source
         Dandisets before this limit is applied. Useful for testing.
     :type limit: int, optional
+    :param only_pipeline: If provided, prepare only this pipeline instead of every
+        pipeline in the queue config. Raises if the name is not configured.
+    :type only_pipeline: str, optional
     """
     queue_config = _load_queue_config(queue_directory=queue_directory)
+    pipelines = queue_config.get("pipelines", {})
+    if only_pipeline is not None and only_pipeline not in pipelines:
+        message = f"Pipeline '{only_pipeline}' is not configured. Configured pipelines are: {list(pipelines.keys())}."
+        raise ValueError(message)
 
     state_file = queue_directory / "state.jsonl"
     state_entries = (
@@ -82,7 +90,9 @@ def prepare_queue(
     ]
 
     prepared_count = 0
-    for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
+    for pipeline_name, pipeline_data in pipelines.items():
+        if only_pipeline is not None and pipeline_name != only_pipeline:
+            continue
         if limit is not None and prepared_count >= limit:
             break
         pipeline_content_ids = (

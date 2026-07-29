@@ -292,6 +292,32 @@ def test_cli_queue_prepare_required_queue_directory() -> None:
 
 
 @pytest.mark.ai_generated
+def test_cli_queue_prepare_forwards_pipeline_as_only_pipeline(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue prepare --pipeline <name> forwards only_pipeline to QueueState.prepare."""
+    queue_dir = _make_queue_dir(tmp_path)
+    runner = CliRunner()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
+        mock.patch(f"{_GROUP}.QueueState.prepare") as mock_prepare,
+        mock.patch(f"{_GROUP}.prepare_queue") as mock_prepare_queue,
+    ):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["queue", "prepare", "--queue", str(queue_dir), "--pipeline", "lfp", "--limit", "5"],
+        )
+
+    assert result.exit_code == 0
+    mock_prepare.assert_called_once_with(
+        queue_directory=queue_dir,
+        config_key="default",
+        limit=5,
+        only_pipeline="lfp",
+    )
+    mock_prepare_queue.assert_not_called()
+
+
+@pytest.mark.ai_generated
 def test_cli_queue_process_requires_processing_directory(tmp_path: pathlib.Path) -> None:
     """Queue process command requires --processing."""
     queue_dir = _make_queue_dir(tmp_path)
