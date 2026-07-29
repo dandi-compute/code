@@ -74,9 +74,7 @@ Non-code files for the AIND ephys pipeline are organized under the following sub
 
 Non-code files for the LFP pipeline are organized under the following subdirectories of `src/dandi_compute_code/lfp_pipeline/`:
 
-- **`parameter_schema.json`** — the JSON Schema that defines and constrains the exposed LFP parameters.
-
-- **`params/`** — JSON parameter files (e.g., `name-default.json`).
+- **`params/`** — JSON parameter files (e.g., `name-default.json`) plus `parameter_schema.json`, the JSON Schema that defines and constrains the exposed LFP parameters.
   To add a new parameters file:
   1. Add the `name-[id].json` file to this directory.
   2. Register it in `registries/registered_params.json` by adding an entry with the short name as the key, and its relative `path` and full MD5 `md5` as values.

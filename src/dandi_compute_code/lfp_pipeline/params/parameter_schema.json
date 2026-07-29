@@ -1,6 +1,6 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://raw.githubusercontent.com/dandi-compute/code/main/src/dandi_compute_code/lfp_pipeline/parameter_schema.json",
+    "$id": "https://raw.githubusercontent.com/dandi-compute/code/main/src/dandi_compute_code/lfp_pipeline/params/parameter_schema.json",
     "title": "DANDI Compute LFP extraction parameters",
     "description": "The minimal set of parameters exposed by the DANDI Compute LFP extraction pipeline. This schema is owned by this pipeline. Some fields correspond to concepts in the AIND ephys parameters schema (https://github.com/dandi-compute/aind-ephys-pipeline/blob/main/pipeline/default_params_schema.json); others are custom to this pipeline. Each field notes its SpikeInterface mapping and whether it aligns with the AIND schema or is custom.",
     "type": "object",
