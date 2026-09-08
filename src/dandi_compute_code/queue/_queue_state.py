@@ -2,7 +2,7 @@
 QueueState — typed container for ``state.jsonl``.
 
 ``state.jsonl`` is a newline-delimited JSON file where each line is one attempt
-capsule. This module provides the typed OOP layer over it:
+capsule. This module provides the typed model over it:
 
 - :class:`JobEntry` wraps an existing :class:`JobInfo` with the status fields
   (``has_code``, ``has_output``, ``has_logs``, ``content_id``, ...).

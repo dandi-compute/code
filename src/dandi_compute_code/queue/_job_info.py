@@ -1,9 +1,8 @@
 """
 ``JobInfo`` — the immutable identity of one attempt capsule.
 
-Kept in its own module so both the OOP model (:mod:`._queue_state`) and its
-private helpers (:mod:`._queue_utils`) can depend on it without coupling to
-each other.
+Kept in its own module so both :mod:`._queue_state` and its private helpers
+(:mod:`._queue_utils`) can depend on it without coupling to each other.
 """
 
 from __future__ import annotations

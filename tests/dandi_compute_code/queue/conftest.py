@@ -1,9 +1,8 @@
 """
-Shared fixtures for the OOP ``QueueState`` model test suite.
+Shared fixtures for the ``QueueState`` model test suite.
 
-This mirrors the queue suite's ``conftest.py`` but the network guard targets the
-binding used by the model (:mod:`dandi_compute_code.queue._queue_state`) rather
-than the legacy free-function module.
+The network guard targets the binding used by the model
+(:mod:`dandi_compute_code.queue._queue_state`).
 """
 
 import json

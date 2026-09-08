@@ -1,5 +1,5 @@
 """
-Private helpers for the :mod:`._queue_state` OOP model.
+Private helpers for the :mod:`._queue_state` model.
 
 This companion module holds the lower-level utilities the ``QueueState`` /
 ``JobEntry`` model depends on (assets-path parsing, attempt-record construction,

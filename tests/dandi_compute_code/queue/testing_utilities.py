@@ -1,7 +1,7 @@
 """
 Plain helpers for working with the example queue (``example_state_files/state.jsonl``).
 
-These are ordinary functions, imported and called directly by the model tests.
+These are ordinary functions, imported and called directly by the queue tests.
 They need nothing from pytest, so they are deliberately not fixtures. The pytest
 fixtures (temporary directories, environment and network setup) live in
 ``conftest.py``.
