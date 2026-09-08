@@ -13,9 +13,10 @@ from dandi_compute_code.queue import prepare_queue
 # (prepare_aind_ephys_job). Both are mocked here; everything else runs for real.
 
 
-def _mock_urlopen_response(payload: list) -> mock.MagicMock:
+def _mock_urlopen_response(qualifying_content_ids: list[str]) -> mock.MagicMock:
+    """Build a mock response matching the real ``{content_id: qualifies}``-per-line JSONL format."""
     mock_response = mock.MagicMock()
-    jsonl = "\n".join(json.dumps(item) for item in payload)
+    jsonl = "\n".join(json.dumps({content_id: True}) for content_id in qualifying_content_ids)
     mock_response.read.return_value = gzip.compress(jsonl.encode())
     mock_response.__enter__.return_value = mock_response
     mock_response.__exit__.return_value = False
@@ -165,6 +166,37 @@ def test_prepare_queue_limit_samples_uniformly_over_dandisets(queue_directory: p
     }
     assert set(mock_shuffle.call_args_list[1].args[0]) == {"asset-a1", "asset-a2"}
     assert set(mock_shuffle.call_args_list[2].args[0]) == {"asset-b1"}
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_excludes_non_qualifying_content_ids(queue_directory: pathlib.Path) -> None:
+    """prepare_queue only prepares content IDs whose remote cache entry is True.
+
+    Regression test for the real cache format: each JSONL line is a
+    ``{content_id: qualifies}`` object covering every content ID that qualifies for the
+    (looser) LFP cache, not just the ones that qualify for the AIND pipeline.
+    """
+    mock_response = mock.MagicMock()
+    jsonl = "\n".join(
+        json.dumps({content_id: qualifies}) for content_id, qualifies in [("asset-bbb", True), ("asset-ccc", False)]
+    )
+    mock_response.read.return_value = gzip.compress(jsonl.encode())
+    mock_response.__enter__.return_value = mock_response
+    mock_response.__exit__.return_value = False
+
+    with (
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch(
+            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_usage_dandiset_path",
+            return_value={},
+        ),
+        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
+    ):
+        mock_urlopen.return_value = mock_response
+        prepare_queue(queue_directory=queue_directory)
+
+    assert mock_prepare.call_count == 1
+    assert mock_prepare.call_args.kwargs["content_id"] == "asset-bbb"
 
 
 @pytest.mark.ai_generated
