@@ -46,6 +46,7 @@ from ._queue_utils import (
     _UpstreamMetadataCache,
 )
 from ..aind_ephys_pipeline import UnmappedContentIDError, prepare_aind_ephys_job
+from ..dandiset import move_job_capsule
 from ..dandiset._globals import _FAILED_RUNS_ARCHIVE_DANDISET_ID, _JOB_CAPSULES_DANDISET_ID
 from ..dandiset._load_assets_jsonld_metadata import (
     AssetMetadata,
@@ -736,6 +737,52 @@ class QueueState:
                 removed.append(attempt_dir)
 
         return removed
+
+    def archive_failed(
+        self,
+        *,
+        dandiset_directory: pathlib.Path,
+        processing_directory: pathlib.Path | None = None,
+        test: bool = False,
+    ) -> list[str]:
+        """
+        Move every failed entry's job capsule into the failed runs archive.
+
+        For each entry in :attr:`failed`, resolves its actual on-disk attempt
+        directory under *dandiset_directory* (see :meth:`JobEntry.resolve_attempt_dir`,
+        which accounts for both the current flat attempt-directory layout and the
+        legacy nested layout) and moves the corresponding capsule from the job
+        capsules Dandiset to the failed runs archive Dandiset via
+        :func:`~dandi_compute_code.dandiset.move_job_capsule`.
+
+        :param dandiset_directory: Local clone of the job capsules Dandiset, used to
+            resolve each failed entry's actual attempt-directory path.
+        :type dandiset_directory: pathlib.Path
+        :param processing_directory: Directory for the temporary working tree used by
+            each move (defaults to the system temporary location).
+        :type processing_directory: pathlib.Path | None
+        :param test: When ``True``, leave each temporary working tree on disk after a
+            successful move for debugging.
+        :type test: bool
+        :returns: Capsule paths (relative to *dandiset_directory*) that were archived,
+            in the order they were processed.
+        :rtype: list[str]
+        :raises RuntimeError: If ``DANDI_API_KEY`` is unset or blank, or if archiving
+            any individual capsule fails (see :func:`move_job_capsule`). A failure
+            leaves entries processed so far archived and stops before the rest.
+        """
+        if not os.environ.get("DANDI_API_KEY", "").strip():
+            message = "`DANDI_API_KEY` environment variable is not set or is blank."
+            raise RuntimeError(message)
+
+        archived: list[str] = []
+        for entry in self.failed:
+            attempt_dir = entry.resolve_attempt_dir(dandiset_directory)
+            capsule_path = attempt_dir.relative_to(dandiset_directory).as_posix()
+            move_job_capsule(capsule_path=capsule_path, processing_directory=processing_directory, test=test)
+            archived.append(capsule_path)
+
+        return archived
 
     @classmethod
     def process_queue(
