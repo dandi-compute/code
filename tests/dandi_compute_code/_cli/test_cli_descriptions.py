@@ -32,6 +32,10 @@ from dandi_compute_code._cli import _dandicompute_group
             ["archive", "failed", "--help"],
             "Move every failed job capsule into the failed runs archive.",
         ),
+        (
+            ["archive", "unsubmitted", "--help"],
+            "Move every unsubmitted job capsule into the failed runs archive.",
+        ),
     ],
 )
 def test_cli_help_includes_descriptions(args: list[str], expected_text: str) -> None:

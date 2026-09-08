@@ -783,6 +783,52 @@ class QueueState:
 
         return archived
 
+    def archive_unsubmitted(
+        self,
+        *,
+        dandiset_directory: pathlib.Path,
+        processing_directory: pathlib.Path | None = None,
+        test: bool = False,
+    ) -> list[str]:
+        """
+        Move every unsubmitted entry's job capsule into the failed runs archive.
+
+        For each entry in :attr:`pending` (code prepared but never submitted), resolves
+        its actual on-disk attempt directory under *dandiset_directory* (see
+        :meth:`JobEntry.resolve_attempt_dir`, which accounts for both the current flat
+        attempt-directory layout and the legacy nested layout) and moves the
+        corresponding capsule from the job capsules Dandiset to the failed runs archive
+        Dandiset via :func:`~dandi_compute_code.dandiset.move_job_capsule`.
+
+        :param dandiset_directory: Local clone of the job capsules Dandiset, used to
+            resolve each unsubmitted entry's actual attempt-directory path.
+        :type dandiset_directory: pathlib.Path
+        :param processing_directory: Directory for the temporary working tree used by
+            each move (defaults to the system temporary location).
+        :type processing_directory: pathlib.Path | None
+        :param test: When ``True``, leave each temporary working tree on disk after a
+            successful move for debugging.
+        :type test: bool
+        :returns: Capsule paths (relative to *dandiset_directory*) that were archived,
+            in the order they were processed.
+        :rtype: list[str]
+        :raises RuntimeError: If ``DANDI_API_KEY`` is unset or blank, or if archiving
+            any individual capsule fails (see :func:`move_job_capsule`). A failure
+            leaves entries processed so far archived and stops before the rest.
+        """
+        if not os.environ.get("DANDI_API_KEY", "").strip():
+            message = "`DANDI_API_KEY` environment variable is not set or is blank."
+            raise RuntimeError(message)
+
+        archived: list[str] = []
+        for entry in self.pending:
+            attempt_dir = entry.resolve_attempt_dir(dandiset_directory)
+            capsule_path = attempt_dir.relative_to(dandiset_directory).as_posix()
+            move_job_capsule(capsule_path=capsule_path, processing_directory=processing_directory, test=test)
+            archived.append(capsule_path)
+
+        return archived
+
     @classmethod
     def process_queue(
         cls,
