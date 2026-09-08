@@ -877,6 +877,7 @@ def _archive_by_status_options(command: click.Command) -> click.Command:
 def _run_archive_by_status_command(
     *,
     status: str,
+    label: str,
     queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
     processing_directory: pathlib.Path | None,
@@ -894,11 +895,11 @@ def _run_archive_by_status_command(
 
     if not silent:
         if archived:
-            _styled_echo(text=f"\nArchived {len(archived)} {status} job capsule(s):", color="green")
+            _styled_echo(text=f"\nArchived {len(archived)} {label} job capsule(s):", color="green")
             for capsule_path in archived:
                 _styled_echo(text=f"  {capsule_path}", color="green")
         else:
-            _styled_echo(text=f"\nNo {status} job capsules to archive.", color="yellow")
+            _styled_echo(text=f"\nNo {label} job capsules to archive.", color="yellow")
 
 
 # dandicompute archive failed [OPTIONS]
@@ -914,6 +915,7 @@ def _archive_failed_command(
     """Move every failed job capsule into the failed runs archive."""
     _run_archive_by_status_command(
         status="failed",
+        label="failed",
         queue_directory=queue_directory,
         dandiset_directory=dandiset_directory,
         processing_directory=processing_directory,
@@ -934,7 +936,8 @@ def _archive_unsubmitted_command(
 ) -> None:
     """Move every unsubmitted job capsule into the failed runs archive."""
     _run_archive_by_status_command(
-        status="unsubmitted",
+        status="pending",
+        label="unsubmitted",
         queue_directory=queue_directory,
         dandiset_directory=dandiset_directory,
         processing_directory=processing_directory,

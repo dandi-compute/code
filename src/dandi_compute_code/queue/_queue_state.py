@@ -737,13 +737,10 @@ class QueueState:
 
         return removed
 
-    #: Maps each supported :meth:`archive_by_status` status to the entries it selects.
-    _ARCHIVABLE_STATUS_ATTRS = {"failed": "failed", "unsubmitted": "pending"}
-
     def archive_by_status(
         self,
         *,
-        status: Literal["failed", "unsubmitted"],
+        status: Literal["failed", "pending"],
         dandiset_directory: pathlib.Path,
         processing_directory: pathlib.Path | None = None,
         test: bool = False,
@@ -751,9 +748,10 @@ class QueueState:
         """
         Move every entry with the given *status* into the failed runs archive.
 
-        ``"failed"`` selects :attr:`failed` (code and logs present, no output);
-        ``"unsubmitted"`` selects :attr:`pending` (code prepared but never submitted).
-        For each matching entry, resolves its actual on-disk attempt directory under
+        *status* names the :class:`QueueState` property selecting the entries to
+        archive: ``"failed"`` (:attr:`failed` — code and logs present, no output) or
+        ``"pending"`` (:attr:`pending` — code prepared but never submitted). For each
+        matching entry, resolves its actual on-disk attempt directory under
         *dandiset_directory* (see :meth:`JobEntry.resolve_attempt_dir`, which accounts
         for both the current flat attempt-directory layout and the legacy nested
         layout) and moves the corresponding capsule from the job capsules Dandiset to
@@ -761,7 +759,7 @@ class QueueState:
         :func:`~dandi_compute_code.dandiset.move_job_capsule`.
 
         :param status: Which subset of entries to archive.
-        :type status: typing.Literal["failed", "unsubmitted"]
+        :type status: typing.Literal["failed", "pending"]
         :param dandiset_directory: Local clone of the job capsules Dandiset, used to
             resolve each matching entry's actual attempt-directory path.
         :type dandiset_directory: pathlib.Path
@@ -777,11 +775,10 @@ class QueueState:
         :raises RuntimeError: If ``DANDI_API_KEY`` is unset or blank, or if archiving
             any individual capsule fails (see :func:`move_job_capsule`). A failure
             leaves entries processed so far archived and stops before the rest.
-        :raises ValueError: If *status* is not ``"failed"`` or ``"unsubmitted"``.
+        :raises ValueError: If *status* is not ``"failed"`` or ``"pending"``.
         """
-        entries_attr = self._ARCHIVABLE_STATUS_ATTRS.get(status)
-        if entries_attr is None:
-            message = f"Unknown status {status!r}; expected one of {sorted(self._ARCHIVABLE_STATUS_ATTRS)}."
+        if status not in ("failed", "pending"):
+            message = f"Unknown status {status!r}; expected 'failed' or 'pending'."
             raise ValueError(message)
 
         if not os.environ.get("DANDI_API_KEY", "").strip():
@@ -789,7 +786,7 @@ class QueueState:
             raise RuntimeError(message)
 
         archived: list[str] = []
-        for entry in getattr(self, entries_attr):
+        for entry in getattr(self, status):
             attempt_dir = entry.resolve_attempt_dir(dandiset_directory)
             capsule_path = attempt_dir.relative_to(dandiset_directory).as_posix()
             move_job_capsule(capsule_path=capsule_path, processing_directory=processing_directory, test=test)

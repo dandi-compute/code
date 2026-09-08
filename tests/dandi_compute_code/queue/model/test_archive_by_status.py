@@ -18,7 +18,7 @@ _STATUS_EXAMPLE_ENTRIES = {
             {"dandi_path": "sub-failed/ses-repeated", "attempt": 2},
         ],
     },
-    "unsubmitted": {
+    "pending": {
         "entry_kwargs": {},
         "matching": [
             {"dandi_path": "sub-pending"},
@@ -29,7 +29,7 @@ _STATUS_EXAMPLE_ENTRIES = {
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "unsubmitted"])
+@pytest.mark.parametrize("status", ["failed", "pending"])
 def test_archive_by_status_raises_without_dandi_api_key(status: str, tmp_path: pathlib.Path) -> None:
     """archive_by_status raises RuntimeError when DANDI_API_KEY is not set."""
     with mock.patch.dict(os.environ, {}, clear=True):
@@ -39,13 +39,13 @@ def test_archive_by_status_raises_without_dandi_api_key(status: str, tmp_path: p
 
 @pytest.mark.ai_generated
 def test_archive_by_status_raises_on_unknown_status(tmp_path: pathlib.Path, dandi_api_key: None) -> None:
-    """archive_by_status raises ValueError for a status other than 'failed'/'unsubmitted'."""
+    """archive_by_status raises ValueError for a status other than 'failed'/'pending'."""
     with pytest.raises(ValueError, match="Unknown status"):
         QueueState(entries=[]).archive_by_status(status="successful", dandiset_directory=tmp_path)
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "unsubmitted"])
+@pytest.mark.parametrize("status", ["failed", "pending"])
 def test_archive_by_status_returns_empty_list_when_nothing_matches(
     status: str, tmp_path: pathlib.Path, dandi_api_key: None
 ) -> None:
@@ -58,7 +58,7 @@ def test_archive_by_status_returns_empty_list_when_nothing_matches(
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "unsubmitted"])
+@pytest.mark.parametrize("status", ["failed", "pending"])
 def test_archive_by_status_moves_every_matching_entry(
     status: str, example_queue_state: QueueState, tmp_path: pathlib.Path, dandi_api_key: None
 ) -> None:
@@ -82,7 +82,7 @@ def test_archive_by_status_moves_every_matching_entry(
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "unsubmitted"])
+@pytest.mark.parametrize("status", ["failed", "pending"])
 def test_archive_by_status_ignores_non_matching_entries(
     status: str, example_queue_state: QueueState, tmp_path: pathlib.Path, dandi_api_key: None
 ) -> None:
@@ -100,9 +100,8 @@ def test_archive_by_status_ignores_non_matching_entries(
         with_logs=True,
     )
 
-    entries_attr = QueueState._ARCHIVABLE_STATUS_ATTRS[status]
     non_matching_state = QueueState(
-        entries=[entry for entry in example_queue_state if entry not in getattr(example_queue_state, entries_attr)]
+        entries=[entry for entry in example_queue_state if entry not in getattr(example_queue_state, status)]
     )
     with mock.patch("dandi_compute_code.queue._queue_state.move_job_capsule") as mock_move:
         archived = non_matching_state.archive_by_status(status=status, dandiset_directory=dandiset_dir)
@@ -112,7 +111,7 @@ def test_archive_by_status_ignores_non_matching_entries(
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "unsubmitted"])
+@pytest.mark.parametrize("status", ["failed", "pending"])
 def test_archive_by_status_forwards_processing_directory_and_test_flag(
     status: str, example_queue_state: QueueState, tmp_path: pathlib.Path, dandi_api_key: None
 ) -> None:
