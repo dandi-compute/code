@@ -1,4 +1,4 @@
-"""Unit tests for the ``dandicompute archive by-status`` CLI command."""
+"""Unit tests for the ``dandicompute archive --status`` CLI option."""
 
 import os
 import pathlib
@@ -33,7 +33,7 @@ def test_cli_archive_by_status_fails_without_api_key(status: str, tmp_path: path
     with mock.patch.dict(os.environ, env_without_key, clear=True):
         result = runner.invoke(
             _dandicompute_group,
-            ["archive", "by-status", "--status", status, "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
+            ["archive", "--status", status, "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
         )
 
     assert result.exit_code != 0
@@ -53,7 +53,6 @@ def test_cli_archive_by_status_rejects_unknown_status(tmp_path: pathlib.Path) ->
             _dandicompute_group,
             [
                 "archive",
-                "by-status",
                 "--status",
                 "successful",
                 "--queue",
@@ -69,8 +68,21 @@ def test_cli_archive_by_status_rejects_unknown_status(tmp_path: pathlib.Path) ->
 
 @pytest.mark.ai_generated
 @pytest.mark.parametrize("status", ["failed", "pending"])
+def test_cli_archive_by_status_requires_queue_and_dandiset(status: str, tmp_path: pathlib.Path) -> None:
+    """dandicompute archive --status without --queue/--dandiset is rejected with a clear error."""
+    runner = CliRunner()
+
+    with mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+        result = runner.invoke(_dandicompute_group, ["archive", "--status", status])
+
+    assert result.exit_code != 0
+    assert "--queue and --dandiset are required" in result.output
+
+
+@pytest.mark.ai_generated
+@pytest.mark.parametrize("status", ["failed", "pending"])
 def test_cli_archive_by_status_invokes_archive_by_status_with_options(status: str, tmp_path: pathlib.Path) -> None:
-    """dandicompute archive by-status calls QueueState.archive_by_status with the provided options."""
+    """dandicompute archive --status calls QueueState.archive_by_status with the provided options."""
     runner = CliRunner()
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "dandiset"
@@ -88,7 +100,6 @@ def test_cli_archive_by_status_invokes_archive_by_status_with_options(status: st
             _dandicompute_group,
             [
                 "archive",
-                "by-status",
                 "--status",
                 status,
                 "--queue",
@@ -112,7 +123,7 @@ def test_cli_archive_by_status_invokes_archive_by_status_with_options(status: st
 @pytest.mark.ai_generated
 @pytest.mark.parametrize("status", ["failed", "pending"])
 def test_cli_archive_by_status_reports_nothing_to_archive(status: str, tmp_path: pathlib.Path) -> None:
-    """dandicompute archive by-status reports when there are no matching capsules to archive."""
+    """dandicompute archive --status reports when there are no matching capsules to archive."""
     runner = CliRunner()
     queue_dir = _make_queue_dir(tmp_path)
     dandiset_dir = tmp_path / "dandiset"
@@ -124,7 +135,7 @@ def test_cli_archive_by_status_reports_nothing_to_archive(status: str, tmp_path:
     ):
         result = runner.invoke(
             _dandicompute_group,
-            ["archive", "by-status", "--status", status, "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
+            ["archive", "--status", status, "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
         )
 
     assert result.exit_code == 0, result.output
