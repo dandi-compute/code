@@ -10,6 +10,10 @@ _QUEUE_CONFIG_SCHEMA_PATH = pathlib.Path(__file__).parent / "schemas" / "queue_c
 _FLAT_ATTEMPT_DIR_RE = re.compile(r"^version-(?P<version>.+?)_codebase-[^_]+_params-[^_]+_config-[^_]+_attempt-\d+$")
 _DURATION_PART_RE = re.compile(r"(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>ms|s|m|h|d)\b")
 TEST_QUEUE_CONTENT_ID = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
+_QUALIFYING_AIND_CONTENT_IDS_URL = (
+    "https://raw.githubusercontent.com/dandi-cache/qualifying-aind-content-ids/dist/"
+    "derivatives/qualifying_aind_content_ids.jsonl.gz"
+)
 
 try:
     _AIND_EPHYS_PARAMS_REGISTRY: dict = json.loads(_AIND_EPHYS_PARAMS_REGISTRY_PATH.read_text())

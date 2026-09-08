@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import collections
 import datetime
-import gzip
 import json
 import logging
 import os
@@ -25,11 +24,11 @@ import shutil
 import subprocess
 import tempfile
 import time
-import urllib.request
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Literal
 
+from ._fetch_qualifying_aind_content_ids import _fetch_qualifying_aind_content_ids
 from ._globals import _AIND_EPHYS_PARAMS_REGISTRY
 from ._job_info import JobInfo
 from ._queue_utils import (
@@ -866,13 +865,7 @@ class QueueState:
         queue_config = _load_queue_config(queue_directory=queue_directory)
 
         if content_ids is None:
-            qualifying_aind_content_ids_url = (
-                "https://raw.githubusercontent.com/dandi-cache/qualifying-aind-content-ids/dist/"
-                "derivatives/qualifying_aind_content_ids.jsonl.gz"
-            )
-            with urllib.request.urlopen(url=qualifying_aind_content_ids_url) as response:
-                decompressed = gzip.decompress(response.read()).decode()
-                fetched_content_ids = [json.loads(line) for line in decompressed.splitlines() if line.strip()]
+            fetched_content_ids = _fetch_qualifying_aind_content_ids()
             content_ids = _order_content_ids_for_uniform_dandiset_sampling(content_ids=fetched_content_ids)
 
         state_file = queue_directory / "state.jsonl"
