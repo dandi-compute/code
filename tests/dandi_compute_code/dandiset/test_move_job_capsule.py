@@ -287,7 +287,43 @@ def test_cli_archive_job_invokes_move(tmp_path: pathlib.Path) -> None:
         )
     assert result.exit_code == 0, result.output
     assert "Archived job capsule" in result.output
-    mock_move.assert_called_once_with(capsule_path=_EXAMPLE_CAPSULE_PATH, processing_directory=None, test=False)
+    mock_move.assert_called_once_with(
+        capsule_path=_EXAMPLE_CAPSULE_PATH,
+        source_dandiset_id=_SOURCE_DANDISET_ID,
+        target_dandiset_id=_TARGET_DANDISET_ID,
+        processing_directory=None,
+        test=False,
+    )
+
+
+@pytest.mark.ai_generated
+def test_cli_archive_job_forwards_custom_dandiset_ids(tmp_path: pathlib.Path) -> None:
+    """dandicompute archive --job forwards --dandiset-id/--archive-dandiset-id to move_job_capsule."""
+    runner = CliRunner()
+    with (
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}),
+        mock.patch("dandi_compute_code._cli._dandicompute_group.move_job_capsule") as mock_move,
+    ):
+        result = runner.invoke(
+            _dandicompute_group,
+            [
+                "archive",
+                "--job",
+                _EXAMPLE_CAPSULE_PATH,
+                "--dandiset-id",
+                "000123",
+                "--archive-dandiset-id",
+                "000456",
+            ],
+        )
+    assert result.exit_code == 0, result.output
+    mock_move.assert_called_once_with(
+        capsule_path=_EXAMPLE_CAPSULE_PATH,
+        source_dandiset_id="000123",
+        target_dandiset_id="000456",
+        processing_directory=None,
+        test=False,
+    )
 
 
 @pytest.mark.ai_generated

@@ -14,6 +14,7 @@ from ..dandiset import (
     move_job_capsule,
     scan_version_directories,
 )
+from ..dandiset._globals import _FAILED_RUNS_ARCHIVE_DANDISET_ID, _JOB_CAPSULES_DANDISET_ID
 from ..queue import (
     TEST_QUEUE_CONTENT_ID,
     QueueState,
@@ -807,12 +808,22 @@ def _delete_version_command(dandiset_directory: pathlib.Path, version: str, sile
     default=None,
 )
 @click.option(
-    "--dandiset",
-    "dandiset_directory",
-    help="Path to a local clone of the job capsules dandiset, used to resolve capsule paths. Required with --status.",
+    "--dandiset-id",
+    "dandiset_id",
+    help="Dandiset ID capsules are archived from.",
     required=False,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
+    type=str,
+    default=_JOB_CAPSULES_DANDISET_ID,
+    show_default=True,
+)
+@click.option(
+    "--archive-dandiset-id",
+    "archive_dandiset_id",
+    help="Dandiset ID capsules are archived to.",
+    required=False,
+    type=str,
+    default=_FAILED_RUNS_ARCHIVE_DANDISET_ID,
+    show_default=True,
 )
 @click.option(
     "--processing",
@@ -841,7 +852,8 @@ def _archive_command(
     status: str | None,
     capsule_path: str | None,
     queue_directory: pathlib.Path | None,
-    dandiset_directory: pathlib.Path | None,
+    dandiset_id: str,
+    archive_dandiset_id: str,
     processing_directory: pathlib.Path | None = None,
     test: bool = False,
     silent: bool = False,
@@ -855,18 +867,28 @@ def _archive_command(
     _require_dandi_api_key()
 
     if capsule_path is not None:
-        move_job_capsule(capsule_path=capsule_path, processing_directory=processing_directory, test=test)
+        move_job_capsule(
+            capsule_path=capsule_path,
+            source_dandiset_id=dandiset_id,
+            target_dandiset_id=archive_dandiset_id,
+            processing_directory=processing_directory,
+            test=test,
+        )
         if not silent:
             _styled_echo(text=f"\nArchived job capsule: {capsule_path}", color="green")
         return
 
-    if queue_directory is None or dandiset_directory is None:
-        message = "--queue and --dandiset are required when archiving by --status."
+    if queue_directory is None:
+        message = "--queue is required when archiving by --status."
         raise click.UsageError(message)
 
     state = QueueState.from_jsonl(queue_directory / "state.jsonl")
     archived = state.archive_by_status(
-        status=status, dandiset_directory=dandiset_directory, processing_directory=processing_directory, test=test
+        status=status,
+        dandiset_id=dandiset_id,
+        archive_dandiset_id=archive_dandiset_id,
+        processing_directory=processing_directory,
+        test=test,
     )
 
     if not silent:
