@@ -14,6 +14,7 @@ from ..dandiset import (
     move_job_capsule,
     scan_version_directories,
 )
+from ..dandiset._globals import _FAILED_RUNS_ARCHIVE_DANDISET_ID, _JOB_CAPSULES_DANDISET_ID
 from ..queue import (
     TEST_QUEUE_CONTENT_ID,
     QueueState,
@@ -779,21 +780,50 @@ def _delete_version_command(dandiset_directory: pathlib.Path, version: str, sile
         _styled_echo(text=f"\nDeleted {len(deleted)} version {noun}.", color="green")
 
 
-# dandicompute archive
-@_dandicompute_group.group(name="archive")
-def _archive_group() -> None:
-    """Move job capsules into the permanent archive of failed job runs."""
-    pass
-
-
-# dandicompute archive job [OPTIONS]
-@_archive_group.command(name="job")
+# dandicompute archive [OPTIONS]
+@_dandicompute_group.command(name="archive")
 @click.option(
-    "--path",
+    "--status",
+    "status",
+    help="Archive every job capsule with this status. Mutually exclusive with --job.",
+    required=False,
+    type=click.Choice(["failed", "pending"]),
+    default=None,
+)
+@click.option(
+    "--job",
     "capsule_path",
-    help="Path of the job capsule folder relative to the source Dandiset root.",
-    required=True,
+    help="Path of a single job capsule folder (relative to the source Dandiset root) to archive directly. "
+    "Mutually exclusive with --status.",
+    required=False,
     type=str,
+    default=None,
+)
+@click.option(
+    "--queue",
+    "queue_directory",
+    help="Path to the queue root directory (containing state.jsonl). Required with --status.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--dandiset-id",
+    "dandiset_id",
+    help="Dandiset ID capsules are archived from.",
+    required=False,
+    type=str,
+    default=_JOB_CAPSULES_DANDISET_ID,
+    show_default=True,
+)
+@click.option(
+    "--archive-dandiset-id",
+    "archive_dandiset_id",
+    help="Dandiset ID capsules are archived to.",
+    required=False,
+    type=str,
+    default=_FAILED_RUNS_ARCHIVE_DANDISET_ID,
+    show_default=True,
 )
 @click.option(
     "--processing",
@@ -818,15 +848,54 @@ def _archive_group() -> None:
     is_flag=True,
     default=False,
 )
-def _archive_job_command(
-    capsule_path: str,
+def _archive_command(
+    status: str | None,
+    capsule_path: str | None,
+    queue_directory: pathlib.Path | None,
+    dandiset_id: str,
+    archive_dandiset_id: str,
     processing_directory: pathlib.Path | None = None,
     test: bool = False,
     silent: bool = False,
 ) -> None:
-    """Move a job capsule from the job capsules Dandiset to the failed runs archive."""
+    """Archive one job capsule (--job) or every capsule with a --status."""
+    if (status is None) == (capsule_path is None):
+        message = "Provide exactly one of --status (failed|pending) or --job PATH."
+        raise click.UsageError(message)
+
     _configure_logging(silent=silent)
     _require_dandi_api_key()
-    move_job_capsule(capsule_path=capsule_path, processing_directory=processing_directory, test=test)
+    _require_dandi_devel()
+
+    if capsule_path is not None:
+        move_job_capsule(
+            capsule_path=capsule_path,
+            source_dandiset_id=dandiset_id,
+            target_dandiset_id=archive_dandiset_id,
+            processing_directory=processing_directory,
+            test=test,
+        )
+        if not silent:
+            _styled_echo(text=f"\nArchived job capsule: {capsule_path}", color="green")
+        return
+
+    if queue_directory is None:
+        message = "--queue is required when archiving by --status."
+        raise click.UsageError(message)
+
+    state = QueueState.from_jsonl(queue_directory / "state.jsonl")
+    archived = state.archive_by_status(
+        status=status,
+        dandiset_id=dandiset_id,
+        archive_dandiset_id=archive_dandiset_id,
+        processing_directory=processing_directory,
+        test=test,
+    )
+
     if not silent:
-        _styled_echo(text=f"\nArchived job capsule: {capsule_path}", color="green")
+        if archived:
+            _styled_echo(text=f"\nArchived {len(archived)} {status} job capsule(s):", color="green")
+            for capsule_path in archived:
+                _styled_echo(text=f"  {capsule_path}", color="green")
+        else:
+            _styled_echo(text=f"\nNo {status} job capsules to archive.", color="yellow")

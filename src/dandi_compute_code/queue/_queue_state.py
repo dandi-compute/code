@@ -24,7 +24,7 @@ import shutil
 import subprocess
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -45,6 +45,7 @@ from ._queue_utils import (
     _UpstreamMetadataCache,
 )
 from ..aind_ephys_pipeline import UnmappedContentIDError, prepare_aind_ephys_job
+from ..dandiset import move_job_capsule
 from ..dandiset._globals import _FAILED_RUNS_ARCHIVE_DANDISET_ID, _JOB_CAPSULES_DANDISET_ID
 from ..dandiset._load_assets_jsonld_metadata import (
     AssetMetadata,
@@ -177,6 +178,89 @@ class JobEntry:
                 return fallback_nested_attempt_dir
 
         return nested_attempt_dir
+
+    def capsule_path_candidates(self) -> tuple[str, str]:
+        """
+        Return ``(flat_layout_path, legacy_nested_layout_path)`` for this attempt as
+        paths relative to the Dandiset root (POSIX strings).
+
+        The remote-metadata counterpart of :meth:`attempt_dir_candidates`, used when
+        resolving a capsule's path against DANDI assets metadata rather than a local
+        Dandiset clone.
+
+        :raises ValueError: If this entry's ``dandi_path`` is an empty string.
+        """
+        if self.job.dandi_path == "":
+            message = f"Entry has invalid dandi_path field (empty): {self!r}"
+            raise ValueError(message)
+        normalized_dandi_path = self.job.dandi_path.removesuffix(".nwb")
+
+        pipeline_dir = (
+            f"derivatives/dandiset-{self.job.dandiset_id}/{normalized_dandi_path}/pipeline-{self.job.pipeline}"
+        )
+        flat_capsule_path = (
+            f"{pipeline_dir}/version-{self.job.version}_codebase-{self.job.codebase}"
+            f"_params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
+        )
+        nested_capsule_path = (
+            f"{pipeline_dir}/version-{self.job.version}"
+            f"/params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
+        )
+        return flat_capsule_path, nested_capsule_path
+
+    def resolve_capsule_path(self, asset_paths: Collection[str]) -> str:
+        """
+        Resolve the best capsule path (relative to the Dandiset root) for this entry
+        against a known set of remote asset paths, e.g. the keys of
+        :attr:`~dandi_compute_code.dandiset.AssetsJsonldMetadata.path_to_asset_metadata`.
+
+        The remote-metadata counterpart of :meth:`resolve_attempt_dir`: the same
+        flat/nested/fallback resolution order, but checked against *asset_paths*
+        membership instead of the local filesystem -- so this works purely from
+        DANDI metadata, without a local Dandiset clone.
+
+        :param asset_paths: Asset paths (POSIX strings) for the Dandiset this
+            entry's capsule lives in.
+        :type asset_paths: collections.abc.Collection[str]
+        """
+
+        def _has_assets_under(prefix: str) -> bool:
+            return any(path == prefix or path.startswith(f"{prefix}/") for path in asset_paths)
+
+        flat_capsule_path, nested_capsule_path = self.capsule_path_candidates()
+        if _has_assets_under(flat_capsule_path):
+            return flat_capsule_path
+        if _has_assets_under(nested_capsule_path):
+            return nested_capsule_path
+
+        dandiset_prefix = f"derivatives/dandiset-{self.job.dandiset_id}/"
+        if not any(path.startswith(dandiset_prefix) for path in asset_paths):
+            return nested_capsule_path
+
+        pipeline_dir_name = f"pipeline-{self.job.pipeline}"
+        flat_attempt_dir_name = (
+            f"version-{self.job.version}_codebase-{self.job.codebase}"
+            f"_params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
+        )
+        nested_attempt_dir_name = f"params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
+
+        pipeline_dir_marker = f"/{pipeline_dir_name}/"
+        pipeline_dirs = sorted(
+            {
+                path[: path.index(pipeline_dir_marker) + len(pipeline_dir_marker) - 1]
+                for path in asset_paths
+                if path.startswith(dandiset_prefix) and pipeline_dir_marker in path
+            }
+        )
+        for pipeline_dir in pipeline_dirs:
+            fallback_flat_capsule_path = f"{pipeline_dir}/{flat_attempt_dir_name}"
+            if _has_assets_under(fallback_flat_capsule_path):
+                return fallback_flat_capsule_path
+            fallback_nested_capsule_path = f"{pipeline_dir}/version-{self.job.version}/{nested_attempt_dir_name}"
+            if _has_assets_under(fallback_nested_capsule_path):
+                return fallback_nested_capsule_path
+
+        return nested_capsule_path
 
     def resolve_unsubmitted_attempt_dir(self, base_dir: pathlib.Path) -> pathlib.Path | None:
         """
@@ -735,6 +819,78 @@ class QueueState:
                 removed.append(attempt_dir)
 
         return removed
+
+    def archive_by_status(
+        self,
+        *,
+        status: Literal["failed", "pending"],
+        dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
+        archive_dandiset_id: str = _FAILED_RUNS_ARCHIVE_DANDISET_ID,
+        processing_directory: pathlib.Path | None = None,
+        test: bool = False,
+    ) -> list[str]:
+        """
+        Move every entry with the given *status* into the failed runs archive.
+
+        *status* names the :class:`QueueState` property selecting the entries to
+        archive: ``"failed"`` (:attr:`failed` — code and logs present, no output) or
+        ``"pending"`` (:attr:`pending` — code prepared but never submitted). For each
+        matching entry, resolves its capsule path against *dandiset_id*'s remote
+        ``assets.jsonld`` (see :meth:`JobEntry.resolve_capsule_path`, which accounts
+        for both the current flat attempt-directory layout and the legacy nested
+        layout) and moves the corresponding capsule from *dandiset_id* to
+        *archive_dandiset_id* via :func:`~dandi_compute_code.dandiset.move_job_capsule`.
+        Both Dandisets are addressed purely by ID -- everything is resolved and moved
+        ephemerally over the network, with no local Dandiset clone required.
+
+        :param status: Which subset of entries to archive.
+        :type status: typing.Literal["failed", "pending"]
+        :param dandiset_id: Dandiset entries are archived *from*. Defaults to the job
+            capsules Dandiset.
+        :type dandiset_id: str
+        :param archive_dandiset_id: Dandiset entries are archived *to*. Defaults to
+            the failed runs archive Dandiset.
+        :type archive_dandiset_id: str
+        :param processing_directory: Directory for the temporary working tree used by
+            each move (defaults to the system temporary location).
+        :type processing_directory: pathlib.Path | None
+        :param test: When ``True``, leave each temporary working tree on disk after a
+            successful move for debugging.
+        :type test: bool
+        :returns: Capsule paths (relative to the Dandiset root) that were archived,
+            in the order they were processed.
+        :rtype: list[str]
+        :raises RuntimeError: If ``DANDI_API_KEY`` is unset or blank, or if archiving
+            any individual capsule fails (see :func:`move_job_capsule`). A failure
+            leaves entries processed so far archived and stops before the rest.
+        :raises ValueError: If *status* is not ``"failed"`` or ``"pending"``.
+        """
+        if status not in ("failed", "pending"):
+            message = f"Unknown status {status!r}; expected 'failed' or 'pending'."
+            raise ValueError(message)
+
+        if not os.environ.get("DANDI_API_KEY", "").strip():
+            message = "`DANDI_API_KEY` environment variable is not set or is blank."
+            raise RuntimeError(message)
+
+        entries = getattr(self, status)
+        archived: list[str] = []
+        if not entries:
+            return archived
+
+        asset_paths = set(load_assets_jsonld_metadata(dandiset_id=dandiset_id).path_to_asset_metadata)
+        for entry in entries:
+            capsule_path = entry.resolve_capsule_path(asset_paths)
+            move_job_capsule(
+                capsule_path=capsule_path,
+                source_dandiset_id=dandiset_id,
+                target_dandiset_id=archive_dandiset_id,
+                processing_directory=processing_directory,
+                test=test,
+            )
+            archived.append(capsule_path)
+
+        return archived
 
     @classmethod
     def process_queue(
