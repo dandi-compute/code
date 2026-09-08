@@ -137,18 +137,22 @@ def test_cli_queue_refresh_does_not_require_dandi_api_key(tmp_path: pathlib.Path
 
 
 @pytest.mark.ai_generated
-def test_cli_queue_refresh_fails_without_queue_config(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh fails when queue_config.json is missing."""
+def test_cli_queue_refresh_falls_back_to_packaged_pipeline_config(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue refresh uses the packaged pipeline config when --queue has none."""
     queue_dir = tmp_path / "queue_directory"
     queue_dir.mkdir()
     runner = CliRunner()
-    result = runner.invoke(
-        _dandicompute_group,
-        ["queue", "refresh", "--queue", str(queue_dir)],
-        env={"DANDI_API_KEY": "test-key"},
-    )
-    assert result.exit_code != 0
-    assert "queue_config.json" in result.output
+    with mock.patch(
+        "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
+        return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
+    ):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["queue", "refresh", "--queue", str(queue_dir)],
+            env={"DANDI_API_KEY": "test-key"},
+        )
+    assert result.exit_code == 0, result.output
+    assert (queue_dir / "state.jsonl").exists()
 
 
 @pytest.mark.ai_generated
