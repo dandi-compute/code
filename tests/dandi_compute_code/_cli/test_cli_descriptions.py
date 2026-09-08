@@ -33,8 +33,8 @@ from dandi_compute_code._cli import _dandicompute_group
             "Move every failed job capsule into the failed runs archive.",
         ),
         (
-            ["archive", "unsubmitted", "--help"],
-            "Move every unsubmitted job capsule into the failed runs archive.",
+            ["archive", "pending", "--help"],
+            "Move every pending job capsule into the failed runs archive.",
         ),
     ],
 )
