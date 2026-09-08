@@ -832,45 +832,78 @@ def _archive_job_command(
         _styled_echo(text=f"\nArchived job capsule: {capsule_path}", color="green")
 
 
+def _archive_by_status_options(command: click.Command) -> click.Command:
+    """Shared ``--queue``/``--dandiset``/``--processing``/``--test``/``--silent`` options."""
+    command = click.option(
+        "--queue",
+        "queue_directory",
+        help="Path to the queue root directory (containing state.jsonl).",
+        required=True,
+        type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    )(command)
+    command = click.option(
+        "--dandiset",
+        "dandiset_directory",
+        help="Path to a local clone of the job capsules dandiset, used to resolve capsule paths.",
+        required=True,
+        type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    )(command)
+    command = click.option(
+        "--processing",
+        "processing_directory",
+        help="Directory for the temporary working tree (defaults to the system temporary location).",
+        required=False,
+        type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+        default=None,
+    )(command)
+    command = click.option(
+        "--test",
+        "test",
+        help="Preserve the temporary working tree instead of cleaning it up.",
+        required=False,
+        is_flag=True,
+        default=False,
+    )(command)
+    command = click.option(
+        "--silent",
+        help="Suppress informational log output.",
+        required=False,
+        is_flag=True,
+        default=False,
+    )(command)
+    return command
+
+
+def _run_archive_by_status_command(
+    *,
+    status: str,
+    queue_directory: pathlib.Path,
+    dandiset_directory: pathlib.Path,
+    processing_directory: pathlib.Path | None,
+    test: bool,
+    silent: bool,
+) -> None:
+    """Shared body for the ``archive failed``/``archive unsubmitted`` commands."""
+    _configure_logging(silent=silent)
+    _require_dandi_api_key()
+
+    state = QueueState.from_jsonl(queue_directory / "state.jsonl")
+    archived = state.archive_by_status(
+        status=status, dandiset_directory=dandiset_directory, processing_directory=processing_directory, test=test
+    )
+
+    if not silent:
+        if archived:
+            _styled_echo(text=f"\nArchived {len(archived)} {status} job capsule(s):", color="green")
+            for capsule_path in archived:
+                _styled_echo(text=f"  {capsule_path}", color="green")
+        else:
+            _styled_echo(text=f"\nNo {status} job capsules to archive.", color="yellow")
+
+
 # dandicompute archive failed [OPTIONS]
 @_archive_group.command(name="failed")
-@click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory (containing state.jsonl).",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
-@click.option(
-    "--dandiset",
-    "dandiset_directory",
-    help="Path to a local clone of the job capsules dandiset, used to resolve failed capsule paths.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
-@click.option(
-    "--processing",
-    "processing_directory",
-    help="Directory for the temporary working tree (defaults to the system temporary location).",
-    required=False,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
-)
-@click.option(
-    "--test",
-    "test",
-    help="Preserve the temporary working tree instead of cleaning it up.",
-    required=False,
-    is_flag=True,
-    default=False,
-)
-@click.option(
-    "--silent",
-    help="Suppress informational log output.",
-    required=False,
-    is_flag=True,
-    default=False,
-)
+@_archive_by_status_options
 def _archive_failed_command(
     queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
@@ -879,62 +912,19 @@ def _archive_failed_command(
     silent: bool = False,
 ) -> None:
     """Move every failed job capsule into the failed runs archive."""
-    _configure_logging(silent=silent)
-    _require_dandi_api_key()
-
-    state = QueueState.from_jsonl(queue_directory / "state.jsonl")
-    archived = state.archive_failed(
-        dandiset_directory=dandiset_directory, processing_directory=processing_directory, test=test
+    _run_archive_by_status_command(
+        status="failed",
+        queue_directory=queue_directory,
+        dandiset_directory=dandiset_directory,
+        processing_directory=processing_directory,
+        test=test,
+        silent=silent,
     )
-
-    if not silent:
-        if archived:
-            _styled_echo(text=f"\nArchived {len(archived)} failed job capsule(s):", color="green")
-            for capsule_path in archived:
-                _styled_echo(text=f"  {capsule_path}", color="green")
-        else:
-            _styled_echo(text="\nNo failed job capsules to archive.", color="yellow")
 
 
 # dandicompute archive unsubmitted [OPTIONS]
 @_archive_group.command(name="unsubmitted")
-@click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory (containing state.jsonl).",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
-@click.option(
-    "--dandiset",
-    "dandiset_directory",
-    help="Path to a local clone of the job capsules dandiset, used to resolve unsubmitted capsule paths.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
-@click.option(
-    "--processing",
-    "processing_directory",
-    help="Directory for the temporary working tree (defaults to the system temporary location).",
-    required=False,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
-)
-@click.option(
-    "--test",
-    "test",
-    help="Preserve the temporary working tree instead of cleaning it up.",
-    required=False,
-    is_flag=True,
-    default=False,
-)
-@click.option(
-    "--silent",
-    help="Suppress informational log output.",
-    required=False,
-    is_flag=True,
-    default=False,
-)
+@_archive_by_status_options
 def _archive_unsubmitted_command(
     queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
@@ -943,18 +933,11 @@ def _archive_unsubmitted_command(
     silent: bool = False,
 ) -> None:
     """Move every unsubmitted job capsule into the failed runs archive."""
-    _configure_logging(silent=silent)
-    _require_dandi_api_key()
-
-    state = QueueState.from_jsonl(queue_directory / "state.jsonl")
-    archived = state.archive_unsubmitted(
-        dandiset_directory=dandiset_directory, processing_directory=processing_directory, test=test
+    _run_archive_by_status_command(
+        status="unsubmitted",
+        queue_directory=queue_directory,
+        dandiset_directory=dandiset_directory,
+        processing_directory=processing_directory,
+        test=test,
+        silent=silent,
     )
-
-    if not silent:
-        if archived:
-            _styled_echo(text=f"\nArchived {len(archived)} unsubmitted job capsule(s):", color="green")
-            for capsule_path in archived:
-                _styled_echo(text=f"  {capsule_path}", color="green")
-        else:
-            _styled_echo(text="\nNo unsubmitted job capsules to archive.", color="yellow")
