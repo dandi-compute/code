@@ -1,12 +1,10 @@
 """
-Private helpers for the :mod:`._queue_state` OOP model.
+Private helpers for the :mod:`._queue_state` model.
 
 This companion module holds the lower-level utilities the ``QueueState`` /
 ``JobEntry`` model depends on (assets-path parsing, attempt-record construction,
 upstream-metadata lookup, queue-config validation, content-id ordering, and log
-parsing). It deliberately reimplements the behavior of the sibling procedural
-queue helpers so the model does not call them. The duplication is temporary,
-kept until those procedural functions are removed in favor of the model.
+parsing).
 """
 
 from __future__ import annotations

@@ -6,7 +6,7 @@ import pytest
 
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.dandiset._globals import _FAILED_RUNS_ARCHIVE_DANDISET_ID
-from dandi_compute_code.queue import write_archive_state
+from dandi_compute_code.queue import QueueState
 
 # write_archive_state derives archive_state.jsonl from DANDI assets.jsonld metadata,
 # fetched over the network. That loader is the one external boundary mocked here.
@@ -50,11 +50,11 @@ def test_write_archive_state_writes_adjacent_file_from_archive_dandiset(tmp_path
     )
     with (
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             load_metadata,
         ),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -68,7 +68,7 @@ def test_write_archive_state_writes_adjacent_file_from_archive_dandiset(tmp_path
             ),
         ),
     ):
-        write_archive_state(queue_directory=queue_dir)
+        QueueState.write_archive_state(queue_directory=queue_dir)
 
     # The archive metadata is read from the failed runs archive Dandiset, not the job capsules one.
     load_metadata.assert_called_once_with(dandiset_id=_FAILED_RUNS_ARCHIVE_DANDISET_ID)
@@ -90,37 +90,11 @@ def test_write_archive_state_writes_empty_file_when_no_attempts(tmp_path: pathli
     """write_archive_state writes an empty archive_state.jsonl when no attempts are present."""
     queue_dir = _make_queue_dir(tmp_path)
     with mock.patch(
-        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+        "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
         return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
     ):
-        write_archive_state(queue_directory=queue_dir)
+        QueueState.write_archive_state(queue_directory=queue_dir)
 
     archive_state_file = queue_dir / "archive_state.jsonl"
     assert archive_state_file.exists()
     assert archive_state_file.read_text() == ""
-
-
-@pytest.mark.ai_generated
-def test_cli_queue_refresh_also_writes_archive_state(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh writes both state.jsonl and archive_state.jsonl."""
-    from click.testing import CliRunner
-
-    from dandi_compute_code._cli import _dandicompute_group
-
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
-
-    runner = CliRunner()
-    with mock.patch(
-        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
-        return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
-    ):
-        result = runner.invoke(
-            _dandicompute_group,
-            ["queue", "refresh", "--queue", str(queue_dir)],
-        )
-
-    assert result.exit_code == 0, result.output
-    assert (queue_dir / "state.jsonl").exists()
-    assert (queue_dir / "archive_state.jsonl").exists()

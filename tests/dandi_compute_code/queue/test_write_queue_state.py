@@ -5,7 +5,7 @@ from unittest import mock
 import pytest
 
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
-from dandi_compute_code.queue import QueueState, write_queue_state
+from dandi_compute_code.queue import QueueState
 
 # write_queue_state derives state.jsonl from DANDI assets.jsonld metadata fetched over
 # the network. The conftest _no_real_dandi_fetch guard defaults that loader to empty;
@@ -41,7 +41,7 @@ def test_write_queue_state_raises_when_queue_config_fails_linkml_validation(tmp_
     (queue_dir / "queue_config.json").write_text(json.dumps(invalid_queue_config))
 
     with pytest.raises(ValueError, match="LinkML validation failed"):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
 
 
 @pytest.mark.ai_generated
@@ -51,10 +51,10 @@ def test_write_queue_state_writes_empty_files_for_missing_dandiset_directory(tmp
 
     content_id_to_asset: dict[str, dict[str, object]] = {}
     with mock.patch(
-        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+        "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
         return_value=AssetsJsonldMetadata(content_id_to_asset=content_id_to_asset, path_to_asset_metadata={}),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
     assert (queue_dir / "state.jsonl").exists()
     assert (queue_dir / "state.jsonl").read_text() == ""
 
@@ -87,15 +87,15 @@ def test_write_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.
     }
     with (
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata=attempt_metadata_by_path),
         ),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata=source_metadata_by_path),
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 5
@@ -118,7 +118,7 @@ def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pat
     )
     with (
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -132,7 +132,7 @@ def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pat
             ),
         ),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -146,7 +146,7 @@ def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pat
             ),
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
 
@@ -189,13 +189,13 @@ def test_write_queue_state_submitted_marker_sets_has_been_submitted(tmp_path: pa
         },
     )
     with (
-        mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata),
+        mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
     assert state_entries[0]["has_code"] is True
@@ -275,13 +275,13 @@ def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_
         },
     )
     with (
-        mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata),
+        mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
@@ -328,7 +328,7 @@ def test_write_queue_state_with_dandiset_directory_creates_valid_files(tmp_path:
     )
     with (
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -342,7 +342,7 @@ def test_write_queue_state_with_dandiset_directory_creates_valid_files(tmp_path:
             ),
         ),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -356,7 +356,7 @@ def test_write_queue_state_with_dandiset_directory_creates_valid_files(tmp_path:
             ),
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
     state_file = queue_dir / "state.jsonl"
     assert state_file.exists()
     lines = [line for line in state_file.read_text().splitlines() if line.strip()]
@@ -396,7 +396,7 @@ def test_write_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathlib
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -410,7 +410,7 @@ def test_write_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathlib
             ),
         ),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -424,7 +424,7 @@ def test_write_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathlib
             ),
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
 
     state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
     assert len(state_records) == 1
@@ -460,7 +460,7 @@ def test_write_queue_state_writes_resolved_dandi_path_for_root_level_asset(tmp_p
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -474,7 +474,7 @@ def test_write_queue_state_writes_resolved_dandi_path_for_root_level_asset(tmp_p
             ),
         ),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -488,7 +488,7 @@ def test_write_queue_state_writes_resolved_dandi_path_for_root_level_asset(tmp_p
             ),
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
 
     state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
     assert len(state_records) == 1
@@ -503,10 +503,10 @@ def test_write_queue_state_with_dandiset_directory_empty_when_no_attempts(tmp_pa
     queue_dir.mkdir()
     (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
     with mock.patch(
-        "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+        "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
         return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
     state_file = queue_dir / "state.jsonl"
     assert state_file.exists()
     assert state_file.read_text() == ""
@@ -521,11 +521,11 @@ def test_write_queue_state_does_not_require_dandi_api_key(tmp_path: pathlib.Path
     with (
         mock.patch.dict("os.environ", {}, clear=True),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
 
 
 @pytest.mark.ai_generated
@@ -589,13 +589,13 @@ def test_write_queue_state_with_dandiset_directory_includes_only_pending_in_wait
         },
     )
     with (
-        mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata),
+        mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
 
     state_lines = [line for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
     assert len(state_lines) == 2
@@ -631,7 +631,7 @@ def test_write_queue_state_with_dandiset_directory_excludes_entries_with_submitt
     )
     with (
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -645,7 +645,7 @@ def test_write_queue_state_with_dandiset_directory_excludes_entries_with_submitt
             ),
         ),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(
                 content_id_to_asset={},
                 path_to_asset_metadata={
@@ -659,7 +659,7 @@ def test_write_queue_state_with_dandiset_directory_excludes_entries_with_submitt
             ),
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
 
     state_lines = [line for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
     assert len(state_lines) == 1
@@ -716,13 +716,13 @@ def test_write_queue_state_parses_codebase_field_from_new_format_path(tmp_path: 
         },
     )
     with (
-        mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata),
+        mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
@@ -765,13 +765,13 @@ def test_write_queue_state_output_paths_empty_when_no_output(tmp_path: pathlib.P
         },
     )
     with (
-        mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata),
+        mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
@@ -811,13 +811,13 @@ def test_write_queue_state_log_paths_empty_when_no_logs(tmp_path: pathlib.Path) 
         },
     )
     with (
-        mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata),
+        mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
@@ -868,13 +868,13 @@ def test_write_queue_state_output_paths_maps_asset_paths_to_blob_ids(tmp_path: p
         },
     )
     with (
-        mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata),
+        mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1
@@ -940,13 +940,13 @@ def test_write_queue_state_log_paths_map_asset_paths_to_blob_ids(tmp_path: pathl
         },
     )
     with (
-        mock.patch("dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=metadata),
+        mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
         mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
             return_value=upstream_metadata,
         ),
     ):
-        write_queue_state(queue_directory=queue_dir)
+        QueueState.write_state(queue_directory=queue_dir)
 
     state_entries = _read_jsonl(queue_dir / "state.jsonl")
     assert len(state_entries) == 1

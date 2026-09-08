@@ -1,10 +1,8 @@
 """
-Shared fixtures for the queue test suite.
+Shared fixtures for the ``QueueState`` model test suite.
 
-The literal example queue lives in ``example_state_files/state.jsonl`` and is
-loaded and materialized by the plain helpers in ``testing_utilities.py``. These
-fixtures provide only what genuinely needs pytest: temporary directories and
-environment or network setup.
+The network guard targets the binding used by the model
+(:mod:`dandi_compute_code.queue._queue_state`).
 """
 
 import json
@@ -16,6 +14,10 @@ from unittest import mock
 import pytest
 
 from dandi_compute_code.dandiset import AssetsJsonldMetadata
+from dandi_compute_code.queue import QueueState
+
+#: The committed example queue used as ground truth across the model tests.
+EXAMPLE_STATE_FILE = pathlib.Path(__file__).parent / "example_state_files" / "state.jsonl"
 
 #: Consolidated queue config used by tests that need a populated queue directory.
 EXAMPLE_QUEUE_CONFIG = {
@@ -36,19 +38,13 @@ def mock_dandi_assets_metadata() -> Iterator[None]:
     """
     Default the DANDI ``assets.jsonld`` loaders to empty so no test hits the network.
 
-    ``write_queue_state`` (and therefore ``queue refresh``) fetches assets metadata
-    from the DANDI archive. This guard makes that return empty by default. Tests
-    that need specific metadata override these with their own ``mock.patch``.
+    ``QueueState.write_state`` (and ``from_dandi`` / ``pending_code_dirs``) fetch
+    assets metadata from the DANDI archive via the ``_queue_state`` binding. This
+    guard makes that return empty by default. Tests that need specific metadata
+    override these with their own ``mock.patch``.
     """
     empty_metadata = AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={})
     with (
-        mock.patch(
-            "dandi_compute_code.queue._write_queue_state.load_assets_jsonld_metadata", return_value=empty_metadata
-        ),
-        mock.patch(
-            "dandi_compute_code.queue._write_queue_state._load_upstream_assets_jsonld_metadata",
-            return_value=empty_metadata,
-        ),
         mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=empty_metadata),
         mock.patch(
             "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
@@ -58,12 +54,10 @@ def mock_dandi_assets_metadata() -> Iterator[None]:
         yield
 
 
-@pytest.fixture(autouse=True)
-def redirect_oop_failsafe_log(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
-    """Redirect the OOP-failsafe log directory to a temporary one so tests never write under ``$HOME``."""
-    log_directory = tmp_path_factory.mktemp("oop_failsafe")
-    with mock.patch.dict(os.environ, {"DANDICOMPUTE_OOP_FAILSAFE_LOG": str(log_directory)}):
-        yield
+@pytest.fixture
+def example_queue_state() -> QueueState:
+    """The committed example queue (``example_state_files/state.jsonl``) loaded into a fresh model."""
+    return QueueState.from_jsonl(EXAMPLE_STATE_FILE)
 
 
 @pytest.fixture

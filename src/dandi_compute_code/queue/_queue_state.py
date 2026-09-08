@@ -2,8 +2,7 @@
 QueueState — typed container for ``state.jsonl``.
 
 ``state.jsonl`` is a newline-delimited JSON file where each line is one attempt
-capsule.  Previously every consumer read it into a ``list[dict]`` and accessed
-fields by string key.  This module adds a thin typed layer on top:
+capsule. This module provides the typed model over it:
 
 - :class:`JobEntry` wraps an existing :class:`JobInfo` with the status fields
   (``has_code``, ``has_output``, ``has_logs``, ``content_id``, ...).
@@ -327,13 +326,7 @@ class JobEntry:
 
 @dataclass
 class QueueState:
-    """
-    Container for all entries in ``state.jsonl``.
-
-    Replaces the scattered ``list[dict]`` reads in ``_prepare_queue.py``,
-    ``_aggregate_queue_statistics.py``, ``_process_queue.py``, and
-    ``_clean_unsubmitted_capsules.py``.
-    """
+    """Container for all entries in ``state.jsonl``."""
 
     entries: list[JobEntry]
 
