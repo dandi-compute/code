@@ -2,33 +2,9 @@ import json
 import pathlib
 
 import pytest
+from testing_utilities import write_attempt_logs
 
-from dandi_compute_code.queue import dump_issues, summarize_issues
-
-
-def _write_attempt_logs(
-    *,
-    dandiset_directory: pathlib.Path,
-    dandiset_id: str,
-    subject: str,
-    attempt: int,
-    nextflow_lines: list[str],
-    slurm_lines_by_file: dict[str, list[str]],
-) -> pathlib.Path:
-    logs_dir = (
-        dandiset_directory
-        / "derivatives"
-        / f"dandiset-{dandiset_id}"
-        / f"sub-{subject}"
-        / "pipeline-test"
-        / f"version-v1.0_params-default_config-abc123_attempt-{attempt}"
-        / "logs"
-    )
-    logs_dir.mkdir(parents=True)
-    (logs_dir / "nextflow.log").write_text("\n".join(nextflow_lines) + "\n")
-    for file_name, lines in slurm_lines_by_file.items():
-        (logs_dir / file_name).write_text("\n".join(lines) + "\n")
-    return logs_dir
+from dandi_compute_code.queue import QueueState
 
 
 @pytest.mark.ai_generated
@@ -38,7 +14,7 @@ def test_dump_issues_writes_per_capsule_records(tmp_path: pathlib.Path) -> None:
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
 
-    _write_attempt_logs(
+    write_attempt_logs(
         dandiset_directory=dandiset_dir,
         dandiset_id="000001",
         subject="mouse01",
@@ -46,7 +22,7 @@ def test_dump_issues_writes_per_capsule_records(tmp_path: pathlib.Path) -> None:
         nextflow_lines=["INFO start", "ERROR ~ Process failed"],
         slurm_lines_by_file={"job-123_slurm.log": ["slurm ok", "srun: error: node failure"]},
     )
-    _write_attempt_logs(
+    write_attempt_logs(
         dandiset_directory=dandiset_dir,
         dandiset_id="000001",
         subject="mouse02",
@@ -55,7 +31,7 @@ def test_dump_issues_writes_per_capsule_records(tmp_path: pathlib.Path) -> None:
         slurm_lines_by_file={"job-456_slurm.log": ["all good"]},
     )
 
-    records = dump_issues(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    records = QueueState.dump_issues(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
     dump_payload = json.loads((queue_dir / "issues_dump.json").read_text())
 
     assert len(records) == 1
@@ -72,7 +48,7 @@ def test_summarize_issues_writes_descending_frequency(tmp_path: pathlib.Path) ->
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
 
-    _write_attempt_logs(
+    write_attempt_logs(
         dandiset_directory=dandiset_dir,
         dandiset_id="000001",
         subject="mouse01",
@@ -80,7 +56,7 @@ def test_summarize_issues_writes_descending_frequency(tmp_path: pathlib.Path) ->
         nextflow_lines=["error: common failure", "error: unique failure"],
         slurm_lines_by_file={"job-001_slurm.log": ["error: common failure"]},
     )
-    _write_attempt_logs(
+    write_attempt_logs(
         dandiset_directory=dandiset_dir,
         dandiset_id="000002",
         subject="mouse02",
@@ -89,7 +65,7 @@ def test_summarize_issues_writes_descending_frequency(tmp_path: pathlib.Path) ->
         slurm_lines_by_file={"job-002_slurm.log": ["done"]},
     )
 
-    summary = summarize_issues(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
+    summary = QueueState.summarize_issues(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
     summary_payload = json.loads((queue_dir / "issues_summary.json").read_text())
 
     assert summary == {"3": ["error: common failure"], "1": ["error: unique failure"]}

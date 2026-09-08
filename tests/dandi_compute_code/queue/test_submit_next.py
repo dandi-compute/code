@@ -6,9 +6,9 @@ from unittest import mock
 import pytest
 
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
-from dandi_compute_code.queue._submit_next import _submit_next
+from dandi_compute_code.queue import QueueState
 
-# _submit_next reaches three external boundaries that cannot run in CI: the
+# QueueState.submit_next reaches three external boundaries that cannot run in CI: the
 # assets.jsonld metadata loader (network), the dandi/sbatch subprocess calls, and
 # the temporary working directory. All are mocked; the metadata built below is the
 # ground-truth input describing which capsules are pending.
@@ -71,7 +71,7 @@ def test_submit_next_returns_false_when_max_submissions_less_than_one(tmp_path: 
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
 
-    result = _submit_next(processing_directory=processing_dir, max_submissions=0)
+    result = QueueState.submit_next(processing_directory=processing_dir, max_submissions=0)
 
     assert result is False
 
@@ -85,13 +85,13 @@ def test_submit_next_returns_false_and_logs_when_no_eligible_entries(
     processing_dir.mkdir()
 
     with (
-        caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._submit_next"),
+        caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._queue_state"),
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
         ),
     ):
-        result = _submit_next(processing_directory=processing_dir)
+        result = QueueState.submit_next(processing_directory=processing_dir)
 
     assert result is False
     assert any("No eligible pending entries" in record.message for record in caplog.records)
@@ -108,13 +108,13 @@ def test_submit_next_returns_false_when_all_submit_sh_have_submitted_marker(
     metadata = _make_metadata_with_submitted(_EXAMPLE_CODE_DIR_PATH)
 
     with (
-        caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._submit_next"),
+        caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._queue_state"),
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
     ):
-        result = _submit_next(processing_directory=processing_dir)
+        result = QueueState.submit_next(processing_directory=processing_dir)
 
     assert result is False
     assert any("No eligible pending entries" in record.message for record in caplog.records)
@@ -132,18 +132,18 @@ def test_submit_next_calls_dandi_download_for_unsubmitted_candidate(tmp_path: pa
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
-            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            "dandi_compute_code.queue._queue_state.tempfile.mkdtemp",
             return_value=str(fixed_temp_dir),
         ) as mock_mkdtemp,
-        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
-        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree"),
+        mock.patch("dandi_compute_code.queue._queue_state.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._queue_state.shutil.rmtree"),
     ):
         mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
-        _submit_next(processing_directory=processing_dir)
+        QueueState.submit_next(processing_directory=processing_dir)
 
     expected_url = f"dandi://dandi/001697/{_EXAMPLE_CODE_DIR_PATH}/"
     mock_mkdtemp.assert_called_once_with(dir=processing_dir, prefix="submit-next-")
@@ -164,18 +164,18 @@ def test_submit_next_calls_sbatch_with_submit_sh_path(tmp_path: pathlib.Path) ->
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
-            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            "dandi_compute_code.queue._queue_state.tempfile.mkdtemp",
             return_value=str(fixed_temp_dir),
         ),
-        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
-        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree"),
+        mock.patch("dandi_compute_code.queue._queue_state.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._queue_state.shutil.rmtree"),
     ):
         mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
-        _submit_next(processing_directory=processing_dir)
+        QueueState.submit_next(processing_directory=processing_dir)
 
     sbatch_call = mock_run.call_args_list[1]
     expected_submit_sh = (fixed_temp_dir / "001697" / _EXAMPLE_CODE_DIR_PATH / "submit.sh").absolute()
@@ -195,20 +195,20 @@ def test_submit_next_writes_submitted_marker_adjacent_to_submit_sh(
     metadata = _make_metadata_with_submit_sh(_EXAMPLE_CODE_DIR_PATH)
 
     with (
-        caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._submit_next"),
+        caplog.at_level(logging.INFO, logger="dandi_compute_code.queue._queue_state"),
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
-            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            "dandi_compute_code.queue._queue_state.tempfile.mkdtemp",
             return_value=str(fixed_temp_dir),
         ),
-        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
-        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree"),
+        mock.patch("dandi_compute_code.queue._queue_state.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._queue_state.shutil.rmtree"),
     ):
         mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
-        result = _submit_next(processing_directory=processing_dir)
+        result = QueueState.submit_next(processing_directory=processing_dir)
 
     assert result is True
     marker_files = list((fixed_temp_dir / "001697" / _EXAMPLE_CODE_DIR_PATH).glob("submitted_date-*"))
@@ -235,18 +235,18 @@ def test_submit_next_calls_dandi_upload_with_allow_any_path(tmp_path: pathlib.Pa
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
-            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            "dandi_compute_code.queue._queue_state.tempfile.mkdtemp",
             return_value=str(fixed_temp_dir),
         ),
-        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
-        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree"),
+        mock.patch("dandi_compute_code.queue._queue_state.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._queue_state.shutil.rmtree"),
     ):
         mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
-        _submit_next(processing_directory=processing_dir)
+        QueueState.submit_next(processing_directory=processing_dir)
 
     upload_call = mock_run.call_args_list[2]
     assert upload_call.args[0] == ["dandi", "upload", "--allow-any-path"]
@@ -265,18 +265,18 @@ def test_submit_next_cleans_up_temp_dir_on_success(tmp_path: pathlib.Path) -> No
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
-            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            "dandi_compute_code.queue._queue_state.tempfile.mkdtemp",
             return_value=str(fixed_temp_dir),
         ),
-        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
-        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree") as mock_rmtree,
+        mock.patch("dandi_compute_code.queue._queue_state.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._queue_state.shutil.rmtree") as mock_rmtree,
     ):
         mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
-        _submit_next(processing_directory=processing_dir)
+        QueueState.submit_next(processing_directory=processing_dir)
 
     mock_rmtree.assert_called_once_with(fixed_temp_dir)
 
@@ -298,18 +298,18 @@ def test_submit_next_does_not_clean_up_temp_dir_on_download_failure(tmp_path: pa
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
-            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            "dandi_compute_code.queue._queue_state.tempfile.mkdtemp",
             return_value=str(fixed_temp_dir),
         ),
-        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run", return_value=failed_result),
-        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree") as mock_rmtree,
+        mock.patch("dandi_compute_code.queue._queue_state.subprocess.run", return_value=failed_result),
+        mock.patch("dandi_compute_code.queue._queue_state.shutil.rmtree") as mock_rmtree,
     ):
         with pytest.raises(RuntimeError, match="dandi download failed"):
-            _submit_next(processing_directory=processing_dir)
+            QueueState.submit_next(processing_directory=processing_dir)
 
     mock_rmtree.assert_not_called()
 
@@ -326,18 +326,18 @@ def test_submit_next_does_not_clean_up_temp_dir_in_test_mode(tmp_path: pathlib.P
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
-            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            "dandi_compute_code.queue._queue_state.tempfile.mkdtemp",
             return_value=str(fixed_temp_dir),
         ),
-        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
-        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree") as mock_rmtree,
+        mock.patch("dandi_compute_code.queue._queue_state.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._queue_state.shutil.rmtree") as mock_rmtree,
     ):
         mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
-        _submit_next(processing_directory=processing_dir, test=True)
+        QueueState.submit_next(processing_directory=processing_dir, test=True)
 
     mock_rmtree.assert_not_called()
 
@@ -366,18 +366,18 @@ def test_submit_next_submits_up_to_max_submissions(tmp_path: pathlib.Path) -> No
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
-            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            "dandi_compute_code.queue._queue_state.tempfile.mkdtemp",
             side_effect=lambda **kw: next(temp_dir_iter),
         ),
-        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
-        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree"),
+        mock.patch("dandi_compute_code.queue._queue_state.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._queue_state.shutil.rmtree"),
     ):
         mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
-        result = _submit_next(processing_directory=processing_dir, max_submissions=2)
+        result = QueueState.submit_next(processing_directory=processing_dir, max_submissions=2)
 
     assert result is True
     # 3 calls per submission (download, sbatch, upload) × 2 submissions = 6
@@ -414,18 +414,18 @@ def test_submit_next_skips_candidates_with_submitted_in_metadata(tmp_path: pathl
 
     with (
         mock.patch(
-            "dandi_compute_code.queue._find_pending_entries.load_assets_jsonld_metadata",
+            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
             return_value=metadata,
         ),
         mock.patch(
-            "dandi_compute_code.queue._submit_next.tempfile.mkdtemp",
+            "dandi_compute_code.queue._queue_state.tempfile.mkdtemp",
             return_value=str(fixed_temp_dir),
         ),
-        mock.patch("dandi_compute_code.queue._submit_next.subprocess.run") as mock_run,
-        mock.patch("dandi_compute_code.queue._submit_next.shutil.rmtree"),
+        mock.patch("dandi_compute_code.queue._queue_state.subprocess.run") as mock_run,
+        mock.patch("dandi_compute_code.queue._queue_state.shutil.rmtree"),
     ):
         mock_run.side_effect = lambda cmd, **kw: _download_side_effect(cmd, **kw)
-        result = _submit_next(processing_directory=processing_dir, max_submissions=1)
+        result = QueueState.submit_next(processing_directory=processing_dir, max_submissions=1)
 
     assert result is True
     # Only one submission happened → 3 subprocess calls

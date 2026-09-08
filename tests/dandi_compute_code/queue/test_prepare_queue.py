@@ -4,9 +4,8 @@ import pathlib
 from unittest import mock
 
 import pytest
-from testing_utilities import copy_state_file
 
-from dandi_compute_code.queue import prepare_queue
+from dandi_compute_code.queue import QueueState
 
 # prepare_queue reaches two external boundaries that cannot run in CI: the
 # qualifying-content-ids download (urllib) and the per-asset job preparation
@@ -37,7 +36,7 @@ def test_prepare_queue_raises_when_queue_config_fails_linkml_validation(tmp_path
     (queue_dir / "queue_config.json").write_text(json.dumps(invalid_queue_config))
 
     with pytest.raises(ValueError, match="LinkML validation failed"):
-        prepare_queue(queue_directory=queue_dir, content_ids=[])
+        QueueState.prepare(queue_directory=queue_dir, content_ids=[])
 
 
 @pytest.mark.ai_generated
@@ -48,13 +47,13 @@ def test_prepare_queue_calls_prepare_for_each_qualifying_asset(queue_directory: 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
         mock.patch(
-            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_usage_dandiset_path",
+            "dandi_compute_code.queue._queue_utils._load_content_id_to_usage_dandiset_path",
             return_value={},
         ),
-        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(queue_directory=queue_directory)
+        QueueState.prepare(queue_directory=queue_directory)
 
     assert mock_prepare.call_count == 2
     prepared_ids = {call.kwargs["content_id"] for call in mock_prepare.call_args_list}
@@ -62,23 +61,25 @@ def test_prepare_queue_calls_prepare_for_each_qualifying_asset(queue_directory: 
 
 
 @pytest.mark.ai_generated
-def test_prepare_queue_skips_when_failures_reach_max(queue_directory: pathlib.Path) -> None:
+def test_prepare_queue_skips_when_failures_reach_max(
+    example_queue_state: QueueState, queue_directory: pathlib.Path
+) -> None:
     """prepare_queue skips assets for dandisets whose failure count reaches max_fail_per_dandiset."""
     # The example queue records repeated failures for dandiset 000001 (reaching
     # max_fail_per_dandiset) mapped to asset-aaa, and a fresh asset in 000002 mapped to asset-bbb.
-    copy_state_file(queue_directory)
+    example_queue_state.to_file(queue_directory / "state.jsonl")
     qualifying_ids = ["asset-aaa", "asset-bbb"]
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
         mock.patch(
-            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_usage_dandiset_path",
+            "dandi_compute_code.queue._queue_utils._load_content_id_to_usage_dandiset_path",
             return_value={},
         ),
-        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(queue_directory=queue_directory)
+        QueueState.prepare(queue_directory=queue_directory)
 
     assert mock_prepare.call_count == 1
     prepared_ids = [call.kwargs["content_id"] for call in mock_prepare.call_args_list]
@@ -95,13 +96,13 @@ def test_prepare_queue_passes_optional_args_through(queue_directory: pathlib.Pat
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
         mock.patch(
-            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_usage_dandiset_path",
+            "dandi_compute_code.queue._queue_utils._load_content_id_to_usage_dandiset_path",
             return_value={},
         ),
-        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(
+        QueueState.prepare(
             queue_directory=queue_directory,
             pipeline_directory=fake_pipeline_dir,
             config_key="mit+engaging+revision-1",
@@ -121,13 +122,13 @@ def test_prepare_queue_limit_stops_after_n_assets(queue_directory: pathlib.Path)
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
         mock.patch(
-            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_usage_dandiset_path",
+            "dandi_compute_code.queue._queue_utils._load_content_id_to_usage_dandiset_path",
             return_value={},
         ),
-        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(queue_directory=queue_directory, limit=2)
+        QueueState.prepare(queue_directory=queue_directory, limit=2)
 
     assert mock_prepare.call_count == 2
 
@@ -145,17 +146,17 @@ def test_prepare_queue_limit_samples_uniformly_over_dandisets(queue_directory: p
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
         mock.patch(
-            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_usage_dandiset_path",
+            "dandi_compute_code.queue._queue_utils._load_content_id_to_usage_dandiset_path",
             return_value=content_id_mapping,
         ),
         mock.patch(
-            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling.random.shuffle",
+            "dandi_compute_code.queue._queue_utils.random.shuffle",
             side_effect=lambda items: None,
         ) as mock_shuffle,
-        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        prepare_queue(queue_directory=queue_directory, limit=2)
+        QueueState.prepare(queue_directory=queue_directory, limit=2)
 
     prepared_ids = [call.kwargs["content_id"] for call in mock_prepare.call_args_list]
     assert prepared_ids == ["asset-a1", "asset-b1"]
@@ -170,7 +171,7 @@ def test_prepare_queue_limit_samples_uniformly_over_dandisets(queue_directory: p
 
 @pytest.mark.ai_generated
 def test_prepare_queue_excludes_non_qualifying_content_ids(queue_directory: pathlib.Path) -> None:
-    """prepare_queue only prepares content IDs whose remote cache entry is True.
+    """QueueState.prepare only prepares content IDs whose remote cache entry is True.
 
     Regression test for the real cache format: each JSONL line is a
     ``{content_id: qualifies}`` object covering every content ID that qualifies for the
@@ -187,13 +188,13 @@ def test_prepare_queue_excludes_non_qualifying_content_ids(queue_directory: path
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
         mock.patch(
-            "dandi_compute_code.queue._order_content_ids_for_uniform_dandiset_sampling._load_content_id_to_usage_dandiset_path",
+            "dandi_compute_code.queue._queue_utils._load_content_id_to_usage_dandiset_path",
             return_value={},
         ),
-        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = mock_response
-        prepare_queue(queue_directory=queue_directory)
+        QueueState.prepare(queue_directory=queue_directory)
 
     assert mock_prepare.call_count == 1
     assert mock_prepare.call_args.kwargs["content_id"] == "asset-bbb"
@@ -206,9 +207,9 @@ def test_prepare_queue_uses_explicit_content_ids_when_provided(queue_directory: 
 
     with (
         mock.patch("urllib.request.urlopen") as mock_urlopen,
-        mock.patch("dandi_compute_code.queue._prepare_queue.prepare_aind_ephys_job") as mock_prepare,
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_aind_ephys_job") as mock_prepare,
     ):
-        prepare_queue(queue_directory=queue_directory, content_ids=explicit_ids)
+        QueueState.prepare(queue_directory=queue_directory, content_ids=explicit_ids)
 
     mock_urlopen.assert_not_called()
     assert mock_prepare.call_count == 1

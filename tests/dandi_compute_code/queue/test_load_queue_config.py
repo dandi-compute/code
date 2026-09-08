@@ -3,7 +3,7 @@ import pathlib
 
 import pytest
 
-from dandi_compute_code.queue._load_queue_config import _load_queue_config
+from dandi_compute_code.queue import QueueState
 
 _ISSUE_EXAMPLE_QUEUE_CONFIG = {
     "pipelines": {
@@ -25,6 +25,6 @@ def test_load_queue_config_validates_issue_example_schema(tmp_path: pathlib.Path
     queue_dir.mkdir()
     (queue_dir / "queue_config.json").write_text(json.dumps(_ISSUE_EXAMPLE_QUEUE_CONFIG))
 
-    loaded = _load_queue_config(queue_directory=queue_dir)
+    loaded = QueueState.load_queue_config(queue_directory=queue_dir)
 
     assert loaded == _ISSUE_EXAMPLE_QUEUE_CONFIG

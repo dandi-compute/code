@@ -8,11 +8,9 @@ from click.testing import CliRunner
 from dandi_compute_code._cli import _dandicompute_group
 from dandi_compute_code.queue import TEST_QUEUE_CONTENT_ID
 
-# These tests exercise CLI argument wiring. Each command first attempts the new
-# OOP ``QueueState`` model (see ``_oop_failsafe``); the model methods are mocked
-# here so only the delegation (option parsing and forwarded kwargs) is under
-# test. Fallback-to-current-behavior and failure logging are covered separately
-# in ``test_cli_oop_failsafe.py``.
+# These tests exercise CLI argument wiring. Each command delegates directly to
+# the ``QueueState`` model, so the model methods are mocked here to isolate the
+# delegation (option parsing and forwarded kwargs) under test.
 
 _GROUP = "dandi_compute_code._cli._dandicompute_group"
 
@@ -37,7 +35,6 @@ def test_cli_prepare_test_calls_prepare_with_test_content_id(tmp_path: pathlib.P
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
         mock.patch(f"{_GROUP}.QueueState.prepare") as mock_prepare,
-        mock.patch(f"{_GROUP}.prepare_queue") as mock_prepare_queue,
     ):
         result = runner.invoke(_dandicompute_group, ["prepare", "aind", "--test", "--queue", str(queue_dir)])
 
@@ -48,7 +45,6 @@ def test_cli_prepare_test_calls_prepare_with_test_content_id(tmp_path: pathlib.P
         pipeline_directory=None,
         config_key="default",
     )
-    mock_prepare_queue.assert_not_called()
 
 
 @pytest.mark.ai_generated
@@ -127,10 +123,7 @@ def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
     mock_state.clean_unsubmitted_capsules.return_value = fake_removed
     runner = CliRunner()
 
-    with (
-        mock.patch(f"{_GROUP}.QueueState.from_jsonl", return_value=mock_state) as mock_from_jsonl,
-        mock.patch(f"{_GROUP}.clean_unsubmitted_capsules") as mock_clean,
-    ):
+    with mock.patch(f"{_GROUP}.QueueState.from_jsonl", return_value=mock_state) as mock_from_jsonl:
         result = runner.invoke(
             _dandicompute_group,
             ["queue", "clean", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
@@ -140,7 +133,6 @@ def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
     assert result.exit_code == 0, result.output
     mock_from_jsonl.assert_called_once_with(queue_dir / "state.jsonl")
     mock_state.clean_unsubmitted_capsules.assert_called_once_with(dandiset_directory=dandiset_dir)
-    mock_clean.assert_not_called()
     assert "Cleaned 1 unsubmitted capsule" in result.output
 
 
@@ -179,10 +171,7 @@ def test_cli_queue_stats_calls_helper_and_reports_output(tmp_path: pathlib.Path)
     mock_state.aggregate_statistics.return_value = {"successful_asset_bytes_total": 0}
     runner = CliRunner()
 
-    with (
-        mock.patch(f"{_GROUP}.QueueState.from_jsonl", return_value=mock_state),
-        mock.patch(f"{_GROUP}.aggregate_queue_statistics") as mock_stats,
-    ):
+    with mock.patch(f"{_GROUP}.QueueState.from_jsonl", return_value=mock_state):
         result = runner.invoke(
             _dandicompute_group,
             ["queue", "stats", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
@@ -194,7 +183,6 @@ def test_cli_queue_stats_calls_helper_and_reports_output(tmp_path: pathlib.Path)
         dandiset_directory=dandiset_dir,
         output_file_name="queue_stats.json",
     )
-    mock_stats.assert_not_called()
     assert "Wrote queue aggregate statistics" in result.output
 
 
@@ -207,10 +195,7 @@ def test_cli_issues_dump_calls_helper(tmp_path: pathlib.Path) -> None:
     dandiset_dir.mkdir()
 
     runner = CliRunner()
-    with (
-        mock.patch(f"{_GROUP}.QueueState.dump_issues", return_value=[]) as mock_dump,
-        mock.patch(f"{_GROUP}.dump_issues") as mock_dump_fallback,
-    ):
+    with mock.patch(f"{_GROUP}.QueueState.dump_issues", return_value=[]) as mock_dump:
         result = runner.invoke(
             _dandicompute_group,
             ["issues", "dump", "--directory", str(dandiset_dir), "--queue", str(queue_dir)],
@@ -218,7 +203,6 @@ def test_cli_issues_dump_calls_helper(tmp_path: pathlib.Path) -> None:
 
     assert result.exit_code == 0, result.output
     mock_dump.assert_called_once_with(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
-    mock_dump_fallback.assert_not_called()
     assert "Wrote issue dump" in result.output
 
 
@@ -231,10 +215,7 @@ def test_cli_issues_summarize_calls_helper(tmp_path: pathlib.Path) -> None:
     dandiset_dir.mkdir()
 
     runner = CliRunner()
-    with (
-        mock.patch(f"{_GROUP}.QueueState.summarize_issues", return_value={}) as mock_summarize,
-        mock.patch(f"{_GROUP}.summarize_issues") as mock_summarize_fallback,
-    ):
+    with mock.patch(f"{_GROUP}.QueueState.summarize_issues", return_value={}) as mock_summarize:
         result = runner.invoke(
             _dandicompute_group,
             ["issues", "summarize", "--directory", str(dandiset_dir), "--queue", str(queue_dir)],
@@ -242,7 +223,6 @@ def test_cli_issues_summarize_calls_helper(tmp_path: pathlib.Path) -> None:
 
     assert result.exit_code == 0, result.output
     mock_summarize.assert_called_once_with(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
-    mock_summarize_fallback.assert_not_called()
     assert "Wrote issue summary" in result.output
 
 
