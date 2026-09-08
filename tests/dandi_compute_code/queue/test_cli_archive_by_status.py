@@ -56,12 +56,25 @@ def test_cli_archive_by_status_rejects_unknown_status(tmp_path: pathlib.Path) ->
 
 
 @pytest.mark.ai_generated
+def test_cli_archive_by_status_fails_without_dandi_devel(tmp_path: pathlib.Path) -> None:
+    """CLI errors when DANDI_DEVEL is missing, since archive_by_status relies on `dandi upload`'s devel-only flags."""
+    runner = CliRunner()
+    queue_dir = _make_queue_dir(tmp_path)
+
+    with mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}, clear=True):
+        result = runner.invoke(_dandicompute_group, ["archive", "--status", "failed", "--queue", str(queue_dir)])
+
+    assert result.exit_code != 0
+    assert "DANDI_DEVEL" in result.output
+
+
+@pytest.mark.ai_generated
 @pytest.mark.parametrize("status", ["failed", "pending"])
 def test_cli_archive_by_status_requires_queue(status: str, tmp_path: pathlib.Path) -> None:
     """dandicompute archive --status without --queue is rejected with a clear error."""
     runner = CliRunner()
 
-    with mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
+    with mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"}):
         result = runner.invoke(_dandicompute_group, ["archive", "--status", status])
 
     assert result.exit_code != 0
@@ -76,7 +89,7 @@ def test_cli_archive_by_status_invokes_archive_by_status_with_defaults(status: s
     queue_dir = _make_queue_dir(tmp_path)
 
     with (
-        mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}),
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"}),
         mock.patch(
             f"{_GROUP}.QueueState.archive_by_status", return_value=["derivatives/example-attempt"]
         ) as mock_archive,
@@ -104,7 +117,7 @@ def test_cli_archive_by_status_forwards_custom_dandiset_ids(tmp_path: pathlib.Pa
     processing_dir.mkdir()
 
     with (
-        mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}),
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"}),
         mock.patch(
             f"{_GROUP}.QueueState.archive_by_status", return_value=["derivatives/example-attempt"]
         ) as mock_archive,
@@ -145,7 +158,7 @@ def test_cli_archive_by_status_reports_nothing_to_archive(status: str, tmp_path:
     queue_dir = _make_queue_dir(tmp_path)
 
     with (
-        mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}),
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"}),
         mock.patch(f"{_GROUP}.QueueState.archive_by_status", return_value=[]) as mock_archive,
     ):
         result = runner.invoke(_dandicompute_group, ["archive", "--status", status, "--queue", str(queue_dir)])

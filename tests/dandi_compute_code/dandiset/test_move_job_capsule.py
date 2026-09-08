@@ -274,11 +274,24 @@ def test_cli_archive_job_fails_without_api_key(tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.ai_generated
+def test_cli_archive_job_fails_without_dandi_devel(tmp_path: pathlib.Path) -> None:
+    """CLI errors when DANDI_DEVEL is missing, since move_job_capsule relies on `dandi upload`'s devel-only flags."""
+    runner = CliRunner()
+    with mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}, clear=True):
+        result = runner.invoke(
+            _dandicompute_group,
+            ["archive", "--job", _EXAMPLE_CAPSULE_PATH],
+        )
+    assert result.exit_code != 0
+    assert "DANDI_DEVEL" in result.output
+
+
+@pytest.mark.ai_generated
 def test_cli_archive_job_invokes_move(tmp_path: pathlib.Path) -> None:
     """dandicompute archive --job calls move_job_capsule with the provided path."""
     runner = CliRunner()
     with (
-        mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}),
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"}),
         mock.patch("dandi_compute_code._cli._dandicompute_group.move_job_capsule") as mock_move,
     ):
         result = runner.invoke(
@@ -301,7 +314,7 @@ def test_cli_archive_job_forwards_custom_dandiset_ids(tmp_path: pathlib.Path) ->
     """dandicompute archive --job forwards --dandiset-id/--archive-dandiset-id to move_job_capsule."""
     runner = CliRunner()
     with (
-        mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}),
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"}),
         mock.patch("dandi_compute_code._cli._dandicompute_group.move_job_capsule") as mock_move,
     ):
         result = runner.invoke(

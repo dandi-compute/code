@@ -865,6 +865,7 @@ def _archive_command(
 
     _configure_logging(silent=silent)
     _require_dandi_api_key()
+    _require_dandi_devel()
 
     if capsule_path is not None:
         move_job_capsule(
