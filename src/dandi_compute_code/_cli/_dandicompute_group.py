@@ -832,23 +832,30 @@ def _archive_job_command(
         _styled_echo(text=f"\nArchived job capsule: {capsule_path}", color="green")
 
 
-# Shared options for the `archive failed` / `archive pending` commands below, applied
-# by stacking each decorator directly rather than through a decorator-composing helper.
-_archive_queue_directory_option = click.option(
+# dandicompute archive by-status [OPTIONS]
+@_archive_group.command(name="by-status")
+@click.option(
+    "--status",
+    "status",
+    help="Which subset of queued jobs to archive.",
+    required=True,
+    type=click.Choice(["failed", "pending"]),
+)
+@click.option(
     "--queue",
     "queue_directory",
     help="Path to the queue root directory (containing state.jsonl).",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
-_archive_dandiset_directory_option = click.option(
+@click.option(
     "--dandiset",
     "dandiset_directory",
     help="Path to a local clone of the job capsules dandiset, used to resolve capsule paths.",
     required=True,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
-_archive_processing_directory_option = click.option(
+@click.option(
     "--processing",
     "processing_directory",
     help="Directory for the temporary working tree (defaults to the system temporary location).",
@@ -856,7 +863,7 @@ _archive_processing_directory_option = click.option(
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
     default=None,
 )
-_archive_test_flag_option = click.option(
+@click.option(
     "--test",
     "test",
     help="Preserve the temporary working tree instead of cleaning it up.",
@@ -864,25 +871,22 @@ _archive_test_flag_option = click.option(
     is_flag=True,
     default=False,
 )
-_archive_silent_flag_option = click.option(
+@click.option(
     "--silent",
     help="Suppress informational log output.",
     required=False,
     is_flag=True,
     default=False,
 )
-
-
-def _run_archive_by_status_command(
-    *,
+def _archive_by_status_command(
     status: str,
     queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
-    processing_directory: pathlib.Path | None,
-    test: bool,
-    silent: bool,
+    processing_directory: pathlib.Path | None = None,
+    test: bool = False,
+    silent: bool = False,
 ) -> None:
-    """Shared body for the ``archive failed``/``archive pending`` commands."""
+    """Move every job capsule with the given --status into the failed runs archive."""
     _configure_logging(silent=silent)
     _require_dandi_api_key()
 
@@ -898,53 +902,3 @@ def _run_archive_by_status_command(
                 _styled_echo(text=f"  {capsule_path}", color="green")
         else:
             _styled_echo(text=f"\nNo {status} job capsules to archive.", color="yellow")
-
-
-# dandicompute archive failed [OPTIONS]
-@_archive_group.command(name="failed")
-@_archive_queue_directory_option
-@_archive_dandiset_directory_option
-@_archive_processing_directory_option
-@_archive_test_flag_option
-@_archive_silent_flag_option
-def _archive_failed_command(
-    queue_directory: pathlib.Path,
-    dandiset_directory: pathlib.Path,
-    processing_directory: pathlib.Path | None = None,
-    test: bool = False,
-    silent: bool = False,
-) -> None:
-    """Move every failed job capsule into the failed runs archive."""
-    _run_archive_by_status_command(
-        status="failed",
-        queue_directory=queue_directory,
-        dandiset_directory=dandiset_directory,
-        processing_directory=processing_directory,
-        test=test,
-        silent=silent,
-    )
-
-
-# dandicompute archive pending [OPTIONS]
-@_archive_group.command(name="pending")
-@_archive_queue_directory_option
-@_archive_dandiset_directory_option
-@_archive_processing_directory_option
-@_archive_test_flag_option
-@_archive_silent_flag_option
-def _archive_pending_command(
-    queue_directory: pathlib.Path,
-    dandiset_directory: pathlib.Path,
-    processing_directory: pathlib.Path | None = None,
-    test: bool = False,
-    silent: bool = False,
-) -> None:
-    """Move every pending job capsule into the failed runs archive."""
-    _run_archive_by_status_command(
-        status="pending",
-        queue_directory=queue_directory,
-        dandiset_directory=dandiset_directory,
-        processing_directory=processing_directory,
-        test=test,
-        silent=silent,
-    )

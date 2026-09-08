@@ -29,12 +29,8 @@ from dandi_compute_code._cli import _dandicompute_group
             "Move a job capsule from the job capsules Dandiset to the failed runs archive.",
         ),
         (
-            ["archive", "failed", "--help"],
-            "Move every failed job capsule into the failed runs archive.",
-        ),
-        (
-            ["archive", "pending", "--help"],
-            "Move every pending job capsule into the failed runs archive.",
+            ["archive", "by-status", "--help"],
+            "Move every job capsule with the given --status into the failed runs archive.",
         ),
     ],
 )
