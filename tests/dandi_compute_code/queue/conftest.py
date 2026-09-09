@@ -17,7 +17,7 @@ from dandi_compute_code.dandiset import AssetsJsonldMetadata
 from dandi_compute_code.queue import QueueState
 
 #: The committed example queue used as ground truth across the model tests.
-EXAMPLE_STATE_FILE = pathlib.Path(__file__).parent / "example_state_files" / "state.jsonl"
+EXAMPLE_STATE_FILE = pathlib.Path(__file__).parent / "example_state_files" / "state.tsv"
 
 #: Consolidated queue config used by tests that need a populated queue directory.
 EXAMPLE_QUEUE_CONFIG = {
@@ -56,8 +56,8 @@ def mock_dandi_assets_metadata() -> Iterator[None]:
 
 @pytest.fixture
 def example_queue_state() -> QueueState:
-    """The committed example queue (``example_state_files/state.jsonl``) loaded into a fresh model."""
-    return QueueState.from_jsonl(EXAMPLE_STATE_FILE)
+    """The committed example queue (``example_state_files/state.tsv``) loaded into a fresh model."""
+    return QueueState.from_tsv(EXAMPLE_STATE_FILE)
 
 
 @pytest.fixture

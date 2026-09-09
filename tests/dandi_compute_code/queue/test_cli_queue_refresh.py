@@ -8,6 +8,7 @@ from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
+from dandi_compute_code.queue import JobEntry, JobInfo, QueueState
 
 _JOB_CAPSULES_DANDISET_ID = "001697"
 _FAILED_RUNS_ARCHIVE_DANDISET_ID = "001873"
@@ -16,7 +17,7 @@ _DANDI_ENV = {"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"}
 
 @pytest.mark.ai_generated
 def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh writes state.jsonl from assets metadata."""
+    """dandicompute queue refresh writes state.tsv from assets metadata."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     (queue_dir / "queue_config.json").write_text(
@@ -76,8 +77,8 @@ def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> No
             env=_DANDI_ENV,
         )
     assert result.exit_code == 0, result.output
-    assert (queue_dir / "state.jsonl").exists()
-    state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
+    assert (queue_dir / "state.tsv").exists()
+    state_records = [entry.to_dict() for entry in QueueState.from_tsv(queue_dir / "state.tsv")]
     assert len(state_records) == 1
     assert state_records[0]["dandiset_id"] == "001697"
     assert state_records[0]["content_id"] == content_id
@@ -147,21 +148,25 @@ def test_cli_queue_refresh_does_not_require_dandiset_directory(tmp_path: pathlib
     """dandicompute queue refresh runs without --dandiset."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
-    entry = {
-        "dandiset_id": "000001",
-        "dandi_path": "sub-mouse01",
-        "pipeline": "aind+ephys",
-        "version": "v1.0",
-        "params": "abc1234",
-        "config": "def5678",
-        "attempt": 1,
-        "codebase": "v0.3.0",
-        "has_code": True,
-        "has_output": False,
-        "has_logs": False,
-        "created_at": "2024-01-01T00:00:00+00:00",
-    }
-    (queue_dir / "state.jsonl").write_text(json.dumps(entry) + "\n")
+    entry = JobEntry(
+        job=JobInfo(
+            dandiset_id="000001",
+            dandi_path="sub-mouse01",
+            pipeline="aind+ephys",
+            version="v1.0",
+            params="abc1234",
+            config="def5678",
+            attempt=1,
+            codebase="v0.3.0",
+        ),
+        content_id=None,
+        asset_size_bytes=None,
+        has_code=True,
+        has_output=False,
+        has_logs=False,
+        created_at="2024-01-01T00:00:00+00:00",
+    )
+    QueueState(entries=[entry]).to_tsv(queue_dir / "state.tsv")
     (queue_dir / "queue_config.json").write_text(
         json.dumps(
             {
@@ -225,7 +230,7 @@ def test_cli_queue_refresh_falls_back_to_packaged_pipeline_config(tmp_path: path
             env=_DANDI_ENV,
         )
     assert result.exit_code == 0, result.output
-    assert (queue_dir / "state.jsonl").exists()
+    assert (queue_dir / "state.tsv").exists()
 
 
 @pytest.mark.ai_generated

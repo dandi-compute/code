@@ -5,9 +5,9 @@ from unittest import mock
 import pytest
 
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
-from dandi_compute_code.queue import QueueState
+from dandi_compute_code.queue import JobEntry, JobInfo, QueueState
 
-# write_queue_state derives state.jsonl from DANDI assets.jsonld metadata fetched over
+# write_queue_state derives state.tsv from DANDI assets.jsonld metadata fetched over
 # the network. The conftest _no_real_dandi_fetch guard defaults that loader to empty;
 # tests that need specific metadata override it with their own mock.patch. The assets
 # metadata built in each test is the ground-truth input under test.
@@ -23,8 +23,8 @@ def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
     return queue_dir
 
 
-def _read_jsonl(file_path: pathlib.Path) -> list[dict]:
-    return [json.loads(line) for line in file_path.read_text().splitlines() if line.strip()]
+def _read_tsv(file_path: pathlib.Path) -> list[dict]:
+    return [entry.to_dict() for entry in QueueState.from_tsv(file_path)]
 
 
 @pytest.mark.ai_generated
@@ -55,8 +55,8 @@ def test_write_queue_state_writes_empty_files_for_missing_dandiset_directory(tmp
         return_value=AssetsJsonldMetadata(content_id_to_asset=content_id_to_asset, path_to_asset_metadata={}),
     ):
         QueueState.write_state(queue_directory=queue_dir)
-    assert (queue_dir / "state.jsonl").exists()
-    assert (queue_dir / "state.jsonl").read_text() == ""
+    assert (queue_dir / "state.tsv").exists()
+    assert len(QueueState.from_tsv(queue_dir / "state.tsv")) == 0
 
 
 @pytest.mark.ai_generated
@@ -97,7 +97,7 @@ def test_write_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.
     ):
         QueueState.write_state(queue_directory=queue_dir)
 
-    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    state_entries = _read_tsv(queue_dir / "state.tsv")
     assert len(state_entries) == 5
     assert all(
         entry["has_code"] and not entry["has_been_submitted"] and not entry["has_output"] and not entry["has_logs"]
@@ -147,7 +147,7 @@ def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pat
         ),
     ):
         QueueState.write_state(queue_directory=queue_dir)
-    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    state_entries = _read_tsv(queue_dir / "state.tsv")
     assert len(state_entries) == 1
 
 
@@ -196,7 +196,7 @@ def test_write_queue_state_submitted_marker_sets_has_been_submitted(tmp_path: pa
         ),
     ):
         QueueState.write_state(queue_directory=queue_dir)
-    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    state_entries = _read_tsv(queue_dir / "state.tsv")
     assert len(state_entries) == 1
     assert state_entries[0]["has_code"] is True
     assert state_entries[0]["has_been_submitted"] is True
@@ -283,7 +283,7 @@ def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_
     ):
         QueueState.write_state(queue_directory=queue_dir)
 
-    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    state_entries = _read_tsv(queue_dir / "state.tsv")
     assert len(state_entries) == 1
     assert state_entries[0]["dandiset_id"] == "001849"
     assert state_entries[0]["dandi_path"] == source_path
@@ -305,7 +305,7 @@ def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_
 
 @pytest.mark.ai_generated
 def test_write_queue_state_with_dandiset_directory_creates_valid_files(tmp_path: pathlib.Path) -> None:
-    """write_queue_state writes state.jsonl from assets.jsonld metadata."""
+    """write_queue_state writes state.tsv from assets.jsonld metadata."""
     content_id = "0fbbca6a-0000-0000-0000-000000000001"
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_path = (
@@ -357,11 +357,11 @@ def test_write_queue_state_with_dandiset_directory_creates_valid_files(tmp_path:
         ),
     ):
         QueueState.write_state(queue_directory=queue_dir)
-    state_file = queue_dir / "state.jsonl"
+    state_file = queue_dir / "state.tsv"
     assert state_file.exists()
-    lines = [line for line in state_file.read_text().splitlines() if line.strip()]
-    assert len(lines) == 1
-    record = json.loads(lines[0])
+    records = _read_tsv(state_file)
+    assert len(records) == 1
+    record = records[0]
     assert record["dandiset_id"] == "001697"
     assert record["content_id"] == content_id
     assert record["dandi_path"] == source_path
@@ -371,7 +371,7 @@ def test_write_queue_state_with_dandiset_directory_creates_valid_files(tmp_path:
 
 @pytest.mark.ai_generated
 def test_write_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Path) -> None:
-    """write_queue_state writes assets.jsonld-resolved source path in state.jsonl."""
+    """write_queue_state writes assets.jsonld-resolved source path in state.tsv."""
     content_id = "0fbbca6a-0000-0000-0000-000000000001"
     asset_size_bytes = 1234
     resolved_asset_path = "sub-mouse01/sub-mouse01_ses-ses001_obj-raw.nwb"
@@ -426,7 +426,7 @@ def test_write_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathlib
     ):
         QueueState.write_state(queue_directory=queue_dir)
 
-    state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
+    state_records = _read_tsv(queue_dir / "state.tsv")
     assert len(state_records) == 1
     assert state_records[0]["asset_size_bytes"] == asset_size_bytes
     assert state_records[0]["dandi_path"] == resolved_asset_path
@@ -490,7 +490,7 @@ def test_write_queue_state_writes_resolved_dandi_path_for_root_level_asset(tmp_p
     ):
         QueueState.write_state(queue_directory=queue_dir)
 
-    state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
+    state_records = _read_tsv(queue_dir / "state.tsv")
     assert len(state_records) == 1
     assert state_records[0]["asset_size_bytes"] == asset_size_bytes
     assert state_records[0]["dandi_path"] == root_asset_path
@@ -507,9 +507,9 @@ def test_write_queue_state_with_dandiset_directory_empty_when_no_attempts(tmp_pa
         return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
     ):
         QueueState.write_state(queue_directory=queue_dir)
-    state_file = queue_dir / "state.jsonl"
+    state_file = queue_dir / "state.tsv"
     assert state_file.exists()
-    assert state_file.read_text() == ""
+    assert len(QueueState.from_tsv(state_file)) == 0
 
 
 @pytest.mark.ai_generated
@@ -530,7 +530,7 @@ def test_write_queue_state_does_not_require_dandi_api_key(tmp_path: pathlib.Path
 
 @pytest.mark.ai_generated
 def test_write_queue_state_with_dandiset_directory_includes_only_pending_in_waiting(tmp_path: pathlib.Path) -> None:
-    """state.jsonl contains all entries derived from assets metadata."""
+    """state.tsv contains all entries derived from assets metadata."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
     (queue_dir / "queue_config.json").write_text(
@@ -597,9 +597,8 @@ def test_write_queue_state_with_dandiset_directory_includes_only_pending_in_wait
     ):
         QueueState.write_state(queue_directory=queue_dir)
 
-    state_lines = [line for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
-    assert len(state_lines) == 2
-    state_records = [json.loads(line) for line in state_lines]
+    state_records = _read_tsv(queue_dir / "state.tsv")
+    assert len(state_records) == 2
     assert {record["dandi_path"] for record in state_records} == {
         "sub-mouse01/sub-mouse01_ecephys.nwb",
         "sub-mouse02/sub-mouse02_ecephys.nwb",
@@ -661,9 +660,8 @@ def test_write_queue_state_with_dandiset_directory_excludes_entries_with_submitt
     ):
         QueueState.write_state(queue_directory=queue_dir)
 
-    state_lines = [line for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
-    assert len(state_lines) == 1
-    state_records = [json.loads(line) for line in state_lines]
+    state_records = _read_tsv(queue_dir / "state.tsv")
+    assert len(state_records) == 1
     assert state_records[0]["dandi_path"] == "sub-mouse01/sub-mouse01_ecephys.nwb"
 
 
@@ -724,7 +722,7 @@ def test_write_queue_state_parses_codebase_field_from_new_format_path(tmp_path: 
     ):
         QueueState.write_state(queue_directory=queue_dir)
 
-    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    state_entries = _read_tsv(queue_dir / "state.tsv")
     assert len(state_entries) == 1
     assert state_entries[0]["version"] == "v1.1.1"
     assert state_entries[0]["params"] == "4af6a25"
@@ -773,7 +771,7 @@ def test_write_queue_state_output_paths_empty_when_no_output(tmp_path: pathlib.P
     ):
         QueueState.write_state(queue_directory=queue_dir)
 
-    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    state_entries = _read_tsv(queue_dir / "state.tsv")
     assert len(state_entries) == 1
     assert state_entries[0]["has_output"] is False
     assert state_entries[0]["dataset_description_path"] == {}
@@ -819,7 +817,7 @@ def test_write_queue_state_log_paths_empty_when_no_logs(tmp_path: pathlib.Path) 
     ):
         QueueState.write_state(queue_directory=queue_dir)
 
-    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    state_entries = _read_tsv(queue_dir / "state.tsv")
     assert len(state_entries) == 1
     assert state_entries[0]["has_logs"] is False
     assert state_entries[0]["log_paths"] == {}
@@ -876,7 +874,7 @@ def test_write_queue_state_output_paths_maps_asset_paths_to_blob_ids(tmp_path: p
     ):
         QueueState.write_state(queue_directory=queue_dir)
 
-    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    state_entries = _read_tsv(queue_dir / "state.tsv")
     assert len(state_entries) == 1
     assert state_entries[0]["has_output"] is True
     assert state_entries[0]["output_paths"] == {
@@ -948,7 +946,7 @@ def test_write_queue_state_log_paths_map_asset_paths_to_blob_ids(tmp_path: pathl
     ):
         QueueState.write_state(queue_directory=queue_dir)
 
-    state_entries = _read_jsonl(queue_dir / "state.jsonl")
+    state_entries = _read_tsv(queue_dir / "state.tsv")
     assert len(state_entries) == 1
     assert state_entries[0]["has_logs"] is True
     assert state_entries[0]["dataset_description_path"] == {
@@ -961,63 +959,60 @@ def test_write_queue_state_log_paths_map_asset_paths_to_blob_ids(tmp_path: pathl
 
 
 @pytest.mark.ai_generated
-def test_queue_state_from_jsonl_preserves_dataset_description_path(tmp_path: pathlib.Path) -> None:
-    """QueueState.from_jsonl preserves dataset_description_path entries."""
-    state_file = tmp_path / "state.jsonl"
-    state_file.write_text(
-        json.dumps(
-            {
-                "dandiset_id": "001697",
-                "dandi_path": "sub-mouse01/sub-mouse01_ecephys.nwb",
-                "pipeline": "aind+ephys",
-                "version": "v1.0",
-                "params": "abc1234",
-                "config": "def5678",
-                "attempt": 1,
-                "codebase": "v0.3.0",
-                "dataset_description_path": {
-                    "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
-                    "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/"
-                    "dataset_description.json": "dataset-description-id"
-                },
-            }
-        )
-        + "\n"
-    )
-
-    queue_state = QueueState.from_jsonl(state_file)
-
-    assert len(queue_state) == 1
-    assert queue_state.entries[0].dataset_description_path == {
+def test_queue_state_from_tsv_preserves_dataset_description_path(tmp_path: pathlib.Path) -> None:
+    """QueueState.from_tsv preserves dataset_description_path entries."""
+    state_file = tmp_path / "state.tsv"
+    dataset_description_path = {
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
         "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/"
         "dataset_description.json": "dataset-description-id"
     }
+    entry = JobEntry(
+        job=JobInfo(
+            dandiset_id="001697",
+            dandi_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+            pipeline="aind+ephys",
+            version="v1.0",
+            params="abc1234",
+            config="def5678",
+            attempt=1,
+            codebase="v0.3.0",
+        ),
+        content_id=None,
+        asset_size_bytes=None,
+        dataset_description_path=dataset_description_path,
+    )
+    QueueState(entries=[entry]).to_tsv(state_file)
+
+    queue_state = QueueState.from_tsv(state_file)
+
+    assert len(queue_state) == 1
+    assert queue_state.entries[0].dataset_description_path == dataset_description_path
 
 
-def test_queue_state_null_dataset_description_path(
+def test_queue_state_empty_dataset_description_path_cell(
     tmp_path: pathlib.Path,
 ) -> None:
-    """QueueState.from_jsonl converts null dataset_description_path values to empty dicts."""
-    state_file = tmp_path / "state.jsonl"
-    state_file.write_text(
-        json.dumps(
-            {
-                "dandiset_id": "001697",
-                "dandi_path": "sub-mouse01/sub-mouse01_ecephys.nwb",
-                "pipeline": "aind+ephys",
-                "version": "v1.0",
-                "params": "abc1234",
-                "config": "def5678",
-                "attempt": 1,
-                "codebase": "v0.3.0",
-                "dataset_description_path": None,
-            }
-        )
-        + "\n"
+    """QueueState.from_tsv converts an empty dataset_description_path cell to an empty dict."""
+    state_file = tmp_path / "state.tsv"
+    entry = JobEntry(
+        job=JobInfo(
+            dandiset_id="001697",
+            dandi_path="sub-mouse01/sub-mouse01_ecephys.nwb",
+            pipeline="aind+ephys",
+            version="v1.0",
+            params="abc1234",
+            config="def5678",
+            attempt=1,
+            codebase="v0.3.0",
+        ),
+        content_id=None,
+        asset_size_bytes=None,
+        dataset_description_path={},
     )
+    QueueState(entries=[entry]).to_tsv(state_file)
 
-    queue_state = QueueState.from_jsonl(state_file)
+    queue_state = QueueState.from_tsv(state_file)
 
     assert len(queue_state) == 1
     assert queue_state.entries[0].dataset_description_path == {}

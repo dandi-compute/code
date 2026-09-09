@@ -1,9 +1,9 @@
 # Example queue state
 
-`state.jsonl` is a single static example of a queue `state.jsonl` file.
+`state.tsv` is a single static example of a queue `state.tsv` file.
 It is the shared ground truth for the queue test suite.
 
-Each line is one job capsule, matching the format produced by `QueueState.to_file` and consumed by `QueueState.from_jsonl`.
+Each row is one job capsule, matching the format produced by `QueueState.to_tsv` and consumed by `QueueState.from_tsv`.
 Tests load the file through the fixtures in `../conftest.py` and select the entry they need by its `dandi_path`, which is named to describe the scenario it covers.
 
 The empty-queue case is written inline by the few tests that need it rather than kept as a file.

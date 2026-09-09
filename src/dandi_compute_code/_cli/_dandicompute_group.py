@@ -322,9 +322,9 @@ def _queue_refresh_command(
     silent: bool = False,
 ) -> None:
     """
-    Regenerate state.jsonl/archive_state.jsonl and republish state.tsv.
+    Regenerate state.tsv/archive_state.tsv and republish state.tsv.
 
-    Writes state.jsonl and archive_state.jsonl under --queue (see QueueState.write_state /
+    Writes state.tsv and archive_state.tsv under --queue (see QueueState.write_state /
     write_archive_state), then ephemerally rebuilds and republishes derivatives/state.tsv within
     both the source and archived Dandisets themselves, so each always reflects its current state.
     """
@@ -337,7 +337,7 @@ def _queue_refresh_command(
         QueueState.write_state(
             queue_directory=queue_directory,
             dandiset_id=archive_dandiset_id,
-            state_file_name="archive_state.jsonl",
+            state_file_name="archive_state.tsv",
         )
     except FileNotFoundError as error:
         raise click.ClickException(str(error)) from error
@@ -384,7 +384,7 @@ def _queue_clean_command(
     _configure_logging(silent=silent)
     _require_dandi_api_key()
 
-    state = QueueState.from_jsonl(queue_directory / "state.jsonl")
+    state = QueueState.from_tsv(queue_directory / "state.tsv")
     removed = state.clean_unsubmitted_capsules(dandiset_directory=dandiset_directory)
     if removed:
         if not silent:
@@ -434,10 +434,10 @@ def _queue_stats_command(
     output_file_name: str = "queue_stats.json",
     silent: bool = False,
 ) -> None:
-    """Write aggregate queue statistics from state.jsonl and timeline reports."""
+    """Write aggregate queue statistics from state.tsv and timeline reports."""
     _configure_logging(silent=silent)
 
-    state = QueueState.from_jsonl(queue_directory / "state.jsonl")
+    state = QueueState.from_tsv(queue_directory / "state.tsv")
     state.aggregate_statistics(
         queue_directory=queue_directory,
         dandiset_directory=dandiset_directory,
@@ -768,7 +768,7 @@ def _delete_version_command(dandiset_directory: pathlib.Path, version: str, sile
 @click.option(
     "--queue",
     "queue_directory",
-    help="Path to the queue root directory (containing state.jsonl). Required with --status.",
+    help="Path to the queue root directory (containing state.tsv). Required with --status.",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
     default=None,
@@ -849,7 +849,7 @@ def _archive_command(
         message = "--queue is required when archiving by --status."
         raise click.UsageError(message)
 
-    state = QueueState.from_jsonl(queue_directory / "state.jsonl")
+    state = QueueState.from_tsv(queue_directory / "state.tsv")
     archived = state.archive_by_status(
         status=status,
         dandiset_id=dandiset_id,

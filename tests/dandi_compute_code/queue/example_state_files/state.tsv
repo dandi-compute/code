@@ -1,0 +1,11 @@
+dandiset_id	dandi_path	pipeline	version	params	config	attempt	codebase	content_id	asset_size_bytes	has_code	has_been_submitted	has_output	has_logs	dataset_description_path	output_paths	log_paths	created_at	job_completion_time
+000001	sub-pending	test	v1.0	default	cfgpend	1	v0.3.0	asset-pending	1024	True	False	False	False				2024-01-01T00:00:00+00:00	
+000001	sub-successful	test	v1.0	default	cfgsucc	1	v0.3.0	asset-successful	120	True	False	True	True				2024-01-01T00:00:00+00:00	
+000001	sub-failed/ses-repeated	test	v1.0	default	cfgfail	1	v0.3.0	asset-aaa		True	False	False	True				2024-01-01T00:00:00+00:00	
+000001	sub-failed/ses-repeated	test	v1.0	default	cfgfail	2	v0.3.0	asset-aaa		True	False	False	True				2024-01-01T00:00:00+00:00	
+000002	sub-fresh	test	v1.0	default	cfgfrsh	1	v0.3.0	asset-bbb		True	False	False	False				2024-01-01T00:00:00+00:00	
+001371	sub-sole/ses-attempt	aind+ephys	v1.1.1+b268fd2	abc1234	cfgsole	1	v0.3.0			True	False	False	False				2024-01-01T00:00:00+00:00	
+000001	sub-two/ses-attempts	test	v1.0	default	cfgtwo	1	v0.3.0			True	False	False	False				2024-01-01T00:00:00+00:00	
+000001	sub-two/ses-attempts	test	v1.0	default	cfgtwo	2	v0.3.0			True	False	True	False				2024-01-01T00:00:00+00:00	
+000001	sub-already/ses-submitted	test	v1.0	default	cfgsubm	1	v0.3.0			True	False	False	False				2024-01-01T00:00:00+00:00	
+001849	sourcedata/sub-test+bids	aind+ephys	v1.1.1+b268fd2+a66c8df	4af6a25	0d4bf36	1	v0.3.0			True	False	False	False				2024-01-01T00:00:00+00:00	

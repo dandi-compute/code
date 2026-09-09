@@ -67,7 +67,7 @@ def test_prepare_queue_skips_when_failures_reach_max(
     """prepare_queue skips assets for dandisets whose failure count reaches max_fail_per_dandiset."""
     # The example queue records repeated failures for dandiset 000001 (reaching
     # max_fail_per_dandiset) mapped to asset-aaa, and a fresh asset in 000002 mapped to asset-bbb.
-    example_queue_state.to_file(queue_directory / "state.jsonl")
+    example_queue_state.to_tsv(queue_directory / "state.tsv")
     qualifying_ids = ["asset-aaa", "asset-bbb"]
 
     with (

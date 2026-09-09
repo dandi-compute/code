@@ -123,7 +123,7 @@ def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
     mock_state.clean_unsubmitted_capsules.return_value = fake_removed
     runner = CliRunner()
 
-    with mock.patch(f"{_GROUP}.QueueState.from_jsonl", return_value=mock_state) as mock_from_jsonl:
+    with mock.patch(f"{_GROUP}.QueueState.from_tsv", return_value=mock_state) as mock_from_tsv:
         result = runner.invoke(
             _dandicompute_group,
             ["queue", "clean", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
@@ -131,7 +131,7 @@ def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
         )
 
     assert result.exit_code == 0, result.output
-    mock_from_jsonl.assert_called_once_with(queue_dir / "state.jsonl")
+    mock_from_tsv.assert_called_once_with(queue_dir / "state.tsv")
     mock_state.clean_unsubmitted_capsules.assert_called_once_with(dandiset_directory=dandiset_dir)
     assert "Cleaned 1 unsubmitted capsule" in result.output
 
@@ -148,7 +148,7 @@ def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
     mock_state.clean_unsubmitted_capsules.return_value = []
     runner = CliRunner()
 
-    with mock.patch(f"{_GROUP}.QueueState.from_jsonl", return_value=mock_state):
+    with mock.patch(f"{_GROUP}.QueueState.from_tsv", return_value=mock_state):
         result = runner.invoke(
             _dandicompute_group,
             ["queue", "clean", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
@@ -171,7 +171,7 @@ def test_cli_queue_stats_calls_helper_and_reports_output(tmp_path: pathlib.Path)
     mock_state.aggregate_statistics.return_value = {"successful_asset_bytes_total": 0}
     runner = CliRunner()
 
-    with mock.patch(f"{_GROUP}.QueueState.from_jsonl", return_value=mock_state):
+    with mock.patch(f"{_GROUP}.QueueState.from_tsv", return_value=mock_state):
         result = runner.invoke(
             _dandicompute_group,
             ["queue", "stats", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],

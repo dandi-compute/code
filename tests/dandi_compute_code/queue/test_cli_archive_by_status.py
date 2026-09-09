@@ -14,10 +14,10 @@ _GROUP = "dandi_compute_code._cli._dandicompute_group"
 
 
 def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
-    """A queue directory containing an empty state.jsonl."""
+    """A queue directory containing an empty state.tsv."""
     queue_dir = tmp_path / "queue"
     queue_dir.mkdir()
-    (queue_dir / "state.jsonl").write_text("")
+    (queue_dir / "state.tsv").write_text("")
     return queue_dir
 
 
