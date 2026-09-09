@@ -1,5 +1,6 @@
 import json
 import pathlib
+from unittest import mock
 
 import pytest
 
@@ -21,10 +22,10 @@ _ISSUE_EXAMPLE_QUEUE_CONFIG = {
 @pytest.mark.ai_generated
 def test_load_queue_config_validates_issue_example_schema(tmp_path: pathlib.Path) -> None:
     """Issue-provided queue config validates against the LinkML schema."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(json.dumps(_ISSUE_EXAMPLE_QUEUE_CONFIG))
+    config_file = tmp_path / "pipeline_configs.json"
+    config_file.write_text(json.dumps(_ISSUE_EXAMPLE_QUEUE_CONFIG))
 
-    loaded = QueueState.load_queue_config(queue_directory=queue_dir)
+    with mock.patch("dandi_compute_code.queue._queue_utils._PACKAGED_PIPELINE_CONFIGS_PATH", config_file):
+        loaded = QueueState.load_queue_config()
 
     assert loaded == _ISSUE_EXAMPLE_QUEUE_CONFIG

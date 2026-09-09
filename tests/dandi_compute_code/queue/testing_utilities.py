@@ -1,5 +1,5 @@
 """
-Plain helpers for working with the example queue (``example_state_files/state.jsonl``).
+Plain helpers for working with the example queue (``example_state_files/state.tsv``).
 
 These are ordinary functions, imported and called directly by the queue tests.
 They need nothing from pytest, so they are deliberately not fixtures. The pytest
