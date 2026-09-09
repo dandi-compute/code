@@ -110,7 +110,12 @@ class JobEntry:
     @property
     def is_pending(self) -> bool:
         """Code prepared but never submitted (no logs, no output yet)."""
-        return self.has_code and not self.has_logs and not self.has_output
+        return self.has_code and not self.has_been_submitted and not self.has_logs and not self.has_output
+
+    @property
+    def is_stalled(self) -> bool:
+        """Submitted to the scheduler but no logs or output have appeared yet — likely stuck or lost."""
+        return self.has_been_submitted and not self.has_logs and not self.has_output
 
     @property
     def is_running(self) -> bool:
@@ -389,6 +394,11 @@ class QueueState:
     def pending(self) -> list[JobEntry]:
         """Entries with code prepared but not yet submitted."""
         return [e for e in self.entries if e.is_pending]
+
+    @property
+    def stalled(self) -> list[JobEntry]:
+        """Entries submitted to the scheduler with no logs or output yet."""
+        return [e for e in self.entries if e.is_stalled]
 
     @property
     def running(self) -> list[JobEntry]:
@@ -934,7 +944,7 @@ class QueueState:
     def archive_by_status(
         self,
         *,
-        status: Literal["failed", "pending"],
+        status: Literal["failed", "pending", "stalled"],
         dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
         archive_dandiset_id: str = _FAILED_RUNS_ARCHIVE_DANDISET_ID,
         processing_directory: pathlib.Path | None = None,
@@ -944,18 +954,20 @@ class QueueState:
         Move every entry with the given *status* into the failed runs archive.
 
         *status* names the :class:`QueueState` property selecting the entries to
-        archive: ``"failed"`` (:attr:`failed` — code and logs present, no output) or
-        ``"pending"`` (:attr:`pending` — code prepared but never submitted). For each
-        matching entry, resolves its capsule path against *dandiset_id*'s remote
-        ``assets.jsonld`` (see :meth:`JobEntry.resolve_capsule_path`, which accounts
-        for both the current flat attempt-directory layout and the legacy nested
-        layout) and moves the corresponding capsule from *dandiset_id* to
-        *archive_dandiset_id* via :func:`~dandi_compute_code.dandiset.move_job_capsule`.
-        Both Dandisets are addressed purely by ID -- everything is resolved and moved
-        ephemerally over the network, with no local Dandiset clone required.
+        archive: ``"failed"`` (:attr:`failed` — code and logs present, no output),
+        ``"pending"`` (:attr:`pending` — code prepared but never submitted), or
+        ``"stalled"`` (:attr:`stalled` — submitted to the scheduler but no logs or
+        output ever appeared). For each matching entry, resolves its capsule path
+        against *dandiset_id*'s remote ``assets.jsonld`` (see
+        :meth:`JobEntry.resolve_capsule_path`, which accounts for both the current
+        flat attempt-directory layout and the legacy nested layout) and moves the
+        corresponding capsule from *dandiset_id* to *archive_dandiset_id* via
+        :func:`~dandi_compute_code.dandiset.move_job_capsule`. Both Dandisets are
+        addressed purely by ID -- everything is resolved and moved ephemerally over
+        the network, with no local Dandiset clone required.
 
         :param status: Which subset of entries to archive.
-        :type status: typing.Literal["failed", "pending"]
+        :type status: typing.Literal["failed", "pending", "stalled"]
         :param dandiset_id: Dandiset entries are archived *from*. Defaults to the job
             capsules Dandiset.
         :type dandiset_id: str
@@ -974,10 +986,11 @@ class QueueState:
         :raises RuntimeError: If ``DANDI_API_KEY`` is unset or blank, or if archiving
             any individual capsule fails (see :func:`move_job_capsule`). A failure
             leaves entries processed so far archived and stops before the rest.
-        :raises ValueError: If *status* is not ``"failed"`` or ``"pending"``.
+        :raises ValueError: If *status* is not ``"failed"``, ``"pending"``, or
+            ``"stalled"``.
         """
-        if status not in ("failed", "pending"):
-            message = f"Unknown status {status!r}; expected 'failed' or 'pending'."
+        if status not in ("failed", "pending", "stalled"):
+            message = f"Unknown status {status!r}; expected 'failed', 'pending', or 'stalled'."
             raise ValueError(message)
 
         if not os.environ.get("DANDI_API_KEY", "").strip():

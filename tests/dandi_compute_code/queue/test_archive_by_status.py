@@ -19,6 +19,10 @@ _STATUS_EXAMPLE_SELECTORS = {
         {"dandi_path": "sub-pending"},
         {"dandi_path": "sub-fresh"},
     ],
+    "stalled": [
+        {"dandi_path": "sub-stalled/ses-repeated", "attempt": 1},
+        {"dandi_path": "sub-stalled/ses-repeated", "attempt": 2},
+    ],
 }
 
 _DUMMY_ASSET_METADATA = AssetMetadata(path="", date_modified="2025-01-01T00:00:00", content_size=1, content_id="dummy")
@@ -31,7 +35,7 @@ def _metadata_with_capsules_at(*capsule_paths: str) -> AssetsJsonldMetadata:
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "pending"])
+@pytest.mark.parametrize("status", ["failed", "pending", "stalled"])
 def test_archive_by_status_raises_without_dandi_api_key(status: str) -> None:
     """archive_by_status raises RuntimeError when DANDI_API_KEY is not set."""
     with mock.patch.dict(os.environ, {}, clear=True):
@@ -41,13 +45,13 @@ def test_archive_by_status_raises_without_dandi_api_key(status: str) -> None:
 
 @pytest.mark.ai_generated
 def test_archive_by_status_raises_on_unknown_status(dandi_api_key: None) -> None:
-    """archive_by_status raises ValueError for a status other than 'failed'/'pending'."""
+    """archive_by_status raises ValueError for a status other than 'failed'/'pending'/'stalled'."""
     with pytest.raises(ValueError, match="Unknown status"):
         QueueState(entries=[]).archive_by_status(status="successful")
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "pending"])
+@pytest.mark.parametrize("status", ["failed", "pending", "stalled"])
 def test_archive_by_status_returns_empty_list_when_nothing_matches(status: str, dandi_api_key: None) -> None:
     """archive_by_status returns an empty list, without even fetching remote metadata, when nothing matches."""
     with (
@@ -62,7 +66,7 @@ def test_archive_by_status_returns_empty_list_when_nothing_matches(status: str, 
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "pending"])
+@pytest.mark.parametrize("status", ["failed", "pending", "stalled"])
 def test_archive_by_status_moves_every_matching_entry(
     status: str, example_queue_state: QueueState, dandi_api_key: None
 ) -> None:
@@ -92,7 +96,7 @@ def test_archive_by_status_moves_every_matching_entry(
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "pending"])
+@pytest.mark.parametrize("status", ["failed", "pending", "stalled"])
 def test_archive_by_status_ignores_non_matching_entries(
     status: str, example_queue_state: QueueState, dandi_api_key: None
 ) -> None:
@@ -112,7 +116,7 @@ def test_archive_by_status_ignores_non_matching_entries(
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "pending"])
+@pytest.mark.parametrize("status", ["failed", "pending", "stalled"])
 def test_archive_by_status_forwards_processing_directory_and_test_flag(
     status: str, example_queue_state: QueueState, tmp_path: pathlib.Path, dandi_api_key: None
 ) -> None:

@@ -753,7 +753,7 @@ def _delete_version_command(dandiset_directory: pathlib.Path, version: str, sile
     "status",
     help="Archive every job capsule with this status. Mutually exclusive with --job.",
     required=False,
-    type=click.Choice(["failed", "pending"]),
+    type=click.Choice(["failed", "pending", "stalled"]),
     default=None,
 )
 @click.option(
@@ -826,7 +826,7 @@ def _archive_command(
 ) -> None:
     """Archive one job capsule (--job) or every capsule with a --status."""
     if (status is None) == (capsule_path is None):
-        message = "Provide exactly one of --status (failed|pending) or --job PATH."
+        message = "Provide exactly one of --status (failed|pending|stalled) or --job PATH."
         raise click.UsageError(message)
 
     _configure_logging(silent=silent)

@@ -22,7 +22,7 @@ def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "pending"])
+@pytest.mark.parametrize("status", ["failed", "pending", "stalled"])
 def test_cli_archive_by_status_fails_without_api_key(status: str, tmp_path: pathlib.Path) -> None:
     """CLI errors immediately when DANDI_API_KEY is missing."""
     runner = CliRunner()
@@ -41,7 +41,7 @@ def test_cli_archive_by_status_fails_without_api_key(status: str, tmp_path: path
 
 @pytest.mark.ai_generated
 def test_cli_archive_by_status_rejects_unknown_status(tmp_path: pathlib.Path) -> None:
-    """CLI rejects a --status value other than 'failed'/'pending' before touching the queue."""
+    """CLI rejects a --status value other than 'failed'/'pending'/'stalled' before touching the queue."""
     runner = CliRunner()
     queue_dir = _make_queue_dir(tmp_path)
 
@@ -69,7 +69,7 @@ def test_cli_archive_by_status_fails_without_dandi_devel(tmp_path: pathlib.Path)
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "pending"])
+@pytest.mark.parametrize("status", ["failed", "pending", "stalled"])
 def test_cli_archive_by_status_requires_queue(status: str, tmp_path: pathlib.Path) -> None:
     """dandicompute archive --status without --queue is rejected with a clear error."""
     runner = CliRunner()
@@ -82,7 +82,7 @@ def test_cli_archive_by_status_requires_queue(status: str, tmp_path: pathlib.Pat
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "pending"])
+@pytest.mark.parametrize("status", ["failed", "pending", "stalled"])
 def test_cli_archive_by_status_invokes_archive_by_status_with_defaults(status: str, tmp_path: pathlib.Path) -> None:
     """dandicompute archive --status calls QueueState.archive_by_status with the default Dandiset IDs."""
     runner = CliRunner()
@@ -151,7 +151,7 @@ def test_cli_archive_by_status_forwards_custom_dandiset_ids(tmp_path: pathlib.Pa
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "pending"])
+@pytest.mark.parametrize("status", ["failed", "pending", "stalled"])
 def test_cli_archive_by_status_reports_nothing_to_archive(status: str, tmp_path: pathlib.Path) -> None:
     """dandicompute archive --status reports when there are no matching capsules to archive."""
     runner = CliRunner()
