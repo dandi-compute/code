@@ -14,7 +14,7 @@ _GROUP = "dandi_compute_code._cli._dandicompute_group"
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "pending"])
+@pytest.mark.parametrize("status", ["failed", "pending", "stalled"])
 def test_cli_archive_by_status_fails_without_api_key(status: str) -> None:
     """CLI errors immediately when DANDI_API_KEY is missing."""
     runner = CliRunner()
@@ -29,7 +29,7 @@ def test_cli_archive_by_status_fails_without_api_key(status: str) -> None:
 
 @pytest.mark.ai_generated
 def test_cli_archive_by_status_rejects_unknown_status() -> None:
-    """CLI rejects a --status value other than 'failed'/'pending' before touching the queue."""
+    """CLI rejects a --status value other than 'failed'/'pending'/'stalled' before touching the queue."""
     runner = CliRunner()
 
     with mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}):
@@ -52,7 +52,7 @@ def test_cli_archive_by_status_fails_without_dandi_devel() -> None:
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "pending"])
+@pytest.mark.parametrize("status", ["failed", "pending", "stalled"])
 def test_cli_archive_by_status_invokes_archive_by_status_with_defaults(status: str) -> None:
     """dandicompute archive --status calls QueueState.archive_by_status with the default Dandiset IDs."""
     runner = CliRunner()
@@ -119,7 +119,7 @@ def test_cli_archive_by_status_forwards_custom_dandiset_ids(tmp_path: pathlib.Pa
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize("status", ["failed", "pending"])
+@pytest.mark.parametrize("status", ["failed", "pending", "stalled"])
 def test_cli_archive_by_status_reports_nothing_to_archive(status: str) -> None:
     """dandicompute archive --status reports when there are no matching capsules to archive."""
     runner = CliRunner()

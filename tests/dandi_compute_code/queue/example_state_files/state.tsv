@@ -9,3 +9,5 @@ dandiset_id	dandi_path	pipeline	version	params	config	attempt	codebase	content_i
 000001	sub-two/ses-attempts	test	v1.0	default	cfgtwo	2	v0.3.0			True	False	True	False				2024-01-01T00:00:00+00:00
 000001	sub-already/ses-submitted	test	v1.0	default	cfgsubm	1	v0.3.0			True	False	False	False				2024-01-01T00:00:00+00:00
 001849	sourcedata/sub-test+bids	aind+ephys	v1.1.1+b268fd2+a66c8df	4af6a25	0d4bf36	1	v0.3.0			True	False	False	False				2024-01-01T00:00:00+00:00
+000001	sub-stalled/ses-repeated	test	v1.0	default	cfgstal	1	v0.3.0	asset-ccc		True	True	False	False				2024-01-01T00:00:00+00:00
+000001	sub-stalled/ses-repeated	test	v1.0	default	cfgstal	2	v0.3.0	asset-ccc		True	True	False	False				2024-01-01T00:00:00+00:00
