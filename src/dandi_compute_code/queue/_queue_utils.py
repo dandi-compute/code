@@ -22,7 +22,7 @@ from dataclasses import dataclass
 import linkml_runtime.processing.referencevalidator
 import linkml_runtime.utils.schemaview
 
-from ._globals import _DURATION_PART_RE, _QUEUE_CONFIG_SCHEMA_PATH
+from ._globals import _DURATION_PART_RE, _PACKAGED_PIPELINE_CONFIGS_PATH, _QUEUE_CONFIG_SCHEMA_PATH
 from ._job_info import JobInfo
 from ..dandiset._load_assets_jsonld_metadata import (
     AssetMetadata,
@@ -307,19 +307,45 @@ def _validate_queue_config(*, queue_config: dict) -> None:
         raise ValueError(message)
 
 
-def _load_queue_config(*, queue_directory: pathlib.Path) -> dict:
+def _resolve_queue_config_file(*, queue_directory: pathlib.Path | None) -> pathlib.Path:
     """
-    Read ``queue_config.json`` and validate it against the LinkML schema.
+    Resolve the pipeline configuration file to read.
 
-    :raises FileNotFoundError: If ``queue_config.json`` is not found in *queue_directory*.
-    :raises ValueError: If the queue configuration fails LinkML validation.
+    Prefers ``pipeline_configs.json`` in *queue_directory* (if given), falls back to the
+    legacy ``queue_config.json`` name in the same directory, and otherwise falls back to
+    the packaged default committed to this repo (see ``_PACKAGED_PIPELINE_CONFIGS_PATH``).
     """
-    queue_config_file = queue_directory / "queue_config.json"
-    if not queue_config_file.exists():
-        message = f"'queue_config.json' not found in '{queue_directory}'."
+    if queue_directory is not None:
+        pipeline_configs_file = queue_directory / "pipeline_configs.json"
+        if pipeline_configs_file.exists():
+            return pipeline_configs_file
+        legacy_queue_config_file = queue_directory / "queue_config.json"
+        if legacy_queue_config_file.exists():
+            return legacy_queue_config_file
+    return _PACKAGED_PIPELINE_CONFIGS_PATH
+
+
+def _load_queue_config(*, queue_directory: pathlib.Path | None = None) -> dict:
+    """
+    Read the pipeline configuration and validate it against the LinkML schema.
+
+    Resolved via :func:`_resolve_queue_config_file`: a ``pipeline_configs.json`` or legacy
+    ``queue_config.json`` in *queue_directory* takes precedence; otherwise the pipeline
+    configuration packaged with this repo is used.
+
+    :raises FileNotFoundError: If no pipeline configuration file can be resolved.
+    :raises ValueError: If the pipeline configuration fails LinkML validation.
+    """
+    config_file = _resolve_queue_config_file(queue_directory=queue_directory)
+    if not config_file.exists():
+        message = (
+            f"No pipeline configuration found: neither 'pipeline_configs.json' nor the legacy "
+            f"'queue_config.json' exist in '{queue_directory}', and the packaged default at "
+            f"'{_PACKAGED_PIPELINE_CONFIGS_PATH}' is missing."
+        )
         raise FileNotFoundError(message)
 
-    queue_config = json.loads(queue_config_file.read_text())
+    queue_config = json.loads(config_file.read_text())
     _validate_queue_config(queue_config=queue_config)
     return queue_config
 

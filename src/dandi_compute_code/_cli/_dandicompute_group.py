@@ -272,6 +272,41 @@ def _queue_group() -> None:
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 @click.option(
+    "--dandiset-id",
+    "dandiset_id",
+    help="Source (job capsules) Dandiset ID whose state is refreshed.",
+    required=False,
+    type=str,
+    default=_JOB_CAPSULES_DANDISET_ID,
+    show_default=True,
+)
+@click.option(
+    "--archive-dandiset-id",
+    "archive_dandiset_id",
+    help="Archived (failed runs archive) Dandiset ID whose state is refreshed.",
+    required=False,
+    type=str,
+    default=_FAILED_RUNS_ARCHIVE_DANDISET_ID,
+    show_default=True,
+)
+@click.option(
+    "--processing",
+    "processing_directory",
+    help="Directory for the temporary working tree used to publish each state.tsv "
+    "(defaults to the system temporary location).",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--test",
+    "test",
+    help="Preserve the temporary working tree used to publish each state.tsv instead of cleaning it up.",
+    required=False,
+    is_flag=True,
+    default=False,
+)
+@click.option(
     "--silent",
     help="Suppress informational log output.",
     required=False,
@@ -280,16 +315,41 @@ def _queue_group() -> None:
 )
 def _queue_refresh_command(
     queue_directory: pathlib.Path,
+    dandiset_id: str,
+    archive_dandiset_id: str,
+    processing_directory: pathlib.Path | None = None,
+    test: bool = False,
     silent: bool = False,
 ) -> None:
-    """Regenerate state.jsonl and archive_state.jsonl from DANDI assets metadata."""
+    """
+    Regenerate state.jsonl/archive_state.jsonl and republish state.tsv.
+
+    Writes state.jsonl and archive_state.jsonl under --queue (see QueueState.write_state /
+    write_archive_state), then ephemerally rebuilds and republishes derivatives/state.tsv within
+    both the source and archived Dandisets themselves, so each always reflects its current state.
+    """
     _configure_logging(silent=silent)
+    _require_dandi_api_key()
+    _require_dandi_devel()
 
     try:
-        QueueState.write_state(queue_directory=queue_directory)
-        QueueState.write_archive_state(queue_directory=queue_directory)
+        QueueState.write_state(queue_directory=queue_directory, dandiset_id=dandiset_id)
+        QueueState.write_state(
+            queue_directory=queue_directory,
+            dandiset_id=archive_dandiset_id,
+            state_file_name="archive_state.jsonl",
+        )
     except FileNotFoundError as error:
         raise click.ClickException(str(error)) from error
+
+    for target_dandiset_id in (dandiset_id, archive_dandiset_id):
+        QueueState.write_dandiset_state_table(
+            dandiset_id=target_dandiset_id,
+            processing_directory=processing_directory,
+            test=test,
+        )
+        if not silent:
+            _styled_echo(text=f"\nPublished derivatives/state.tsv to Dandiset {target_dandiset_id}.", color="green")
 
 
 # dandicompute queue clean [OPTIONS]
