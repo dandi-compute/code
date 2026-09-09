@@ -5,7 +5,6 @@ import pathlib
 import click
 
 from ._clean_work_directory import clean_work_directory
-from ._oop_failsafe import run_with_oop_failsafe
 from ._styled_echo import _styled_echo
 from .._configure_logging import _configure_logging
 from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
@@ -14,19 +13,8 @@ from ..dandiset import (
     move_job_capsule,
     scan_version_directories,
 )
-from ..queue import (
-    TEST_QUEUE_CONTENT_ID,
-    QueueState,
-    aggregate_queue_statistics,
-    clean_unsubmitted_capsules,
-    dump_issues,
-    has_pending_jobs,
-    prepare_queue,
-    process_queue,
-    summarize_issues,
-    write_archive_state,
-    write_queue_state,
-)
+from ..dandiset._globals import _FAILED_RUNS_ARCHIVE_DANDISET_ID, _JOB_CAPSULES_DANDISET_ID
+from ..queue import TEST_QUEUE_CONTENT_ID, QueueState
 
 logging.basicConfig(level=logging.INFO)
 
@@ -197,14 +185,6 @@ def _prepare_group() -> None:
     is_flag=True,
     default=False,
 )
-@click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory containing queue_config.json (only used with --test).",
-    required=False,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
-)
 def _prepare_aind_command(
     test: bool = False,
     pipeline_version: str | None = None,
@@ -216,7 +196,6 @@ def _prepare_aind_command(
     parameters_key: str = "default",
     submit: bool = False,
     silent: bool = False,
-    queue_directory: pathlib.Path | None = None,
 ) -> None:
     """Prepare an AIND ephys job, or prepare test queue entries with --test."""
     _configure_logging(silent=silent)
@@ -224,29 +203,10 @@ def _prepare_aind_command(
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
 
     if test:
-        if queue_directory is None:
-            raise click.UsageError("--queue is required when using --test.")
-
-        def _prepare_test_oop() -> None:
-            QueueState.prepare(
-                queue_directory=queue_directory,
-                content_ids=[TEST_QUEUE_CONTENT_ID],
-                pipeline_directory=pipeline_directory,
-                config_key=config_key,
-            )
-
-        def _prepare_test_fallback() -> None:
-            prepare_queue(
-                queue_directory=queue_directory,
-                content_ids=[TEST_QUEUE_CONTENT_ID],
-                pipeline_directory=pipeline_directory,
-                config_key=config_key,
-            )
-
-        run_with_oop_failsafe(
-            command="prepare aind --test",
-            oop_path=_prepare_test_oop,
-            fallback_path=_prepare_test_fallback,
+        QueueState.prepare(
+            content_ids=[TEST_QUEUE_CONTENT_ID],
+            pipeline_directory=pipeline_directory,
+            config_key=config_key,
         )
         return
 
@@ -292,11 +252,39 @@ def _queue_group() -> None:
 # dandicompute queue refresh [OPTIONS]
 @_queue_group.command(name="refresh")
 @click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory.",
-    required=True,
+    "--dandiset-id",
+    "dandiset_id",
+    help="Source (job capsules) Dandiset ID whose state is refreshed.",
+    required=False,
+    type=str,
+    default=_JOB_CAPSULES_DANDISET_ID,
+    show_default=True,
+)
+@click.option(
+    "--archive-dandiset-id",
+    "archive_dandiset_id",
+    help="Archived (failed runs archive) Dandiset ID whose state is refreshed.",
+    required=False,
+    type=str,
+    default=_FAILED_RUNS_ARCHIVE_DANDISET_ID,
+    show_default=True,
+)
+@click.option(
+    "--processing",
+    "processing_directory",
+    help="Directory for the temporary working tree used to write each state.tsv "
+    "(defaults to the system temporary location).",
+    required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--test",
+    "test",
+    help="Preserve the temporary working tree used to write each state.tsv instead of cleaning it up.",
+    required=False,
+    is_flag=True,
+    default=False,
 )
 @click.option(
     "--silent",
@@ -306,35 +294,35 @@ def _queue_group() -> None:
     default=False,
 )
 def _queue_refresh_command(
-    queue_directory: pathlib.Path,
+    dandiset_id: str,
+    archive_dandiset_id: str,
+    processing_directory: pathlib.Path | None = None,
+    test: bool = False,
     silent: bool = False,
 ) -> None:
-    """Regenerate state.jsonl and archive_state.jsonl from DANDI assets metadata."""
+    """
+    Rewrite state.tsv into both Dandisets.
+
+    Ephemerally rebuilds and rewrites derivatives/state.tsv within both the source and
+    archived Dandisets themselves (see QueueState.write_dandiset_state_table), so each always
+    reflects its current state fetched fresh from its own assets.jsonld.
+    """
     _configure_logging(silent=silent)
+    _require_dandi_api_key()
+    _require_dandi_devel()
 
-    def _refresh_oop() -> None:
-        QueueState.write_state(queue_directory=queue_directory)
-        QueueState.write_archive_state(queue_directory=queue_directory)
-
-    def _refresh_fallback() -> None:
-        write_queue_state(queue_directory=queue_directory)
-        write_archive_state(queue_directory=queue_directory)
-
-    try:
-        run_with_oop_failsafe(command="queue refresh", oop_path=_refresh_oop, fallback_path=_refresh_fallback)
-    except FileNotFoundError as error:
-        raise click.ClickException(str(error)) from error
+    for target_dandiset_id in (dandiset_id, archive_dandiset_id):
+        QueueState.write_dandiset_state_table(
+            dandiset_id=target_dandiset_id,
+            processing_directory=processing_directory,
+            test=test,
+        )
+        if not silent:
+            _styled_echo(text=f"\nWrote derivatives/state.tsv to Dandiset {target_dandiset_id}.", color="green")
 
 
 # dandicompute queue clean [OPTIONS]
 @_queue_group.command(name="clean")
-@click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
 @click.option(
     "--dandiset",
     "dandiset_directory",
@@ -350,7 +338,6 @@ def _queue_refresh_command(
     default=False,
 )
 def _queue_clean_command(
-    queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
     silent: bool = False,
 ) -> None:
@@ -358,14 +345,8 @@ def _queue_clean_command(
     _configure_logging(silent=silent)
     _require_dandi_api_key()
 
-    def _clean_oop() -> list[pathlib.Path]:
-        state = QueueState.from_jsonl(queue_directory / "state.jsonl")
-        return state.clean_unsubmitted_capsules(dandiset_directory=dandiset_directory)
-
-    def _clean_fallback() -> list[pathlib.Path]:
-        return clean_unsubmitted_capsules(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
-
-    removed = run_with_oop_failsafe(command="queue clean", oop_path=_clean_oop, fallback_path=_clean_fallback)
+    state = QueueState.from_dandi()
+    removed = state.clean_unsubmitted_capsules(dandiset_directory=dandiset_directory)
     if removed:
         if not silent:
             for path in removed:
@@ -379,13 +360,6 @@ def _queue_clean_command(
 # dandicompute queue stats [OPTIONS]
 @_queue_group.command(name="stats")
 @click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
-@click.option(
     "--dandiset",
     "dandiset_directory",
     help="Path to a local dandiset clone used to locate Nextflow timeline reports.",
@@ -393,13 +367,30 @@ def _queue_clean_command(
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 @click.option(
-    "--output-file",
-    "output_file_name",
-    help="Name of the aggregate statistics JSON file written under --queue.",
+    "--dandiset-id",
+    "dandiset_id",
+    help="Dandiset ID the aggregate statistics JSON is written into.",
     required=False,
     type=str,
-    default="queue_stats.json",
+    default=_JOB_CAPSULES_DANDISET_ID,
     show_default=True,
+)
+@click.option(
+    "--processing",
+    "processing_directory",
+    help="Directory for the temporary working tree used to write the statistics JSON "
+    "(defaults to the system temporary location).",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--test",
+    "test",
+    help="Preserve the temporary working tree used to write the statistics JSON instead of cleaning it up.",
+    required=False,
+    is_flag=True,
+    default=False,
 )
 @click.option(
     "--silent",
@@ -409,32 +400,24 @@ def _queue_clean_command(
     default=False,
 )
 def _queue_stats_command(
-    queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
-    output_file_name: str = "queue_stats.json",
+    dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
+    processing_directory: pathlib.Path | None = None,
+    test: bool = False,
     silent: bool = False,
 ) -> None:
-    """Write aggregate queue statistics from state.jsonl and timeline reports."""
+    """Write aggregate queue statistics from the live queue state."""
     _configure_logging(silent=silent)
 
-    def _stats_oop() -> dict:
-        state = QueueState.from_jsonl(queue_directory / "state.jsonl")
-        return state.aggregate_statistics(
-            queue_directory=queue_directory,
-            dandiset_directory=dandiset_directory,
-            output_file_name=output_file_name,
-        )
-
-    def _stats_fallback() -> dict:
-        return aggregate_queue_statistics(
-            queue_directory=queue_directory,
-            dandiset_directory=dandiset_directory,
-            output_file_name=output_file_name,
-        )
-
-    run_with_oop_failsafe(command="queue stats", oop_path=_stats_oop, fallback_path=_stats_fallback)
+    state = QueueState.from_dandi(dandiset_id=dandiset_id)
+    state.aggregate_statistics(
+        dandiset_directory=dandiset_directory,
+        dandiset_id=dandiset_id,
+        processing_directory=processing_directory,
+        test=test,
+    )
     if not silent:
-        _styled_echo(text=f"\nWrote queue aggregate statistics: {queue_directory / output_file_name}", color="green")
+        _styled_echo(text=f"\nWrote derivatives/queue_stats.json to Dandiset {dandiset_id}.", color="green")
 
 
 # dandicompute queue pending [OPTIONS]
@@ -457,11 +440,7 @@ def _queue_pending_command(context: click.Context, silent: bool = False) -> None
         dandicompute queue pending --silent && dandicompute queue process ...
     """
     _configure_logging(silent=silent)
-    pending = run_with_oop_failsafe(
-        command="queue pending",
-        oop_path=QueueState.has_pending_jobs,
-        fallback_path=has_pending_jobs,
-    )
+    pending = QueueState.has_pending_jobs()
     if not silent:
         _styled_echo(text="true" if pending else "false", color="green" if pending else "yellow")
     context.exit(0 if pending else 1)
@@ -469,13 +448,6 @@ def _queue_pending_command(context: click.Context, silent: bool = False) -> None
 
 # dandicompute queue process [OPTIONS]
 @_queue_group.command(name="process")
-@click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
 @click.option(
     "--processing",
     "processing_directory",
@@ -517,7 +489,6 @@ def _queue_pending_command(context: click.Context, silent: bool = False) -> None
     show_default=True,
 )
 def _queue_process_command(
-    queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
     max_concurrent_aind_jobs: int = 2,
     silent: bool = False,
@@ -529,28 +500,11 @@ def _queue_process_command(
     _require_dandi_api_key()
     _require_dandi_devel()
 
-    def _process_oop() -> str:
-        return QueueState.process_queue(
-            queue_directory=queue_directory,
-            processing_directory=processing_directory,
-            max_concurrent_aind_jobs=max_concurrent_aind_jobs,
-            jitter_seconds=jitter_seconds,
-            test=test,
-        )
-
-    def _process_fallback() -> str:
-        return process_queue(
-            queue_directory=queue_directory,
-            processing_directory=processing_directory,
-            max_concurrent_aind_jobs=max_concurrent_aind_jobs,
-            jitter_seconds=jitter_seconds,
-            test=test,
-        )
-
-    queue_status = run_with_oop_failsafe(
-        command="queue process",
-        oop_path=_process_oop,
-        fallback_path=_process_fallback,
+    queue_status = QueueState.process_queue(
+        processing_directory=processing_directory,
+        max_concurrent_aind_jobs=max_concurrent_aind_jobs,
+        jitter_seconds=jitter_seconds,
+        test=test,
     )
     if not silent and queue_status == "no-pending":
         _styled_echo(text="\nNo jobs were found waiting to be submitted.", color="yellow")
@@ -558,13 +512,6 @@ def _queue_process_command(
 
 # dandicompute queue prepare [OPTIONS]
 @_queue_group.command(name="prepare")
-@click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
 @click.option(
     "--pipeline",
     "only_pipeline",
@@ -597,7 +544,6 @@ def _queue_process_command(
     default=False,
 )
 def _queue_prepare_command(
-    queue_directory: pathlib.Path,
     only_pipeline: str | None = None,
     config_key: str = "default",
     limit: int | None = None,
@@ -608,23 +554,11 @@ def _queue_prepare_command(
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
 
-    def _prepare_oop() -> None:
-        QueueState.prepare(
-            queue_directory=queue_directory,
-            config_key=config_key,
-            limit=limit,
-            only_pipeline=only_pipeline,
-        )
-
-    def _prepare_fallback() -> None:
-        prepare_queue(
-            queue_directory=queue_directory,
-            config_key=config_key,
-            limit=limit,
-            only_pipeline=only_pipeline,
-        )
-
-    run_with_oop_failsafe(command="queue prepare", oop_path=_prepare_oop, fallback_path=_prepare_fallback)
+    QueueState.prepare(
+        config_key=config_key,
+        limit=limit,
+        only_pipeline=only_pipeline,
+    )
 
 
 # dandicompute issues
@@ -644,11 +578,30 @@ def _issues_group() -> None:
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 @click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory.",
-    required=True,
+    "--dandiset-id",
+    "dandiset_id",
+    help="Dandiset ID the issue dump JSON is written into.",
+    required=False,
+    type=str,
+    default=_JOB_CAPSULES_DANDISET_ID,
+    show_default=True,
+)
+@click.option(
+    "--processing",
+    "processing_directory",
+    help="Directory for the temporary working tree used to write the issue dump JSON "
+    "(defaults to the system temporary location).",
+    required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--test",
+    "test",
+    help="Preserve the temporary working tree used to write the issue dump JSON instead of cleaning it up.",
+    required=False,
+    is_flag=True,
+    default=False,
 )
 @click.option(
     "--silent",
@@ -659,21 +612,22 @@ def _issues_group() -> None:
 )
 def _issues_dump_command(
     dandiset_directory: pathlib.Path,
-    queue_directory: pathlib.Path,
+    dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
+    processing_directory: pathlib.Path | None = None,
+    test: bool = False,
     silent: bool = False,
 ) -> None:
     """Scan nextflow and slurm logs and write per-capsule issue records."""
     _configure_logging(silent=silent)
 
-    def _dump_oop() -> list[dict]:
-        return QueueState.dump_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
-
-    def _dump_fallback() -> list[dict]:
-        return dump_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
-
-    run_with_oop_failsafe(command="issues dump", oop_path=_dump_oop, fallback_path=_dump_fallback)
+    QueueState.dump_issues(
+        dandiset_directory=dandiset_directory,
+        dandiset_id=dandiset_id,
+        processing_directory=processing_directory,
+        test=test,
+    )
     if not silent:
-        _styled_echo(text=f"\nWrote issue dump: {queue_directory / 'issues_dump.json'}", color="green")
+        _styled_echo(text=f"\nWrote derivatives/issues_dump.json to Dandiset {dandiset_id}.", color="green")
 
 
 # dandicompute issues summarize [OPTIONS]
@@ -686,11 +640,30 @@ def _issues_dump_command(
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 @click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory.",
-    required=True,
+    "--dandiset-id",
+    "dandiset_id",
+    help="Dandiset ID the issue summary JSON (and its issue dump) is written into.",
+    required=False,
+    type=str,
+    default=_JOB_CAPSULES_DANDISET_ID,
+    show_default=True,
+)
+@click.option(
+    "--processing",
+    "processing_directory",
+    help="Directory for the temporary working tree used to write the issue summary JSON "
+    "(defaults to the system temporary location).",
+    required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--test",
+    "test",
+    help="Preserve the temporary working tree used to write the issue summary JSON instead of cleaning it up.",
+    required=False,
+    is_flag=True,
+    default=False,
 )
 @click.option(
     "--silent",
@@ -701,21 +674,22 @@ def _issues_dump_command(
 )
 def _issues_summarize_command(
     dandiset_directory: pathlib.Path,
-    queue_directory: pathlib.Path,
+    dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
+    processing_directory: pathlib.Path | None = None,
+    test: bool = False,
     silent: bool = False,
 ) -> None:
     """Summarize discovered issue lines by descending occurrence count."""
     _configure_logging(silent=silent)
 
-    def _summarize_oop() -> dict[str, list[str]]:
-        return QueueState.summarize_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
-
-    def _summarize_fallback() -> dict[str, list[str]]:
-        return summarize_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
-
-    run_with_oop_failsafe(command="issues summarize", oop_path=_summarize_oop, fallback_path=_summarize_fallback)
+    QueueState.summarize_issues(
+        dandiset_directory=dandiset_directory,
+        dandiset_id=dandiset_id,
+        processing_directory=processing_directory,
+        test=test,
+    )
     if not silent:
-        _styled_echo(text=f"\nWrote issue summary: {queue_directory / 'issues_summary.json'}", color="green")
+        _styled_echo(text=f"\nWrote derivatives/issues_summary.json to Dandiset {dandiset_id}.", color="green")
 
 
 # dandicompute delete
@@ -779,21 +753,42 @@ def _delete_version_command(dandiset_directory: pathlib.Path, version: str, sile
         _styled_echo(text=f"\nDeleted {len(deleted)} version {noun}.", color="green")
 
 
-# dandicompute archive
-@_dandicompute_group.group(name="archive")
-def _archive_group() -> None:
-    """Move job capsules into the permanent archive of failed job runs."""
-    pass
-
-
-# dandicompute archive job [OPTIONS]
-@_archive_group.command(name="job")
+# dandicompute archive [OPTIONS]
+@_dandicompute_group.command(name="archive")
 @click.option(
-    "--path",
+    "--status",
+    "status",
+    help="Archive every job capsule with this status. Mutually exclusive with --job.",
+    required=False,
+    type=click.Choice(["failed", "pending", "stalled"]),
+    default=None,
+)
+@click.option(
+    "--job",
     "capsule_path",
-    help="Path of the job capsule folder relative to the source Dandiset root.",
-    required=True,
+    help="Path of a single job capsule folder (relative to the source Dandiset root) to archive directly. "
+    "Mutually exclusive with --status.",
+    required=False,
     type=str,
+    default=None,
+)
+@click.option(
+    "--dandiset-id",
+    "dandiset_id",
+    help="Dandiset ID capsules are archived from.",
+    required=False,
+    type=str,
+    default=_JOB_CAPSULES_DANDISET_ID,
+    show_default=True,
+)
+@click.option(
+    "--archive-dandiset-id",
+    "archive_dandiset_id",
+    help="Dandiset ID capsules are archived to.",
+    required=False,
+    type=str,
+    default=_FAILED_RUNS_ARCHIVE_DANDISET_ID,
+    show_default=True,
 )
 @click.option(
     "--processing",
@@ -818,15 +813,49 @@ def _archive_group() -> None:
     is_flag=True,
     default=False,
 )
-def _archive_job_command(
-    capsule_path: str,
+def _archive_command(
+    status: str | None,
+    capsule_path: str | None,
+    dandiset_id: str,
+    archive_dandiset_id: str,
     processing_directory: pathlib.Path | None = None,
     test: bool = False,
     silent: bool = False,
 ) -> None:
-    """Move a job capsule from the job capsules Dandiset to the failed runs archive."""
+    """Archive one job capsule (--job) or every capsule with a --status."""
+    if (status is None) == (capsule_path is None):
+        message = "Provide exactly one of --status (failed|pending|stalled) or --job PATH."
+        raise click.UsageError(message)
+
     _configure_logging(silent=silent)
     _require_dandi_api_key()
-    move_job_capsule(capsule_path=capsule_path, processing_directory=processing_directory, test=test)
+    _require_dandi_devel()
+
+    if capsule_path is not None:
+        move_job_capsule(
+            capsule_path=capsule_path,
+            source_dandiset_id=dandiset_id,
+            target_dandiset_id=archive_dandiset_id,
+            processing_directory=processing_directory,
+            test=test,
+        )
+        if not silent:
+            _styled_echo(text=f"\nArchived job capsule: {capsule_path}", color="green")
+        return
+
+    state = QueueState.from_dandi(dandiset_id=dandiset_id)
+    archived = state.archive_by_status(
+        status=status,
+        dandiset_id=dandiset_id,
+        archive_dandiset_id=archive_dandiset_id,
+        processing_directory=processing_directory,
+        test=test,
+    )
+
     if not silent:
-        _styled_echo(text=f"\nArchived job capsule: {capsule_path}", color="green")
+        if archived:
+            _styled_echo(text=f"\nArchived {len(archived)} {status} job capsule(s):", color="green")
+            for capsule_path in archived:
+                _styled_echo(text=f"  {capsule_path}", color="green")
+        else:
+            _styled_echo(text=f"\nNo {status} job capsules to archive.", color="yellow")

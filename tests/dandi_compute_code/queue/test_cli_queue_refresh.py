@@ -1,160 +1,80 @@
-import json
-import pathlib
+import os
 from unittest import mock
 
 import pytest
 from click.testing import CliRunner
 
 from dandi_compute_code._cli import _dandicompute_group
-from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
+
+_JOB_CAPSULES_DANDISET_ID = "001697"
+_FAILED_RUNS_ARCHIVE_DANDISET_ID = "001873"
+_DANDI_ENV = {"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"}
 
 
 @pytest.mark.ai_generated
-def test_cli_queue_refresh_with_dandiset_directory(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh writes state.jsonl from assets metadata."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(
-        json.dumps(
-            {
-                "pipelines": {
-                    "aind+ephys": {
-                        "version_priority": ["v1.0"],
-                        "params_priority": ["default"],
-                        "max_fail_per_dandiset": 3,
-                    }
-                }
-            }
-        )
-    )
-    content_id = "048d1ee9-83b7-491f-8f02-1ca615b1d455"
-    source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    attempt_prefix = (
-        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
-        "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-default_config-0d4bf36_attempt-1"
-    )
+def test_cli_queue_refresh_writes_tables_to_source_and_archived() -> None:
+    """dandicompute queue refresh rewrites derivatives/state.tsv into both Dandisets."""
     runner = CliRunner()
-    with (
-        mock.patch(
-            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
-            return_value=AssetsJsonldMetadata(
-                content_id_to_asset={},
-                path_to_asset_metadata={
-                    f"{attempt_prefix}/code/submit.sh": AssetMetadata(
-                        path=f"{attempt_prefix}/code/submit.sh",
-                        date_modified="2025-01-01T00:00:00+00:00",
-                        content_size=1,
-                        content_id="attempt-code-id",
-                    )
-                },
-            ),
-        ),
-        mock.patch(
-            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
-            return_value=AssetsJsonldMetadata(
-                content_id_to_asset={},
-                path_to_asset_metadata={
-                    source_path: AssetMetadata(
-                        path=source_path,
-                        date_modified="2025-01-01T00:00:00+00:00",
-                        content_size=1234,
-                        content_id=content_id,
-                    )
-                },
-            ),
-        ),
-    ):
+    with mock.patch("dandi_compute_code.queue._queue_state.QueueState.write_dandiset_state_table") as mock_write:
+        result = runner.invoke(_dandicompute_group, ["queue", "refresh"], env=_DANDI_ENV)
+    assert result.exit_code == 0, result.output
+    called_dandiset_ids = {call.kwargs["dandiset_id"] for call in mock_write.call_args_list}
+    assert called_dandiset_ids == {_JOB_CAPSULES_DANDISET_ID, _FAILED_RUNS_ARCHIVE_DANDISET_ID}
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_refresh_forwards_custom_dandiset_ids() -> None:
+    """dandicompute queue refresh forwards --dandiset-id/--archive-dandiset-id to write_dandiset_state_table."""
+    runner = CliRunner()
+    with mock.patch("dandi_compute_code.queue._queue_state.QueueState.write_dandiset_state_table") as mock_write:
         result = runner.invoke(
             _dandicompute_group,
-            ["queue", "refresh", "--queue", str(queue_dir)],
-            env={"DANDI_API_KEY": "test-key"},
+            [
+                "queue",
+                "refresh",
+                "--dandiset-id",
+                "000123",
+                "--archive-dandiset-id",
+                "000456",
+            ],
+            env=_DANDI_ENV,
         )
     assert result.exit_code == 0, result.output
-    assert (queue_dir / "state.jsonl").exists()
-    state_records = [json.loads(line) for line in (queue_dir / "state.jsonl").read_text().splitlines() if line.strip()]
-    assert len(state_records) == 1
-    assert state_records[0]["dandiset_id"] == "001697"
-    assert state_records[0]["content_id"] == content_id
+    called_dandiset_ids = {call.kwargs["dandiset_id"] for call in mock_write.call_args_list}
+    assert called_dandiset_ids == {"000123", "000456"}
 
 
 @pytest.mark.ai_generated
-def test_cli_queue_refresh_does_not_require_dandiset_directory(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh runs without --dandiset."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    entry = {
-        "dandiset_id": "000001",
-        "dandi_path": "sub-mouse01",
-        "pipeline": "aind+ephys",
-        "version": "v1.0",
-        "params": "abc1234",
-        "config": "def5678",
-        "attempt": 1,
-        "codebase": "v0.3.0",
-        "has_code": True,
-        "has_output": False,
-        "has_logs": False,
-        "created_at": "2024-01-01T00:00:00+00:00",
-    }
-    (queue_dir / "state.jsonl").write_text(json.dumps(entry) + "\n")
-    (queue_dir / "queue_config.json").write_text(
-        json.dumps(
-            {
-                "pipelines": {
-                    "aind+ephys": {
-                        "version_priority": ["v1.0+abc1234+def5678"],
-                        "params_priority": ["default"],
-                        "max_fail_per_dandiset": 3,
-                    }
-                }
-            }
-        )
-    )
+def test_cli_queue_refresh_forwards_processing_and_test_flags() -> None:
+    """dandicompute queue refresh forwards --processing/--test to write_dandiset_state_table."""
     runner = CliRunner()
-    result = runner.invoke(
-        _dandicompute_group,
-        ["queue", "refresh", "--queue", str(queue_dir)],
-    )
-    assert result.exit_code == 0, result.output
-
-
-@pytest.mark.ai_generated
-@pytest.mark.parametrize("dandi_api_key", [None, ""])
-def test_cli_queue_refresh_does_not_require_dandi_api_key(tmp_path: pathlib.Path, dandi_api_key: str | None) -> None:
-    """dandicompute queue refresh runs when DANDI_API_KEY is missing."""
-    queue_dir = tmp_path / "queue_directory"
-    queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
-
-    runner = CliRunner()
-    with mock.patch.dict("os.environ", {}, clear=True):
+    with mock.patch("dandi_compute_code.queue._queue_state.QueueState.write_dandiset_state_table") as mock_write:
         result = runner.invoke(
             _dandicompute_group,
-            ["queue", "refresh", "--queue", str(queue_dir)],
-            env={} if dandi_api_key is None else {"DANDI_API_KEY": dandi_api_key},
+            ["queue", "refresh", "--test"],
+            env=_DANDI_ENV,
         )
     assert result.exit_code == 0, result.output
+    for call in mock_write.call_args_list:
+        assert call.kwargs["test"] is True
 
 
 @pytest.mark.ai_generated
-def test_cli_queue_refresh_fails_without_queue_config(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh fails when queue_config.json is missing."""
-    queue_dir = tmp_path / "queue_directory"
-    queue_dir.mkdir()
+def test_cli_queue_refresh_fails_without_api_key() -> None:
+    """dandicompute queue refresh errors immediately when DANDI_API_KEY is missing (it writes to DANDI)."""
     runner = CliRunner()
-    result = runner.invoke(
-        _dandicompute_group,
-        ["queue", "refresh", "--queue", str(queue_dir)],
-        env={"DANDI_API_KEY": "test-key"},
-    )
+    env_without_key = {k: v for k, v in os.environ.items() if k != "DANDI_API_KEY"}
+    with mock.patch.dict(os.environ, env_without_key, clear=True):
+        result = runner.invoke(_dandicompute_group, ["queue", "refresh"])
     assert result.exit_code != 0
-    assert "queue_config.json" in result.output
+    assert "DANDI_API_KEY" in result.output
 
 
 @pytest.mark.ai_generated
-def test_cli_queue_refresh_required_queue_directory(tmp_path: pathlib.Path) -> None:
-    """dandicompute queue refresh requires --queue."""
+def test_cli_queue_refresh_fails_without_dandi_devel() -> None:
+    """dandicompute queue refresh errors when DANDI_DEVEL is missing."""
     runner = CliRunner()
-    result = runner.invoke(_dandicompute_group, ["queue", "refresh"])
+    with mock.patch.dict(os.environ, {"DANDI_API_KEY": "test-key"}, clear=True):
+        result = runner.invoke(_dandicompute_group, ["queue", "refresh"])
     assert result.exit_code != 0
-    assert "Missing option '--queue'" in result.output
+    assert "DANDI_DEVEL" in result.output

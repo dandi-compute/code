@@ -1,9 +1,8 @@
 """
-QueueState — typed container for ``state.jsonl``.
+QueueState — typed container for ``state.tsv``.
 
-``state.jsonl`` is a newline-delimited JSON file where each line is one attempt
-capsule.  Previously every consumer read it into a ``list[dict]`` and accessed
-fields by string key.  This module adds a thin typed layer on top:
+``state.tsv`` is a tab-separated table where each row is one attempt
+capsule. This module provides the typed model over it:
 
 - :class:`JobEntry` wraps an existing :class:`JobInfo` with the status fields
   (``has_code``, ``has_output``, ``has_logs``, ``content_id``, ...).
@@ -14,7 +13,9 @@ fields by string key.  This module adds a thin typed layer on top:
 from __future__ import annotations
 
 import collections
+import csv
 import datetime
+import io
 import json
 import logging
 import os
@@ -24,13 +25,14 @@ import shutil
 import subprocess
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from dataclasses import dataclass, field
 from typing import Literal
 
+from ._fetch_qualifying_aind_content_ids import _fetch_qualifying_aind_content_ids
+from ._fetch_qualifying_lfp_content_ids import _fetch_qualifying_lfp_content_ids
 from ._globals import _AIND_EPHYS_PARAMS_REGISTRY
 from ._job_info import JobInfo
-from ._qualifying_content_ids import _fetch_qualifying_content_ids
 from ._queue_utils import (
     _collect_attempts,
     _duration_string_to_seconds,
@@ -45,6 +47,7 @@ from ._queue_utils import (
     _UpstreamMetadataCache,
 )
 from ..aind_ephys_pipeline import UnmappedContentIDError, prepare_aind_ephys_job
+from ..dandiset import move_job_capsule, write_dandiset_file
 from ..dandiset._globals import _FAILED_RUNS_ARCHIVE_DANDISET_ID, _JOB_CAPSULES_DANDISET_ID
 from ..dandiset._load_assets_jsonld_metadata import (
     AssetMetadata,
@@ -58,6 +61,32 @@ _log = logging.getLogger(__name__)
 
 #: Dandiset whose assets back the pending/submission queries (the job capsules Dandiset).
 _DANDISET_ID = _JOB_CAPSULES_DANDISET_ID
+
+#: Column order for the ``state.tsv`` table -- matches :meth:`JobEntry.to_dict` field order.
+_STATE_TSV_FIELD_NAMES = [
+    "dandiset_id",
+    "dandi_path",
+    "pipeline",
+    "version",
+    "params",
+    "config",
+    "attempt",
+    "codebase",
+    "content_id",
+    "asset_size_bytes",
+    "has_code",
+    "has_been_submitted",
+    "has_output",
+    "has_logs",
+    "dataset_description_path",
+    "output_paths",
+    "log_paths",
+    "created_at",
+    "job_completion_time",
+]
+
+#: Default subpath (relative to a Dandiset root) that ``state.tsv`` is written to.
+_STATE_TSV_RELATIVE_PATH = "derivatives/state.tsv"
 
 
 @dataclass
@@ -83,7 +112,12 @@ class JobEntry:
     @property
     def is_pending(self) -> bool:
         """Code prepared but never submitted (no logs, no output yet)."""
-        return self.has_code and not self.has_logs and not self.has_output
+        return self.has_code and not self.has_been_submitted and not self.has_logs and not self.has_output
+
+    @property
+    def is_stalled(self) -> bool:
+        """Submitted to the scheduler but no logs or output have appeared yet — likely stuck or lost."""
+        return self.has_been_submitted and not self.has_logs and not self.has_output
 
     @property
     def is_running(self) -> bool:
@@ -179,6 +213,89 @@ class JobEntry:
 
         return nested_attempt_dir
 
+    def capsule_path_candidates(self) -> tuple[str, str]:
+        """
+        Return ``(flat_layout_path, legacy_nested_layout_path)`` for this attempt as
+        paths relative to the Dandiset root (POSIX strings).
+
+        The remote-metadata counterpart of :meth:`attempt_dir_candidates`, used when
+        resolving a capsule's path against DANDI assets metadata rather than a local
+        Dandiset clone.
+
+        :raises ValueError: If this entry's ``dandi_path`` is an empty string.
+        """
+        if self.job.dandi_path == "":
+            message = f"Entry has invalid dandi_path field (empty): {self!r}"
+            raise ValueError(message)
+        normalized_dandi_path = self.job.dandi_path.removesuffix(".nwb")
+
+        pipeline_dir = (
+            f"derivatives/dandiset-{self.job.dandiset_id}/{normalized_dandi_path}/pipeline-{self.job.pipeline}"
+        )
+        flat_capsule_path = (
+            f"{pipeline_dir}/version-{self.job.version}_codebase-{self.job.codebase}"
+            f"_params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
+        )
+        nested_capsule_path = (
+            f"{pipeline_dir}/version-{self.job.version}"
+            f"/params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
+        )
+        return flat_capsule_path, nested_capsule_path
+
+    def resolve_capsule_path(self, asset_paths: Collection[str]) -> str:
+        """
+        Resolve the best capsule path (relative to the Dandiset root) for this entry
+        against a known set of remote asset paths, e.g. the keys of
+        :attr:`~dandi_compute_code.dandiset.AssetsJsonldMetadata.path_to_asset_metadata`.
+
+        The remote-metadata counterpart of :meth:`resolve_attempt_dir`: the same
+        flat/nested/fallback resolution order, but checked against *asset_paths*
+        membership instead of the local filesystem -- so this works purely from
+        DANDI metadata, without a local Dandiset clone.
+
+        :param asset_paths: Asset paths (POSIX strings) for the Dandiset this
+            entry's capsule lives in.
+        :type asset_paths: collections.abc.Collection[str]
+        """
+
+        def _has_assets_under(prefix: str) -> bool:
+            return any(path == prefix or path.startswith(f"{prefix}/") for path in asset_paths)
+
+        flat_capsule_path, nested_capsule_path = self.capsule_path_candidates()
+        if _has_assets_under(flat_capsule_path):
+            return flat_capsule_path
+        if _has_assets_under(nested_capsule_path):
+            return nested_capsule_path
+
+        dandiset_prefix = f"derivatives/dandiset-{self.job.dandiset_id}/"
+        if not any(path.startswith(dandiset_prefix) for path in asset_paths):
+            return nested_capsule_path
+
+        pipeline_dir_name = f"pipeline-{self.job.pipeline}"
+        flat_attempt_dir_name = (
+            f"version-{self.job.version}_codebase-{self.job.codebase}"
+            f"_params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
+        )
+        nested_attempt_dir_name = f"params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
+
+        pipeline_dir_marker = f"/{pipeline_dir_name}/"
+        pipeline_dirs = sorted(
+            {
+                path[: path.index(pipeline_dir_marker) + len(pipeline_dir_marker) - 1]
+                for path in asset_paths
+                if path.startswith(dandiset_prefix) and pipeline_dir_marker in path
+            }
+        )
+        for pipeline_dir in pipeline_dirs:
+            fallback_flat_capsule_path = f"{pipeline_dir}/{flat_attempt_dir_name}"
+            if _has_assets_under(fallback_flat_capsule_path):
+                return fallback_flat_capsule_path
+            fallback_nested_capsule_path = f"{pipeline_dir}/version-{self.job.version}/{nested_attempt_dir_name}"
+            if _has_assets_under(fallback_nested_capsule_path):
+                return fallback_nested_capsule_path
+
+        return nested_capsule_path
+
     def resolve_unsubmitted_attempt_dir(self, base_dir: pathlib.Path) -> pathlib.Path | None:
         """
         Resolve the attempt directory only if this entry is queued but unsubmitted.
@@ -198,7 +315,7 @@ class JobEntry:
 
     @classmethod
     def from_dict(cls, data: dict, /) -> JobEntry:
-        """Construct from a raw ``state.jsonl`` entry dict."""
+        """Construct from a raw entry dict (as produced by :meth:`to_dict`)."""
         job = JobInfo(
             dandiset_id=data["dandiset_id"],
             dandi_path=data["dandi_path"],
@@ -225,7 +342,7 @@ class JobEntry:
         )
 
     def to_dict(self) -> dict:
-        """Serialise back to the flat dict format written to ``state.jsonl``."""
+        """Serialise back to the flat dict format underlying :meth:`to_tsv_row`."""
         return {
             **self.job.to_dict(),
             "content_id": self.content_id,
@@ -241,16 +358,80 @@ class JobEntry:
             "job_completion_time": self.job_completion_time,
         }
 
+    def to_tsv_row(self) -> dict[str, str]:
+        """
+        Flatten this entry to a single ``state.tsv`` row.
+
+        Every value from :meth:`to_dict` is coerced to a plain string: ``None`` becomes an
+        empty cell, and the nested path/content-id mappings (``dataset_description_path``,
+        ``output_paths``, ``log_paths``) are serialised as compact JSON so the table stays
+        strictly tabular (one row per attempt capsule).
+        """
+        raw = self.to_dict()
+        row: dict[str, str] = {}
+        for field_name in _STATE_TSV_FIELD_NAMES:
+            value = raw[field_name]
+            if isinstance(value, dict):
+                row[field_name] = json.dumps(value, sort_keys=True) if value else ""
+            elif value is None:
+                row[field_name] = ""
+            else:
+                row[field_name] = str(value)
+        return row
+
+    @classmethod
+    def from_tsv_row(cls, row: dict[str, str], /) -> JobEntry:
+        """
+        Construct from a single ``state.tsv`` row (the inverse of :meth:`to_tsv_row`).
+
+        Reverses the coercions applied by :meth:`to_tsv_row`: empty cells become
+        ``None`` (or ``{}`` for the JSON-encoded mapping fields), ``asset_size_bytes``
+        and ``attempt`` are parsed back to ``int``, and the boolean fields (stored as
+        the literal strings ``"True"``/``"False"``) are parsed back to ``bool``.
+        """
+        job = JobInfo(
+            dandiset_id=row["dandiset_id"],
+            dandi_path=row["dandi_path"],
+            pipeline=row["pipeline"],
+            version=row["version"],
+            params=row["params"],
+            config=row["config"],
+            attempt=int(row["attempt"]),
+            codebase=row["codebase"],
+        )
+
+        def _parse_bool(value: str) -> bool:
+            return value == "True"
+
+        def _parse_optional_str(value: str) -> str | None:
+            return value if value != "" else None
+
+        def _parse_json_dict(value: str) -> dict[str, str]:
+            return json.loads(value) if value != "" else {}
+
+        content_id = row["content_id"] or None
+        asset_size_bytes_raw = row["asset_size_bytes"]
+        asset_size_bytes = int(asset_size_bytes_raw) if asset_size_bytes_raw != "" else None
+
+        return cls(
+            job=job,
+            content_id=content_id,
+            asset_size_bytes=asset_size_bytes,
+            has_code=_parse_bool(row["has_code"]),
+            has_been_submitted=_parse_bool(row["has_been_submitted"]),
+            has_output=_parse_bool(row["has_output"]),
+            has_logs=_parse_bool(row["has_logs"]),
+            created_at=_parse_optional_str(row["created_at"]),
+            job_completion_time=_parse_optional_str(row["job_completion_time"]),
+            dataset_description_path=_parse_json_dict(row["dataset_description_path"]),
+            output_paths=_parse_json_dict(row["output_paths"]),
+            log_paths=_parse_json_dict(row["log_paths"]),
+        )
+
 
 @dataclass
 class QueueState:
-    """
-    Container for all entries in ``state.jsonl``.
-
-    Replaces the scattered ``list[dict]`` reads in ``_prepare_queue.py``,
-    ``_aggregate_queue_statistics.py``, ``_process_queue.py``, and
-    ``_clean_unsubmitted_capsules.py``.
-    """
+    """Container for all entries in ``state.tsv``."""
 
     entries: list[JobEntry]
 
@@ -264,6 +445,11 @@ class QueueState:
     def pending(self) -> list[JobEntry]:
         """Entries with code prepared but not yet submitted."""
         return [e for e in self.entries if e.is_pending]
+
+    @property
+    def stalled(self) -> list[JobEntry]:
+        """Entries submitted to the scheduler with no logs or output yet."""
+        return [e for e in self.entries if e.is_stalled]
 
     @property
     def running(self) -> list[JobEntry]:
@@ -494,14 +680,17 @@ class QueueState:
         return sum(1 for line in result.stdout.splitlines() if line.strip() == "AIND-Ephys-Pipeline")
 
     @staticmethod
-    def load_queue_config(*, queue_directory: pathlib.Path) -> dict:
+    def load_queue_config() -> dict:
         """
-        Read and validate ``queue_config.json`` under *queue_directory*.
+        Read and validate the packaged pipeline configuration.
 
-        :raises FileNotFoundError: If ``queue_config.json`` is not found.
-        :raises ValueError: If the queue configuration fails LinkML validation.
+        Always reads the pipeline configuration packaged with this repo -- there is no local
+        override.
+
+        :raises FileNotFoundError: If the packaged pipeline configuration file is missing.
+        :raises ValueError: If the pipeline configuration fails LinkML validation.
         """
-        return _load_queue_config(queue_directory=queue_directory)
+        return _load_queue_config()
 
     @staticmethod
     def resolve_params_key_to_id(pipeline: str, params_key: str) -> str:
@@ -591,59 +780,102 @@ class QueueState:
         """
         return cls.from_metadata(load_assets_jsonld_metadata(dandiset_id=dandiset_id))
 
+    def to_tsv_string(self) -> str:
+        """Serialise all entries to a tab-separated ``state.tsv`` table (including header)."""
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=_STATE_TSV_FIELD_NAMES, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for entry in self.entries:
+            writer.writerow(entry.to_tsv_row())
+        return buffer.getvalue()
+
+    def to_tsv(self, file_path: pathlib.Path, /) -> None:
+        """
+        Write all entries to *file_path* as a tab-separated ``state.tsv`` table.
+
+        :param file_path: Destination path; the file is overwritten if it already exists.
+        :type file_path: pathlib.Path
+        """
+        file_path.write_text(self.to_tsv_string())
+
     @classmethod
-    def write_state(
+    def write_dandiset_state_table(
         cls,
         *,
-        queue_directory: pathlib.Path,
         dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
-        state_file_name: str = "state.jsonl",
+        relative_path: str = _STATE_TSV_RELATIVE_PATH,
+        processing_directory: pathlib.Path | None = None,
+        test: bool = False,
     ) -> None:
         """
-        Write a queue state file from DANDI ``assets.jsonld`` metadata.
+        Write this Dandiset's queue state as a ``state.tsv`` table within itself.
 
-        Validates ``queue_config.json`` under *queue_directory*, builds the state via
-        :meth:`from_dandi`, and writes it to ``queue_directory/state_file_name``.
+        Builds the state from *dandiset_id*'s remote ``assets.jsonld`` metadata (see
+        :meth:`from_dandi`) and uploads it as a tab-separated table to *relative_path* within
+        *dandiset_id* (default ``derivatives/state.tsv``) via
+        :func:`~dandi_compute_code.dandiset.write_dandiset_file`.
 
-        :param queue_directory: Path to the queue root directory.
-        :type queue_directory: pathlib.Path
-        :param dandiset_id: The Dandiset whose ``assets.jsonld`` portrays the state.
+        Intended to be called once for the job capsules ("source") Dandiset and once for the
+        failed runs archive ("archived") Dandiset. There is no local queue directory or local
+        state file involved -- the state is always rebuilt fresh from *dandiset_id*'s remote
+        ``assets.jsonld`` and rewritten directly.
+
+        :param dandiset_id: The Dandiset whose ``assets.jsonld`` portrays the state, and which
+            the table is written into. Defaults to the job capsules Dandiset.
         :type dandiset_id: str
-        :param state_file_name: Name of the state file written under *queue_directory*.
-        :type state_file_name: str
-        :raises FileNotFoundError: If ``queue_config.json`` is not found.
-        :raises ValueError: If the queue configuration fails LinkML validation.
+        :param relative_path: Path (relative to the Dandiset root) the table is written to.
+        :type relative_path: str
+        :param processing_directory: Directory for the temporary working tree used to upload
+            the table (defaults to the system temporary location).
+        :type processing_directory: pathlib.Path | None
+        :param test: When ``True``, leave the temporary working tree on disk after a
+            successful upload for debugging.
+        :type test: bool
+        :raises RuntimeError: If ``DANDI_API_KEY`` is unset or blank, or if the upload fails.
         """
-        _load_queue_config(queue_directory=queue_directory)
         state = cls.from_dandi(dandiset_id=dandiset_id)
-        state.to_file(queue_directory / state_file_name)
-
-    @classmethod
-    def write_archive_state(cls, *, queue_directory: pathlib.Path) -> None:
-        """
-        Write ``archive_state.jsonl`` from the failed runs archive ``assets.jsonld``.
-
-        The archive counterpart to :meth:`write_state`; produces an identically
-        structured state file adjacent to ``state.jsonl`` portraying the failed runs
-        archive Dandiset (``001873``) rather than the job capsules Dandiset.
-
-        :param queue_directory: Path to the queue root directory.
-        :type queue_directory: pathlib.Path
-        """
-        cls.write_state(
-            queue_directory=queue_directory,
-            dandiset_id=_FAILED_RUNS_ARCHIVE_DANDISET_ID,
-            state_file_name="archive_state.jsonl",
+        write_dandiset_file(
+            dandiset_id=dandiset_id,
+            relative_path=relative_path,
+            content=state.to_tsv_string(),
+            processing_directory=processing_directory,
+            test=test,
         )
 
     def aggregate_statistics(
         self,
         *,
-        queue_directory: pathlib.Path,
         dandiset_directory: pathlib.Path,
-        output_file_name: str = "queue_stats.json",
+        dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
+        relative_path: str = "derivatives/queue_stats.json",
+        processing_directory: pathlib.Path | None = None,
+        test: bool = False,
     ) -> dict:
-        """Write aggregate queue statistics JSON and return the written payload."""
+        """
+        Write aggregate queue statistics JSON into a Dandiset and return the computed payload.
+
+        Nextflow timeline reports are still located by walking *dandiset_directory* (a local
+        Dandiset clone) -- that part is unchanged. The resulting statistics are written to
+        *relative_path* within *dandiset_id* (default ``derivatives/queue_stats.json``) via
+        :func:`~dandi_compute_code.dandiset.write_dandiset_file`, rather than written to local
+        disk.
+
+        :param dandiset_directory: Local clone of the dandiset used to locate Nextflow timeline
+            reports.
+        :type dandiset_directory: pathlib.Path
+        :param dandiset_id: The Dandiset the statistics JSON is written into.
+        :type dandiset_id: str
+        :param relative_path: Path (relative to the Dandiset root) the statistics JSON is
+            written to.
+        :type relative_path: str
+        :param processing_directory: Directory for the temporary working tree used to upload the
+            statistics JSON (defaults to the system temporary location).
+        :type processing_directory: pathlib.Path | None
+        :param test: When ``True``, leave the temporary working tree on disk after a successful
+            upload for debugging.
+        :type test: bool
+        :raises RuntimeError: If ``DANDI_API_KEY`` is unset or blank, or if the upload fails.
+        """
         job_step_wall_time_seconds: collections.defaultdict[str, float] = collections.defaultdict(float)
         timeline_files_processed = 0
         for entry in self.entries:
@@ -692,8 +924,13 @@ class QueueState:
             },
         }
 
-        output_file = queue_directory / output_file_name
-        output_file.write_text(json.dumps(statistics, indent=2, sort_keys=True) + "\n")
+        write_dandiset_file(
+            dandiset_id=dandiset_id,
+            relative_path=relative_path,
+            content=json.dumps(statistics, indent=2, sort_keys=True) + "\n",
+            processing_directory=processing_directory,
+            test=test,
+        )
         return statistics
 
     def clean_unsubmitted_capsules(self, *, dandiset_directory: pathlib.Path) -> list[pathlib.Path]:
@@ -737,26 +974,102 @@ class QueueState:
 
         return removed
 
+    def archive_by_status(
+        self,
+        *,
+        status: Literal["failed", "pending", "stalled"],
+        dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
+        archive_dandiset_id: str = _FAILED_RUNS_ARCHIVE_DANDISET_ID,
+        processing_directory: pathlib.Path | None = None,
+        test: bool = False,
+    ) -> list[str]:
+        """
+        Move every entry with the given *status* into the failed runs archive.
+
+        *status* names the :class:`QueueState` property selecting the entries to
+        archive: ``"failed"`` (:attr:`failed` — code and logs present, no output),
+        ``"pending"`` (:attr:`pending` — code prepared but never submitted), or
+        ``"stalled"`` (:attr:`stalled` — submitted to the scheduler but no logs or
+        output ever appeared). For each matching entry, resolves its capsule path
+        against *dandiset_id*'s remote ``assets.jsonld`` (see
+        :meth:`JobEntry.resolve_capsule_path`, which accounts for both the current
+        flat attempt-directory layout and the legacy nested layout) and moves the
+        corresponding capsule from *dandiset_id* to *archive_dandiset_id* via
+        :func:`~dandi_compute_code.dandiset.move_job_capsule`. Both Dandisets are
+        addressed purely by ID -- everything is resolved and moved ephemerally over
+        the network, with no local Dandiset clone required.
+
+        :param status: Which subset of entries to archive.
+        :type status: typing.Literal["failed", "pending", "stalled"]
+        :param dandiset_id: Dandiset entries are archived *from*. Defaults to the job
+            capsules Dandiset.
+        :type dandiset_id: str
+        :param archive_dandiset_id: Dandiset entries are archived *to*. Defaults to
+            the failed runs archive Dandiset.
+        :type archive_dandiset_id: str
+        :param processing_directory: Directory for the temporary working tree used by
+            each move (defaults to the system temporary location).
+        :type processing_directory: pathlib.Path | None
+        :param test: When ``True``, leave each temporary working tree on disk after a
+            successful move for debugging.
+        :type test: bool
+        :returns: Capsule paths (relative to the Dandiset root) that were archived,
+            in the order they were processed.
+        :rtype: list[str]
+        :raises RuntimeError: If ``DANDI_API_KEY`` is unset or blank, or if archiving
+            any individual capsule fails (see :func:`move_job_capsule`). A failure
+            leaves entries processed so far archived and stops before the rest.
+        :raises ValueError: If *status* is not ``"failed"``, ``"pending"``, or
+            ``"stalled"``.
+        """
+        if status not in ("failed", "pending", "stalled"):
+            message = f"Unknown status {status!r}; expected 'failed', 'pending', or 'stalled'."
+            raise ValueError(message)
+
+        if not os.environ.get("DANDI_API_KEY", "").strip():
+            message = "`DANDI_API_KEY` environment variable is not set or is blank."
+            raise RuntimeError(message)
+
+        entries = getattr(self, status)
+        archived: list[str] = []
+        if not entries:
+            return archived
+
+        asset_paths = set(load_assets_jsonld_metadata(dandiset_id=dandiset_id).path_to_asset_metadata)
+        for entry in entries:
+            capsule_path = entry.resolve_capsule_path(asset_paths)
+            move_job_capsule(
+                capsule_path=capsule_path,
+                source_dandiset_id=dandiset_id,
+                target_dandiset_id=archive_dandiset_id,
+                processing_directory=processing_directory,
+                test=test,
+            )
+            archived.append(capsule_path)
+
+        return archived
+
     @classmethod
     def process_queue(
         cls,
         *,
-        queue_directory: pathlib.Path,
         processing_directory: pathlib.Path,
         max_concurrent_aind_jobs: int = 2,
         jitter_seconds: float = 30.0,
         test: bool = False,
     ) -> Literal["submitted", "no-pending", "slots-unavailable"]:
         """
-        Submit jobs from ``state.jsonl`` up to ``max_concurrent_aind_jobs`` total
+        Submit jobs from the live queue state up to ``max_concurrent_aind_jobs`` total
         running ``AIND-Ephys-Pipeline`` SLURM jobs.
 
-        :param queue_directory: Path to the queue root directory.
+        The queue state is always fetched fresh -- there is no local queue directory. Presence of
+        pending work is checked live via :meth:`has_pending_jobs`, and submission itself works
+        entirely from the DANDI assets metadata (see :meth:`submit_next`).
+
         :param processing_directory: Directory for temporary working trees during submission.
         :param max_concurrent_aind_jobs: Maximum concurrent ``AIND-Ephys-Pipeline`` jobs.
         :param jitter_seconds: Maximum random delay (seconds) before processing; ``0`` disables.
         :param test: If ``True``, preserve temporary processing directories on success.
-        :raises FileNotFoundError: If ``state.jsonl`` is not found in *queue_directory*.
         :raises ValueError: If *jitter_seconds* is negative or *max_concurrent_aind_jobs* < 1.
         """
         if jitter_seconds < 0:
@@ -767,15 +1080,10 @@ class QueueState:
             _log.info("Sleeping %.2f seconds (jitter) before processing queue", delay)
             time.sleep(delay)
 
-        state_file = queue_directory / "state.jsonl"
-        if not state_file.exists():
-            message = f"State file not found: {state_file}"
-            raise FileNotFoundError(message)
         if max_concurrent_aind_jobs < 1:
             message = "max_concurrent_aind_jobs must be at least 1"
             raise ValueError(message)
-        if not state_file.read_text().strip():
-            _log.info(f"No entries in {state_file}")
+        if not cls.has_pending_jobs():
             return "no-pending"
 
         running_count = cls.count_running_aind_ephys_pipeline_jobs()
@@ -794,7 +1102,6 @@ class QueueState:
     def prepare(
         cls,
         *,
-        queue_directory: pathlib.Path,
         pipeline_directory: pathlib.Path | None = None,
         config_key: str = "default",
         content_ids: list[str] | None = None,
@@ -802,33 +1109,31 @@ class QueueState:
         only_pipeline: str | None = None,
     ) -> None:
         """
-        En-masse preparation of qualifying assets based on the current queue config.
+        En-masse preparation of qualifying assets based on the packaged pipeline config.
 
-        For every pipeline/version/params combination declared in
-        ``queue_config.json`` this determines which content IDs to prepare and calls
-        :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job` for
-        each asset. The per-pipeline failure cap (``max_fail_per_dandiset``) is
-        enforced by reading the existing ``state.jsonl`` under *queue_directory*.
+        For every pipeline/version/params combination declared in the packaged pipeline
+        configuration (see :func:`_load_queue_config`) this determines which content IDs to
+        prepare and calls :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job`
+        for each asset. The per-pipeline failure cap (``max_fail_per_dandiset``) is enforced
+        against the live queue state (see :meth:`from_dandi`) -- there is no local queue
+        directory.
 
-        :param queue_directory: Path to the queue root directory.
         :param pipeline_directory: Local path to the AIND pipeline repository.
         :param config_key: Key for a registered job configuration.
         :param content_ids: Explicit content IDs to prepare; when provided, the
             qualifying list is not fetched from the network.
         :param limit: If provided, stop after preparing *limit* assets in total.
         :param only_pipeline: If provided, prepare only this pipeline instead of
-            every pipeline in the queue config. Raises if the name is not configured.
+            every pipeline in the config. Raises if the name is not configured.
         """
-        queue_config = _load_queue_config(queue_directory=queue_directory)
+        queue_config = _load_queue_config()
         pipelines = queue_config.get("pipelines", {})
         if only_pipeline is not None and only_pipeline not in pipelines:
-            message = (
-                f"Pipeline '{only_pipeline}' is not configured. " f"Configured pipelines are: {list(pipelines.keys())}."
-            )
+            configured = list(pipelines.keys())
+            message = f"Pipeline '{only_pipeline}' is not configured. Configured pipelines are: {configured}."
             raise ValueError(message)
 
-        state_file = queue_directory / "state.jsonl"
-        state = cls.from_jsonl(state_file) if state_file.exists() else cls(entries=[])
+        state = cls.from_dandi()
         content_id_to_dandiset_ids = state.content_id_to_dandiset_ids()
 
         prepared_count = 0
@@ -837,13 +1142,16 @@ class QueueState:
                 continue
             if limit is not None and prepared_count >= limit:
                 break
-            pipeline_content_ids = (
-                content_ids
-                if content_ids is not None
-                else _order_content_ids_for_uniform_dandiset_sampling(
-                    content_ids=_fetch_qualifying_content_ids(pipeline_name)
+            if content_ids is not None:
+                pipeline_content_ids = content_ids
+            elif pipeline_name == "lfp":
+                pipeline_content_ids = _order_content_ids_for_uniform_dandiset_sampling(
+                    content_ids=_fetch_qualifying_lfp_content_ids()
                 )
-            )
+            else:
+                pipeline_content_ids = _order_content_ids_for_uniform_dandiset_sampling(
+                    content_ids=_fetch_qualifying_aind_content_ids()
+                )
             for version in pipeline_data.get("version_priority", []):
                 if limit is not None and prepared_count >= limit:
                     break
@@ -914,10 +1222,20 @@ class QueueState:
     def dump_issues(
         *,
         dandiset_directory: pathlib.Path,
-        queue_directory: pathlib.Path,
-        output_file_name: str = "issues_dump.json",
+        dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
+        relative_path: str = "derivatives/issues_dump.json",
+        processing_directory: pathlib.Path | None = None,
+        test: bool = False,
     ) -> list[dict]:
-        """Scan nextflow/slurm logs and write per-capsule error lines under *queue_directory*."""
+        """
+        Scan nextflow/slurm logs and write per-capsule error lines into a Dandiset.
+
+        Logs are still located by walking *dandiset_directory* (a local Dandiset clone) --
+        that part is unchanged. The resulting records are written to *relative_path* within
+        *dandiset_id* (default ``derivatives/issues_dump.json``) via
+        :func:`~dandi_compute_code.dandiset.write_dandiset_file`, rather than written to local
+        disk.
+        """
         records: list[dict] = []
         for logs_dir in _list_capsule_log_directories(dandiset_directory=dandiset_directory):
             nextflow_log = logs_dir / "nextflow.log"
@@ -947,22 +1265,39 @@ class QueueState:
             "capsule_count": len(records),
             "records": records,
         }
-        (queue_directory / output_file_name).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        write_dandiset_file(
+            dandiset_id=dandiset_id,
+            relative_path=relative_path,
+            content=json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            processing_directory=processing_directory,
+            test=test,
+        )
         return records
 
     @staticmethod
     def summarize_issues(
         *,
         dandiset_directory: pathlib.Path,
-        queue_directory: pathlib.Path,
-        dump_output_file_name: str = "issues_dump.json",
-        output_file_name: str = "issues_summary.json",
+        dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
+        dump_relative_path: str = "derivatives/issues_dump.json",
+        relative_path: str = "derivatives/issues_summary.json",
+        processing_directory: pathlib.Path | None = None,
+        test: bool = False,
     ) -> dict[str, list[str]]:
-        """Write descending error-frequency summary where keys are counts and values are error strings."""
+        """
+        Write a descending error-frequency summary (keys are counts, values are error strings).
+
+        Calls :meth:`dump_issues` (writing its own dump to *dump_relative_path* within
+        *dandiset_id*), then writes the summary to *relative_path* within *dandiset_id*
+        (default ``derivatives/issues_summary.json``) via
+        :func:`~dandi_compute_code.dandiset.write_dandiset_file`.
+        """
         records = QueueState.dump_issues(
             dandiset_directory=dandiset_directory,
-            queue_directory=queue_directory,
-            output_file_name=dump_output_file_name,
+            dandiset_id=dandiset_id,
+            relative_path=dump_relative_path,
+            processing_directory=processing_directory,
+            test=test,
         )
 
         counts: collections.Counter[str] = collections.Counter()
@@ -987,33 +1322,33 @@ class QueueState:
             "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "summary": summary,
         }
-        (queue_directory / output_file_name).write_text(json.dumps(output_payload, indent=2, sort_keys=True) + "\n")
+        write_dandiset_file(
+            dandiset_id=dandiset_id,
+            relative_path=relative_path,
+            content=json.dumps(output_payload, indent=2, sort_keys=True) + "\n",
+            processing_directory=processing_directory,
+            test=test,
+        )
         return summary
 
     @classmethod
-    def from_jsonl(cls, file_path: pathlib.Path, /) -> QueueState:
+    def from_tsv(cls, file_path: pathlib.Path, /) -> QueueState:
         """
-        Load from an existing ``state.jsonl`` file.
+        Load from an existing ``state.tsv`` file.
 
-        :param file_path: Path to the ``state.jsonl`` file to read.
+        The inverse of :meth:`to_tsv`/:meth:`to_tsv_string`: parses the tab-separated
+        table (via :class:`csv.DictReader`, using :data:`_STATE_TSV_FIELD_NAMES` as
+        the expected column order) back into :class:`JobEntry` objects via
+        :meth:`JobEntry.from_tsv_row`.
+
+        :param file_path: Path to the ``state.tsv`` file to read.
         :type file_path: pathlib.Path
         :raises FileNotFoundError: If *file_path* does not exist.
         """
         if not file_path.exists():
             message = f"State file not found: {file_path}"
             raise FileNotFoundError(message)
-        stripped_lines = [line.strip() for line in file_path.read_text().splitlines()]
-        entries = [JobEntry.from_dict(json.loads(line)) for line in stripped_lines if line]
+        with file_path.open(newline="") as file_stream:
+            reader = csv.DictReader(file_stream, delimiter="\t")
+            entries = [JobEntry.from_tsv_row(row) for row in reader]
         return cls(entries=entries)
-
-    def to_file(self, file_path: pathlib.Path, /) -> None:
-        """
-        Write all entries to *file_path* as newline-delimited JSON.
-
-        :param file_path: Destination path; the file is overwritten if it
-            already exists.
-        :type file_path: pathlib.Path
-        """
-        with file_path.open(mode="w") as file_stream:
-            for entry in self.entries:
-                file_stream.write(json.dumps(entry.to_dict()) + "\n")

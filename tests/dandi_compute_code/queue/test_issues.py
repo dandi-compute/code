@@ -1,44 +1,21 @@
 import json
 import pathlib
+from unittest import mock
 
 import pytest
+from testing_utilities import write_attempt_logs
 
-from dandi_compute_code.queue import dump_issues, summarize_issues
+from dandi_compute_code.queue import QueueState
 
-
-def _write_attempt_logs(
-    *,
-    dandiset_directory: pathlib.Path,
-    dandiset_id: str,
-    subject: str,
-    attempt: int,
-    nextflow_lines: list[str],
-    slurm_lines_by_file: dict[str, list[str]],
-) -> pathlib.Path:
-    logs_dir = (
-        dandiset_directory
-        / "derivatives"
-        / f"dandiset-{dandiset_id}"
-        / f"sub-{subject}"
-        / "pipeline-test"
-        / f"version-v1.0_params-default_config-abc123_attempt-{attempt}"
-        / "logs"
-    )
-    logs_dir.mkdir(parents=True)
-    (logs_dir / "nextflow.log").write_text("\n".join(nextflow_lines) + "\n")
-    for file_name, lines in slurm_lines_by_file.items():
-        (logs_dir / file_name).write_text("\n".join(lines) + "\n")
-    return logs_dir
+_JOB_CAPSULES_DANDISET_ID = "001697"
 
 
 @pytest.mark.ai_generated
 def test_dump_issues_writes_per_capsule_records(tmp_path: pathlib.Path) -> None:
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
 
-    _write_attempt_logs(
+    write_attempt_logs(
         dandiset_directory=dandiset_dir,
         dandiset_id="000001",
         subject="mouse01",
@@ -46,7 +23,7 @@ def test_dump_issues_writes_per_capsule_records(tmp_path: pathlib.Path) -> None:
         nextflow_lines=["INFO start", "ERROR ~ Process failed"],
         slurm_lines_by_file={"job-123_slurm.log": ["slurm ok", "srun: error: node failure"]},
     )
-    _write_attempt_logs(
+    write_attempt_logs(
         dandiset_directory=dandiset_dir,
         dandiset_id="000001",
         subject="mouse02",
@@ -55,24 +32,55 @@ def test_dump_issues_writes_per_capsule_records(tmp_path: pathlib.Path) -> None:
         slurm_lines_by_file={"job-456_slurm.log": ["all good"]},
     )
 
-    records = dump_issues(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
-    dump_payload = json.loads((queue_dir / "issues_dump.json").read_text())
+    with mock.patch("dandi_compute_code.queue._queue_state.write_dandiset_file") as mock_write_file:
+        records = QueueState.dump_issues(dandiset_directory=dandiset_dir)
 
     assert len(records) == 1
+    assert records[0]["capsule_path"].endswith("_attempt-1")
+    assert records[0]["nextflow_errors"] == ["ERROR ~ Process failed"]
+    assert records[0]["slurm_errors"] == {"job-123_slurm.log": ["srun: error: node failure"]}
+
+    mock_write_file.assert_called_once()
+    call_kwargs = mock_write_file.call_args.kwargs
+    assert call_kwargs["dandiset_id"] == _JOB_CAPSULES_DANDISET_ID
+    assert call_kwargs["relative_path"] == "derivatives/issues_dump.json"
+    dump_payload = json.loads(call_kwargs["content"])
     assert dump_payload["capsule_count"] == 1
-    assert dump_payload["records"][0]["capsule_path"].endswith("_attempt-1")
-    assert dump_payload["records"][0]["nextflow_errors"] == ["ERROR ~ Process failed"]
-    assert dump_payload["records"][0]["slurm_errors"] == {"job-123_slurm.log": ["srun: error: node failure"]}
+    assert dump_payload["records"] == records
+
+
+@pytest.mark.ai_generated
+def test_dump_issues_forwards_dandiset_id_and_relative_path(tmp_path: pathlib.Path) -> None:
+    """dump_issues forwards dandiset_id/relative_path/processing_directory/test to write_dandiset_file."""
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+
+    with mock.patch("dandi_compute_code.queue._queue_state.write_dandiset_file") as mock_write_file:
+        QueueState.dump_issues(
+            dandiset_directory=dandiset_dir,
+            dandiset_id="000123",
+            relative_path="derivatives/custom_dump.json",
+            processing_directory=processing_dir,
+            test=True,
+        )
+
+    mock_write_file.assert_called_once_with(
+        dandiset_id="000123",
+        relative_path="derivatives/custom_dump.json",
+        content=mock.ANY,
+        processing_directory=processing_dir,
+        test=True,
+    )
 
 
 @pytest.mark.ai_generated
 def test_summarize_issues_writes_descending_frequency(tmp_path: pathlib.Path) -> None:
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
 
-    _write_attempt_logs(
+    write_attempt_logs(
         dandiset_directory=dandiset_dir,
         dandiset_id="000001",
         subject="mouse01",
@@ -80,7 +88,7 @@ def test_summarize_issues_writes_descending_frequency(tmp_path: pathlib.Path) ->
         nextflow_lines=["error: common failure", "error: unique failure"],
         slurm_lines_by_file={"job-001_slurm.log": ["error: common failure"]},
     )
-    _write_attempt_logs(
+    write_attempt_logs(
         dandiset_directory=dandiset_dir,
         dandiset_id="000002",
         subject="mouse02",
@@ -89,8 +97,43 @@ def test_summarize_issues_writes_descending_frequency(tmp_path: pathlib.Path) ->
         slurm_lines_by_file={"job-002_slurm.log": ["done"]},
     )
 
-    summary = summarize_issues(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
-    summary_payload = json.loads((queue_dir / "issues_summary.json").read_text())
+    with mock.patch("dandi_compute_code.queue._queue_state.write_dandiset_file") as mock_write_file:
+        summary = QueueState.summarize_issues(dandiset_directory=dandiset_dir)
 
     assert summary == {"3": ["error: common failure"], "1": ["error: unique failure"]}
+
+    # dump_issues (called internally) plus the summary itself are both written.
+    assert mock_write_file.call_count == 2
+    relative_paths = {call.kwargs["relative_path"] for call in mock_write_file.call_args_list}
+    assert relative_paths == {"derivatives/issues_dump.json", "derivatives/issues_summary.json"}
+
+    summary_call = next(
+        call
+        for call in mock_write_file.call_args_list
+        if call.kwargs["relative_path"] == "derivatives/issues_summary.json"
+    )
+    summary_payload = json.loads(summary_call.kwargs["content"])
     assert summary_payload["summary"] == {"3": ["error: common failure"], "1": ["error: unique failure"]}
+
+
+@pytest.mark.ai_generated
+def test_summarize_issues_forwards_dandiset_id_to_dump_and_summary(tmp_path: pathlib.Path) -> None:
+    """summarize_issues forwards dandiset_id/processing_directory/test to both writes."""
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+    processing_dir = tmp_path / "processing"
+    processing_dir.mkdir()
+
+    with mock.patch("dandi_compute_code.queue._queue_state.write_dandiset_file") as mock_write_file:
+        QueueState.summarize_issues(
+            dandiset_directory=dandiset_dir,
+            dandiset_id="000123",
+            processing_directory=processing_dir,
+            test=True,
+        )
+
+    assert mock_write_file.call_count == 2
+    for call in mock_write_file.call_args_list:
+        assert call.kwargs["dandiset_id"] == "000123"
+        assert call.kwargs["processing_directory"] == processing_dir
+        assert call.kwargs["test"] is True

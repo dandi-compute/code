@@ -21,26 +21,26 @@ dandicompute aind prepare --id [full content ID] --submit
 To test automatically on the example asset:
 
 ```bash
-dandicompute prepare test --queue ./queue
+dandicompute prepare aind --test
 ```
 
 To clean unsubmitted job capsules:
 
 ```bash
-dandicompute queue clean --queue ./queue/ --dandiset ./dandi/001697/
+dandicompute queue clean --dandiset ./dandi/001697/
 ```
 
 To archive a failed job capsule by moving it from `001697` to the permanent archive `001873`:
 
 ```bash
-dandicompute archive job --path derivatives/dandiset-000409/sub-mouse01/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1
+dandicompute archive --job derivatives/dandiset-000409/sub-mouse01/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1
 ```
 
 
 To check whether there is any queued work before dispatching, use `queue pending`. It exits with code 0 when at least one job is awaiting submission, and code 1 when there is nothing to process. This lets a crontab skip the dispatch entirely when the queue is empty:
 
 ```bash
-dandicompute queue pending --silent && dandicompute queue process --queue ./queue/ --processing ./processing/
+dandicompute queue pending --silent && dandicompute queue process --processing ./processing/
 ```
 
 

@@ -1,12 +1,10 @@
 """
-Private helpers for the :mod:`._queue_state` OOP model.
+Private helpers for the :mod:`._queue_state` model.
 
 This companion module holds the lower-level utilities the ``QueueState`` /
 ``JobEntry`` model depends on (assets-path parsing, attempt-record construction,
 upstream-metadata lookup, queue-config validation, content-id ordering, and log
-parsing). It deliberately reimplements the behavior of the sibling procedural
-queue helpers so the model does not call them. The duplication is temporary,
-kept until those procedural functions are removed in favor of the model.
+parsing).
 """
 
 from __future__ import annotations
@@ -24,7 +22,7 @@ from dataclasses import dataclass
 import linkml_runtime.processing.referencevalidator
 import linkml_runtime.utils.schemaview
 
-from ._globals import _DURATION_PART_RE, _QUEUE_CONFIG_SCHEMA_PATH
+from ._globals import _DURATION_PART_RE, _PACKAGED_PIPELINE_CONFIGS_PATH, _QUEUE_CONFIG_SCHEMA_PATH
 from ._job_info import JobInfo
 from ..dandiset._load_assets_jsonld_metadata import (
     AssetMetadata,
@@ -309,19 +307,21 @@ def _validate_queue_config(*, queue_config: dict) -> None:
         raise ValueError(message)
 
 
-def _load_queue_config(*, queue_directory: pathlib.Path) -> dict:
+def _load_queue_config() -> dict:
     """
-    Read ``queue_config.json`` and validate it against the LinkML schema.
+    Read the packaged pipeline configuration and validate it against the LinkML schema.
 
-    :raises FileNotFoundError: If ``queue_config.json`` is not found in *queue_directory*.
-    :raises ValueError: If the queue configuration fails LinkML validation.
+    Always reads the pipeline configuration packaged with this repo (see
+    ``_PACKAGED_PIPELINE_CONFIGS_PATH``) -- there is no local override.
+
+    :raises FileNotFoundError: If the packaged pipeline configuration file is missing.
+    :raises ValueError: If the pipeline configuration fails LinkML validation.
     """
-    queue_config_file = queue_directory / "queue_config.json"
-    if not queue_config_file.exists():
-        message = f"'queue_config.json' not found in '{queue_directory}'."
+    if not _PACKAGED_PIPELINE_CONFIGS_PATH.exists():
+        message = f"Packaged pipeline configuration is missing: '{_PACKAGED_PIPELINE_CONFIGS_PATH}'."
         raise FileNotFoundError(message)
 
-    queue_config = json.loads(queue_config_file.read_text())
+    queue_config = json.loads(_PACKAGED_PIPELINE_CONFIGS_PATH.read_text())
     _validate_queue_config(queue_config=queue_config)
     return queue_config
 

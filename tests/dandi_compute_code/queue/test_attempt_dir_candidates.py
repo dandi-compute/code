@@ -2,7 +2,7 @@ import pathlib
 
 import pytest
 
-from dandi_compute_code.queue._attempt_dir_candidates import _attempt_dir_candidates
+from dandi_compute_code.queue import JobEntry
 
 
 @pytest.mark.ai_generated
@@ -22,7 +22,7 @@ def test_attempt_dir_candidates_constructs_both_layouts(
     relative_prefix: pathlib.Path,
     tmp_path: pathlib.Path,
 ) -> None:
-    """_attempt_dir_candidates returns both flat and legacy attempt directory paths."""
+    """JobEntry.attempt_dir_candidates returns both flat and legacy attempt directory paths."""
     entry = {
         "dandiset_id": "000001",
         "dandi_path": dandi_path,
@@ -34,7 +34,7 @@ def test_attempt_dir_candidates_constructs_both_layouts(
         "codebase": "v0.3.0",
     }
 
-    flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
+    flat_path, legacy_path = JobEntry.from_dict(entry).attempt_dir_candidates(tmp_path)
 
     assert (
         flat_path == tmp_path / relative_prefix / "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-2"
@@ -56,9 +56,11 @@ def test_attempt_dir_candidates_constructs_both_layouts(
                 "params": "abc1234",
                 "config": "def5678",
                 "attempt": 2,
+                "codebase": "v0.3.0",
             },
-            ValueError,
-            r"Entry has invalid dandi_path field \(missing\)",
+            # A JobEntry always carries dandi_path, so a missing key fails at construction.
+            KeyError,
+            r"dandi_path",
         ),
         (
             {
@@ -69,6 +71,7 @@ def test_attempt_dir_candidates_constructs_both_layouts(
                 "params": "abc1234",
                 "config": "def5678",
                 "attempt": 2,
+                "codebase": "v0.3.0",
             },
             ValueError,
             r"Entry has invalid dandi_path field \(empty\)",
@@ -81,14 +84,14 @@ def test_attempt_dir_candidates_requires_valid_dandi_path(
     expected_message: str,
     tmp_path: pathlib.Path,
 ) -> None:
-    """_attempt_dir_candidates requires a valid dandi_path value."""
+    """JobEntry.attempt_dir_candidates requires a valid dandi_path value."""
     with pytest.raises(expected_exception, match=expected_message):
-        _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
+        JobEntry.from_dict(entry).attempt_dir_candidates(tmp_path)
 
 
 @pytest.mark.ai_generated
 def test_attempt_dir_candidates_includes_codebase_in_flat_path(tmp_path: pathlib.Path) -> None:
-    """_attempt_dir_candidates includes the _codebase- segment in the flat path when the entry has a codebase field."""
+    """JobEntry.attempt_dir_candidates includes the _codebase- segment in the flat path."""
     entry = {
         "dandiset_id": "000001",
         "dandi_path": "sub-mouse01",
@@ -99,7 +102,7 @@ def test_attempt_dir_candidates_includes_codebase_in_flat_path(tmp_path: pathlib
         "attempt": 1,
         "codebase": "v0.3.17",
     }
-    flat_path, legacy_path = _attempt_dir_candidates(base_dir=tmp_path, entry=entry)
+    flat_path, legacy_path = JobEntry.from_dict(entry).attempt_dir_candidates(tmp_path)
 
     expected_prefix = tmp_path / "derivatives" / "dandiset-000001" / "sub-mouse01" / "pipeline-test"
     assert flat_path == expected_prefix / "version-v1.1.1_codebase-v0.3.17_params-4af6a25_config-0d4bf36_attempt-1"
