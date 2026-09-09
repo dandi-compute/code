@@ -9,11 +9,14 @@ from dandi_compute_code.queue import JobEntry
 @pytest.mark.parametrize(
     ("dandi_path", "relative_prefix"),
     [
-        ("sub-mouse01", pathlib.Path("derivatives/dandiset-000001/sub-mouse01/pipeline-test")),
-        ("sub-mouse01/ses-01", pathlib.Path("derivatives/dandiset-000001/sub-mouse01/ses-01/pipeline-test")),
+        ("sub-mouse01", pathlib.Path("derivatives/dandisets-000/dandiset-000001/sub-mouse01/pipeline-test")),
+        (
+            "sub-mouse01/ses-01",
+            pathlib.Path("derivatives/dandisets-000/dandiset-000001/sub-mouse01/ses-01/pipeline-test"),
+        ),
         (
             "sourcedata/aind-sample.nwb",
-            pathlib.Path("derivatives/dandiset-000001/sourcedata/aind-sample/pipeline-test"),
+            pathlib.Path("derivatives/dandisets-000/dandiset-000001/sourcedata/aind-sample/pipeline-test"),
         ),
     ],
 )
@@ -104,6 +107,6 @@ def test_attempt_dir_candidates_includes_codebase_in_flat_path(tmp_path: pathlib
     }
     flat_path, legacy_path = JobEntry.from_dict(entry).attempt_dir_candidates(tmp_path)
 
-    expected_prefix = tmp_path / "derivatives" / "dandiset-000001" / "sub-mouse01" / "pipeline-test"
+    expected_prefix = tmp_path / "derivatives" / "dandisets-000" / "dandiset-000001" / "sub-mouse01" / "pipeline-test"
     assert flat_path == expected_prefix / "version-v1.1.1_codebase-v0.3.17_params-4af6a25_config-0d4bf36_attempt-1"
     assert legacy_path == expected_prefix / "version-v1.1.1" / "params-4af6a25_config-0d4bf36_attempt-1"
