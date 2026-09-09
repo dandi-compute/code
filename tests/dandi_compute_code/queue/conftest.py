@@ -5,7 +5,6 @@ The network guard targets the binding used by the model
 (:mod:`dandi_compute_code.queue._queue_state`).
 """
 
-import json
 import os
 import pathlib
 from collections.abc import Iterator
@@ -19,29 +18,15 @@ from dandi_compute_code.queue import QueueState
 #: The committed example queue used as ground truth across the model tests.
 EXAMPLE_STATE_FILE = pathlib.Path(__file__).parent / "example_state_files" / "state.tsv"
 
-#: Consolidated queue config used by tests that need a populated queue directory.
-EXAMPLE_QUEUE_CONFIG = {
-    "pipelines": {
-        "test": {
-            "version_priority": ["v1.0"],
-            "params_priority": ["default"],
-            "max_attempts_per_asset": 2,
-            "asset_overrides": {"asset-aaa": 1},
-            "max_fail_per_dandiset": 2,
-        }
-    }
-}
-
 
 @pytest.fixture(autouse=True)
 def mock_dandi_assets_metadata() -> Iterator[None]:
     """
     Default the DANDI ``assets.jsonld`` loaders to empty so no test hits the network.
 
-    ``QueueState.write_state`` (and ``from_dandi`` / ``pending_code_dirs``) fetch
-    assets metadata from the DANDI archive via the ``_queue_state`` binding. This
-    guard makes that return empty by default. Tests that need specific metadata
-    override these with their own ``mock.patch``.
+    ``QueueState.from_dandi`` / ``pending_code_dirs`` fetch assets metadata from the DANDI
+    archive via the ``_queue_state`` binding. This guard makes that return empty by default.
+    Tests that need specific metadata override these with their own ``mock.patch``.
     """
     empty_metadata = AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={})
     with (
@@ -58,15 +43,6 @@ def mock_dandi_assets_metadata() -> Iterator[None]:
 def example_queue_state() -> QueueState:
     """The committed example queue (``example_state_files/state.tsv``) loaded into a fresh model."""
     return QueueState.from_tsv(EXAMPLE_STATE_FILE)
-
-
-@pytest.fixture
-def queue_directory(tmp_path: pathlib.Path) -> pathlib.Path:
-    """A queue directory containing the example ``queue_config.json``."""
-    directory = tmp_path / "queue"
-    directory.mkdir()
-    (directory / "queue_config.json").write_text(json.dumps(EXAMPLE_QUEUE_CONFIG))
-    return directory
 
 
 @pytest.fixture

@@ -1,68 +1,35 @@
-import json
-import pathlib
 from unittest import mock
 
 import pytest
 
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
-from dandi_compute_code.queue import JobEntry, JobInfo, QueueState
+from dandi_compute_code.queue import QueueState
 
-# write_queue_state derives state.tsv from DANDI assets.jsonld metadata fetched over
-# the network. The conftest _no_real_dandi_fetch guard defaults that loader to empty;
-# tests that need specific metadata override it with their own mock.patch. The assets
-# metadata built in each test is the ground-truth input under test.
-
-
-def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
-    """A queue directory containing a minimal valid queue_config.json."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(
-        json.dumps({"pipelines": {"test": {"version_priority": ["v1.0"], "params_priority": ["default"]}}})
-    )
-    return queue_dir
+# QueueState.from_dandi derives queue state from DANDI assets.jsonld metadata fetched over
+# the network. The conftest _no_real_dandi_fetch guard defaults that loader to empty; tests
+# that need specific metadata override it with their own mock.patch. The assets metadata built
+# in each test is the ground-truth input under test.
 
 
-def _read_tsv(file_path: pathlib.Path) -> list[dict]:
-    return [entry.to_dict() for entry in QueueState.from_tsv(file_path)]
+def _entries(state: QueueState) -> list[dict]:
+    return [entry.to_dict() for entry in state]
 
 
 @pytest.mark.ai_generated
-def test_write_queue_state_raises_when_queue_config_fails_linkml_validation(tmp_path: pathlib.Path) -> None:
-    """write_queue_state raises when queue_config violates LinkML constraints."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    invalid_queue_config = {
-        "pipelines": {
-            # Violates schema minimum_value: 0 constraint.
-            "test": {"version_priority": ["v1.0"], "params_priority": ["default"], "max_attempts_per_asset": -1}
-        }
-    }
-    (queue_dir / "queue_config.json").write_text(json.dumps(invalid_queue_config))
-
-    with pytest.raises(ValueError, match="LinkML validation failed"):
-        QueueState.write_state(queue_directory=queue_dir)
-
-
-@pytest.mark.ai_generated
-def test_write_queue_state_writes_empty_files_for_missing_dandiset_directory(tmp_path: pathlib.Path) -> None:
-    """write_queue_state does not require local dandiset scan."""
-    queue_dir = _make_queue_dir(tmp_path)
-
+def test_from_dandi_returns_empty_for_missing_metadata() -> None:
+    """from_dandi returns an empty state when there is no assets metadata."""
     content_id_to_asset: dict[str, dict[str, object]] = {}
     with mock.patch(
         "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
         return_value=AssetsJsonldMetadata(content_id_to_asset=content_id_to_asset, path_to_asset_metadata={}),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
-    assert (queue_dir / "state.tsv").exists()
-    assert len(QueueState.from_tsv(queue_dir / "state.tsv")) == 0
+        state = QueueState.from_dandi()
+    assert len(state) == 0
 
 
 @pytest.mark.ai_generated
-def test_write_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.Path) -> None:
-    """write_queue_state writes ordered pending entries from metadata."""
-    queue_dir = _make_queue_dir(tmp_path)
+def test_from_dandi_returns_all_ordered_pending_entries() -> None:
+    """from_dandi returns ordered pending entries from metadata."""
     attempt_metadata_by_path = {
         f"derivatives/dandiset-001697/sub-{i:02d}/sub-{i:02d}_ecephys/pipeline-test/"
         f"version-v1.0_codebase-v0.3.0_params-default_config-{i:07d}_attempt-1/code/submit.sh": AssetMetadata(
@@ -95,9 +62,9 @@ def test_write_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.
             return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata=source_metadata_by_path),
         ),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
+        state = QueueState.from_dandi()
 
-    state_entries = _read_tsv(queue_dir / "state.tsv")
+    state_entries = _entries(state)
     assert len(state_entries) == 5
     assert all(
         entry["has_code"] and not entry["has_been_submitted"] and not entry["has_output"] and not entry["has_logs"]
@@ -106,11 +73,8 @@ def test_write_queue_state_writes_all_ordered_pending_entries(tmp_path: pathlib.
 
 
 @pytest.mark.ai_generated
-def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pathlib.Path) -> None:
-    """write_queue_state no longer depends on local submitted marker files."""
-    queue_dir = _make_queue_dir(tmp_path)
-    (tmp_path / "sub-mouse01" / "code").mkdir(parents=True)
-    (tmp_path / "sub-mouse01" / "code" / "submitted_date-date-2025+01+01_time-00+00+00").write_text("")
+def test_from_dandi_includes_entries_with_submitted_markers() -> None:
+    """from_dandi does not depend on local submitted marker files."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_path = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
@@ -146,15 +110,14 @@ def test_write_queue_state_excludes_entries_with_submitted_markers(tmp_path: pat
             ),
         ),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
-    state_entries = _read_tsv(queue_dir / "state.tsv")
+        state = QueueState.from_dandi()
+    state_entries = _entries(state)
     assert len(state_entries) == 1
 
 
 @pytest.mark.ai_generated
-def test_write_queue_state_submitted_marker_sets_has_been_submitted(tmp_path: pathlib.Path) -> None:
-    """Tests that write_queue_state sets has_been_submitted when code/submitted_date-* exists."""
-    queue_dir = _make_queue_dir(tmp_path)
+def test_from_dandi_submitted_marker_sets_has_been_submitted() -> None:
+    """from_dandi sets has_been_submitted when code/submitted_date-* exists."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_prefix = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
@@ -195,8 +158,8 @@ def test_write_queue_state_submitted_marker_sets_has_been_submitted(tmp_path: pa
             return_value=upstream_metadata,
         ),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
-    state_entries = _read_tsv(queue_dir / "state.tsv")
+        state = QueueState.from_dandi()
+    state_entries = _entries(state)
     assert len(state_entries) == 1
     assert state_entries[0]["has_code"] is True
     assert state_entries[0]["has_been_submitted"] is True
@@ -205,9 +168,8 @@ def test_write_queue_state_submitted_marker_sets_has_been_submitted(tmp_path: pa
 
 
 @pytest.mark.ai_generated
-def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_paths(tmp_path: pathlib.Path) -> None:
-    """write_queue_state parses attempt metadata from derivatives asset paths."""
-    queue_dir = _make_queue_dir(tmp_path)
+def test_from_dandi_parses_attempt_fields_and_presence_flags_from_assets_paths() -> None:
+    """from_dandi parses attempt metadata from derivatives asset paths."""
     source_path = "sub-mouse01/sourcedata/aind-sample.nwb"
     attempt_prefix = (
         "derivatives/dandiset-001849/sub-mouse01/sourcedata/aind-sample/pipeline-aind+ephys/"
@@ -281,9 +243,9 @@ def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_
             return_value=upstream_metadata,
         ),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
+        state = QueueState.from_dandi()
 
-    state_entries = _read_tsv(queue_dir / "state.tsv")
+    state_entries = _entries(state)
     assert len(state_entries) == 1
     assert state_entries[0]["dandiset_id"] == "001849"
     assert state_entries[0]["dandi_path"] == source_path
@@ -304,28 +266,16 @@ def test_write_queue_state_parses_attempt_fields_and_presence_flags_from_assets_
 
 
 @pytest.mark.ai_generated
-def test_write_queue_state_with_dandiset_directory_creates_valid_files(tmp_path: pathlib.Path) -> None:
-    """write_queue_state writes state.tsv from assets.jsonld metadata."""
+def test_from_dandi_resolves_dandi_path_for_nested_asset() -> None:
+    """from_dandi writes the assets.jsonld-resolved source path."""
     content_id = "0fbbca6a-0000-0000-0000-000000000001"
-    source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
+    source_path = "sub-mouse01/sub-mouse01_ses-ses001_obj-raw.nwb"
+    asset_size_bytes = 1234
     attempt_path = (
-        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-aind+ephys/"
-        "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/code/submit.sh"
+        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ses-ses001_obj-raw/"
+        "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-2222222_attempt-1/code/submit.sh"
     )
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(
-        json.dumps(
-            {
-                "pipelines": {
-                    "aind+ephys": {
-                        "version_priority": ["v1.0"],
-                        "params_priority": ["abc1234"],
-                    }
-                }
-            }
-        )
-    )
+
     with (
         mock.patch(
             "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
@@ -349,74 +299,6 @@ def test_write_queue_state_with_dandiset_directory_creates_valid_files(tmp_path:
                     source_path: AssetMetadata(
                         path=source_path,
                         date_modified="2025-01-01T00:00:00+00:00",
-                        content_size=1234,
-                        content_id=content_id,
-                    )
-                },
-            ),
-        ),
-    ):
-        QueueState.write_state(queue_directory=queue_dir)
-    state_file = queue_dir / "state.tsv"
-    assert state_file.exists()
-    records = _read_tsv(state_file)
-    assert len(records) == 1
-    record = records[0]
-    assert record["dandiset_id"] == "001697"
-    assert record["content_id"] == content_id
-    assert record["dandi_path"] == source_path
-    assert record["asset_size_bytes"] == 1234
-    assert record["has_code"] is True
-
-
-@pytest.mark.ai_generated
-def test_write_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathlib.Path) -> None:
-    """write_queue_state writes assets.jsonld-resolved source path in state.tsv."""
-    content_id = "0fbbca6a-0000-0000-0000-000000000001"
-    asset_size_bytes = 1234
-    resolved_asset_path = "sub-mouse01/sub-mouse01_ses-ses001_obj-raw.nwb"
-    attempt_path = (
-        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ses-ses001_obj-raw/"
-        "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-2222222_attempt-1/code/submit.sh"
-    )
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(
-        json.dumps(
-            {
-                "pipelines": {
-                    "aind+ephys": {
-                        "version_priority": ["v1.0"],
-                        "params_priority": ["abc1234"],
-                    }
-                }
-            }
-        )
-    )
-
-    with (
-        mock.patch(
-            "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
-            return_value=AssetsJsonldMetadata(
-                content_id_to_asset={},
-                path_to_asset_metadata={
-                    attempt_path: AssetMetadata(
-                        path=attempt_path,
-                        date_modified="2025-01-01T00:00:00+00:00",
-                        content_size=1,
-                        content_id="attempt-code-id",
-                    )
-                },
-            ),
-        ),
-        mock.patch(
-            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
-            return_value=AssetsJsonldMetadata(
-                content_id_to_asset={},
-                path_to_asset_metadata={
-                    resolved_asset_path: AssetMetadata(
-                        path=resolved_asset_path,
-                        date_modified="2025-01-01T00:00:00+00:00",
                         content_size=asset_size_bytes,
                         content_id=content_id,
                     )
@@ -424,38 +306,23 @@ def test_write_queue_state_writes_resolved_dandi_path_to_state(tmp_path: pathlib
             ),
         ),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
+        state = QueueState.from_dandi()
 
-    state_records = _read_tsv(queue_dir / "state.tsv")
-    assert len(state_records) == 1
-    assert state_records[0]["asset_size_bytes"] == asset_size_bytes
-    assert state_records[0]["dandi_path"] == resolved_asset_path
+    state_entries = _entries(state)
+    assert len(state_entries) == 1
+    assert state_entries[0]["asset_size_bytes"] == asset_size_bytes
+    assert state_entries[0]["dandi_path"] == source_path
 
 
 @pytest.mark.ai_generated
-def test_write_queue_state_writes_resolved_dandi_path_for_root_level_asset(tmp_path: pathlib.Path) -> None:
-    """write_queue_state writes resolved dandi_path even when matched asset path is at dandiset root."""
+def test_from_dandi_resolves_dandi_path_for_root_level_asset() -> None:
+    """from_dandi writes the resolved dandi_path even when the matched asset path is at dandiset root."""
     content_id = "0fbbca6a-0000-0000-0000-000000000002"
     asset_size_bytes = 4321
     root_asset_path = "sub-mouse01_ses-ses001_obj-raw.nwb"
     attempt_path = (
         "derivatives/dandiset-001697/sub-mouse01_ses-ses001_obj-raw/"
         "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-3333333_attempt-1/code/submit.sh"
-    )
-
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(
-        json.dumps(
-            {
-                "pipelines": {
-                    "aind+ephys": {
-                        "version_priority": ["v1.0"],
-                        "params_priority": ["abc1234"],
-                    }
-                }
-            }
-        )
     )
 
     with (
@@ -488,36 +355,17 @@ def test_write_queue_state_writes_resolved_dandi_path_for_root_level_asset(tmp_p
             ),
         ),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
+        state = QueueState.from_dandi()
 
-    state_records = _read_tsv(queue_dir / "state.tsv")
-    assert len(state_records) == 1
-    assert state_records[0]["asset_size_bytes"] == asset_size_bytes
-    assert state_records[0]["dandi_path"] == root_asset_path
-
-
-@pytest.mark.ai_generated
-def test_write_queue_state_with_dandiset_directory_empty_when_no_attempts(tmp_path: pathlib.Path) -> None:
-    """write_queue_state writes an empty state file with no assets metadata."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
-    with mock.patch(
-        "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
-        return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
-    ):
-        QueueState.write_state(queue_directory=queue_dir)
-    state_file = queue_dir / "state.tsv"
-    assert state_file.exists()
-    assert len(QueueState.from_tsv(state_file)) == 0
+    state_entries = _entries(state)
+    assert len(state_entries) == 1
+    assert state_entries[0]["asset_size_bytes"] == asset_size_bytes
+    assert state_entries[0]["dandi_path"] == root_asset_path
 
 
 @pytest.mark.ai_generated
-def test_write_queue_state_does_not_require_dandi_api_key(tmp_path: pathlib.Path) -> None:
-    """write_queue_state works when DANDI_API_KEY is not set."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(json.dumps({"pipelines": {}}))
+def test_from_dandi_does_not_require_dandi_api_key() -> None:
+    """from_dandi works when DANDI_API_KEY is not set."""
     with (
         mock.patch.dict("os.environ", {}, clear=True),
         mock.patch(
@@ -525,27 +373,12 @@ def test_write_queue_state_does_not_require_dandi_api_key(tmp_path: pathlib.Path
             return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),
         ),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
+        QueueState.from_dandi()
 
 
 @pytest.mark.ai_generated
-def test_write_queue_state_with_dandiset_directory_includes_only_pending_in_waiting(tmp_path: pathlib.Path) -> None:
-    """state.tsv contains all entries derived from assets metadata."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(
-        json.dumps(
-            {
-                "pipelines": {
-                    "test-pipeline": {
-                        "version_priority": ["v1.0"],
-                        "params_priority": ["abc1234"],
-                    }
-                }
-            }
-        )
-    )
-
+def test_from_dandi_includes_all_entries_derived_from_metadata() -> None:
+    """from_dandi returns all entries derived from assets metadata."""
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={},
         path_to_asset_metadata={
@@ -595,35 +428,19 @@ def test_write_queue_state_with_dandiset_directory_includes_only_pending_in_wait
             return_value=upstream_metadata,
         ),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
+        state = QueueState.from_dandi()
 
-    state_records = _read_tsv(queue_dir / "state.tsv")
-    assert len(state_records) == 2
-    assert {record["dandi_path"] for record in state_records} == {
+    state_entries = _entries(state)
+    assert len(state_entries) == 2
+    assert {record["dandi_path"] for record in state_entries} == {
         "sub-mouse01/sub-mouse01_ecephys.nwb",
         "sub-mouse02/sub-mouse02_ecephys.nwb",
     }
 
 
 @pytest.mark.ai_generated
-def test_write_queue_state_with_dandiset_directory_excludes_entries_with_submitted_markers(
-    tmp_path: pathlib.Path,
-) -> None:
-    """write_queue_state output is independent of local submitted marker files."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(
-        json.dumps(
-            {
-                "pipelines": {
-                    "test-pipeline": {
-                        "version_priority": ["v1.0"],
-                        "params_priority": ["abc1234"],
-                    }
-                }
-            }
-        )
-    )
+def test_from_dandi_is_independent_of_local_submitted_marker_files() -> None:
+    """from_dandi output is independent of local submitted marker files."""
     attempt_path = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test-pipeline/"
         "version-v1.0_codebase-v0.3.0_params-abc1234_config-9999999_attempt-1/code/submit.sh"
@@ -658,17 +475,16 @@ def test_write_queue_state_with_dandiset_directory_excludes_entries_with_submitt
             ),
         ),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
+        state = QueueState.from_dandi()
 
-    state_records = _read_tsv(queue_dir / "state.tsv")
-    assert len(state_records) == 1
-    assert state_records[0]["dandi_path"] == "sub-mouse01/sub-mouse01_ecephys.nwb"
+    state_entries = _entries(state)
+    assert len(state_entries) == 1
+    assert state_entries[0]["dandi_path"] == "sub-mouse01/sub-mouse01_ecephys.nwb"
 
 
 @pytest.mark.ai_generated
-def test_write_queue_state_parses_codebase_field_from_new_format_path(tmp_path: pathlib.Path) -> None:
-    """write_queue_state parses the _codebase- entity from new-format derivatives paths."""
-    queue_dir = _make_queue_dir(tmp_path)
+def test_from_dandi_parses_codebase_field_from_new_format_path() -> None:
+    """from_dandi parses the _codebase- entity from new-format derivatives paths."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_prefix = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-aind+ephys/"
@@ -720,9 +536,9 @@ def test_write_queue_state_parses_codebase_field_from_new_format_path(tmp_path: 
             return_value=upstream_metadata,
         ),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
+        state = QueueState.from_dandi()
 
-    state_entries = _read_tsv(queue_dir / "state.tsv")
+    state_entries = _entries(state)
     assert len(state_entries) == 1
     assert state_entries[0]["version"] == "v1.1.1"
     assert state_entries[0]["params"] == "4af6a25"
@@ -732,9 +548,9 @@ def test_write_queue_state_parses_codebase_field_from_new_format_path(tmp_path: 
     assert state_entries[0]["has_code"] is True
 
 
-def test_write_queue_state_output_paths_empty_when_no_output(tmp_path: pathlib.Path) -> None:
-    """write_queue_state writes output_paths as an empty dict when has_output is False."""
-    queue_dir = _make_queue_dir(tmp_path)
+@pytest.mark.ai_generated
+def test_from_dandi_output_paths_empty_when_no_output() -> None:
+    """from_dandi returns output_paths as an empty dict when has_output is False."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_prefix = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
@@ -769,18 +585,18 @@ def test_write_queue_state_output_paths_empty_when_no_output(tmp_path: pathlib.P
             return_value=upstream_metadata,
         ),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
+        state = QueueState.from_dandi()
 
-    state_entries = _read_tsv(queue_dir / "state.tsv")
+    state_entries = _entries(state)
     assert len(state_entries) == 1
     assert state_entries[0]["has_output"] is False
     assert state_entries[0]["dataset_description_path"] == {}
     assert state_entries[0]["output_paths"] == {}
 
 
-def test_write_queue_state_log_paths_empty_when_no_logs(tmp_path: pathlib.Path) -> None:
-    """write_queue_state writes log_paths as an empty dict when has_logs is False."""
-    queue_dir = _make_queue_dir(tmp_path)
+@pytest.mark.ai_generated
+def test_from_dandi_log_paths_empty_when_no_logs() -> None:
+    """from_dandi returns log_paths as an empty dict when has_logs is False."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_prefix = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
@@ -815,17 +631,17 @@ def test_write_queue_state_log_paths_empty_when_no_logs(tmp_path: pathlib.Path) 
             return_value=upstream_metadata,
         ),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
+        state = QueueState.from_dandi()
 
-    state_entries = _read_tsv(queue_dir / "state.tsv")
+    state_entries = _entries(state)
     assert len(state_entries) == 1
     assert state_entries[0]["has_logs"] is False
     assert state_entries[0]["log_paths"] == {}
 
 
-def test_write_queue_state_output_paths_maps_asset_paths_to_blob_ids(tmp_path: pathlib.Path) -> None:
-    """write_queue_state populates output_paths with all derivatives asset paths mapped to their blob IDs."""
-    queue_dir = _make_queue_dir(tmp_path)
+@pytest.mark.ai_generated
+def test_from_dandi_output_paths_maps_asset_paths_to_blob_ids() -> None:
+    """from_dandi populates output_paths with all derivatives asset paths mapped to their blob IDs."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_prefix = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
@@ -872,9 +688,9 @@ def test_write_queue_state_output_paths_maps_asset_paths_to_blob_ids(tmp_path: p
             return_value=upstream_metadata,
         ),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
+        state = QueueState.from_dandi()
 
-    state_entries = _read_tsv(queue_dir / "state.tsv")
+    state_entries = _entries(state)
     assert len(state_entries) == 1
     assert state_entries[0]["has_output"] is True
     assert state_entries[0]["output_paths"] == {
@@ -883,9 +699,9 @@ def test_write_queue_state_output_paths_maps_asset_paths_to_blob_ids(tmp_path: p
     }
 
 
-def test_write_queue_state_log_paths_map_asset_paths_to_blob_ids(tmp_path: pathlib.Path) -> None:
-    """write_queue_state populates log_paths with log asset paths mapped to their blob IDs."""
-    queue_dir = _make_queue_dir(tmp_path)
+@pytest.mark.ai_generated
+def test_from_dandi_log_paths_map_asset_paths_to_blob_ids() -> None:
+    """from_dandi populates log_paths with log asset paths mapped to their blob IDs."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     attempt_prefix = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
@@ -944,9 +760,9 @@ def test_write_queue_state_log_paths_map_asset_paths_to_blob_ids(tmp_path: pathl
             return_value=upstream_metadata,
         ),
     ):
-        QueueState.write_state(queue_directory=queue_dir)
+        state = QueueState.from_dandi()
 
-    state_entries = _read_tsv(queue_dir / "state.tsv")
+    state_entries = _entries(state)
     assert len(state_entries) == 1
     assert state_entries[0]["has_logs"] is True
     assert state_entries[0]["dataset_description_path"] == {
@@ -956,63 +772,3 @@ def test_write_queue_state_log_paths_map_asset_paths_to_blob_ids(tmp_path: pathl
         f"{attempt_prefix}/logs/stdout.txt": "log-blob-id-1",
         f"{attempt_prefix}/logs/stderr.txt": "log-blob-id-2",
     }
-
-
-@pytest.mark.ai_generated
-def test_queue_state_from_tsv_preserves_dataset_description_path(tmp_path: pathlib.Path) -> None:
-    """QueueState.from_tsv preserves dataset_description_path entries."""
-    state_file = tmp_path / "state.tsv"
-    dataset_description_path = {
-        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
-        "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/"
-        "dataset_description.json": "dataset-description-id"
-    }
-    entry = JobEntry(
-        job=JobInfo(
-            dandiset_id="001697",
-            dandi_path="sub-mouse01/sub-mouse01_ecephys.nwb",
-            pipeline="aind+ephys",
-            version="v1.0",
-            params="abc1234",
-            config="def5678",
-            attempt=1,
-            codebase="v0.3.0",
-        ),
-        content_id=None,
-        asset_size_bytes=None,
-        dataset_description_path=dataset_description_path,
-    )
-    QueueState(entries=[entry]).to_tsv(state_file)
-
-    queue_state = QueueState.from_tsv(state_file)
-
-    assert len(queue_state) == 1
-    assert queue_state.entries[0].dataset_description_path == dataset_description_path
-
-
-def test_queue_state_empty_dataset_description_path_cell(
-    tmp_path: pathlib.Path,
-) -> None:
-    """QueueState.from_tsv converts an empty dataset_description_path cell to an empty dict."""
-    state_file = tmp_path / "state.tsv"
-    entry = JobEntry(
-        job=JobInfo(
-            dandiset_id="001697",
-            dandi_path="sub-mouse01/sub-mouse01_ecephys.nwb",
-            pipeline="aind+ephys",
-            version="v1.0",
-            params="abc1234",
-            config="def5678",
-            attempt=1,
-            codebase="v0.3.0",
-        ),
-        content_id=None,
-        asset_size_bytes=None,
-        dataset_description_path={},
-    )
-    QueueState(entries=[entry]).to_tsv(state_file)
-
-    queue_state = QueueState.from_tsv(state_file)
-
-    assert len(queue_state) == 1
-    assert queue_state.entries[0].dataset_description_path == {}

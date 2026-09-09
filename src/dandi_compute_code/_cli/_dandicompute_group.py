@@ -185,14 +185,6 @@ def _prepare_group() -> None:
     is_flag=True,
     default=False,
 )
-@click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory containing queue_config.json (only used with --test).",
-    required=False,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
-)
 def _prepare_aind_command(
     test: bool = False,
     pipeline_version: str | None = None,
@@ -204,7 +196,6 @@ def _prepare_aind_command(
     parameters_key: str = "default",
     submit: bool = False,
     silent: bool = False,
-    queue_directory: pathlib.Path | None = None,
 ) -> None:
     """Prepare an AIND ephys job, or prepare test queue entries with --test."""
     _configure_logging(silent=silent)
@@ -212,11 +203,7 @@ def _prepare_aind_command(
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
 
     if test:
-        if queue_directory is None:
-            raise click.UsageError("--queue is required when using --test.")
-
         QueueState.prepare(
-            queue_directory=queue_directory,
             content_ids=[TEST_QUEUE_CONTENT_ID],
             pipeline_directory=pipeline_directory,
             config_key=config_key,
@@ -265,13 +252,6 @@ def _queue_group() -> None:
 # dandicompute queue refresh [OPTIONS]
 @_queue_group.command(name="refresh")
 @click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
-@click.option(
     "--dandiset-id",
     "dandiset_id",
     help="Source (job capsules) Dandiset ID whose state is refreshed.",
@@ -314,7 +294,6 @@ def _queue_group() -> None:
     default=False,
 )
 def _queue_refresh_command(
-    queue_directory: pathlib.Path,
     dandiset_id: str,
     archive_dandiset_id: str,
     processing_directory: pathlib.Path | None = None,
@@ -322,25 +301,15 @@ def _queue_refresh_command(
     silent: bool = False,
 ) -> None:
     """
-    Regenerate state.tsv/archive_state.tsv and republish state.tsv.
+    Republish state.tsv into both Dandisets.
 
-    Writes state.tsv and archive_state.tsv under --queue (see QueueState.write_state /
-    write_archive_state), then ephemerally rebuilds and republishes derivatives/state.tsv within
-    both the source and archived Dandisets themselves, so each always reflects its current state.
+    Ephemerally rebuilds and republishes derivatives/state.tsv within both the source and
+    archived Dandisets themselves (see QueueState.write_dandiset_state_table), so each always
+    reflects its current state fetched fresh from its own assets.jsonld.
     """
     _configure_logging(silent=silent)
     _require_dandi_api_key()
     _require_dandi_devel()
-
-    try:
-        QueueState.write_state(queue_directory=queue_directory, dandiset_id=dandiset_id)
-        QueueState.write_state(
-            queue_directory=queue_directory,
-            dandiset_id=archive_dandiset_id,
-            state_file_name="archive_state.tsv",
-        )
-    except FileNotFoundError as error:
-        raise click.ClickException(str(error)) from error
 
     for target_dandiset_id in (dandiset_id, archive_dandiset_id):
         QueueState.write_dandiset_state_table(
@@ -354,13 +323,6 @@ def _queue_refresh_command(
 
 # dandicompute queue clean [OPTIONS]
 @_queue_group.command(name="clean")
-@click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
 @click.option(
     "--dandiset",
     "dandiset_directory",
@@ -376,7 +338,6 @@ def _queue_refresh_command(
     default=False,
 )
 def _queue_clean_command(
-    queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
     silent: bool = False,
 ) -> None:
@@ -384,7 +345,7 @@ def _queue_clean_command(
     _configure_logging(silent=silent)
     _require_dandi_api_key()
 
-    state = QueueState.from_tsv(queue_directory / "state.tsv")
+    state = QueueState.from_dandi()
     removed = state.clean_unsubmitted_capsules(dandiset_directory=dandiset_directory)
     if removed:
         if not silent:
@@ -399,13 +360,6 @@ def _queue_clean_command(
 # dandicompute queue stats [OPTIONS]
 @_queue_group.command(name="stats")
 @click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
-@click.option(
     "--dandiset",
     "dandiset_directory",
     help="Path to a local dandiset clone used to locate Nextflow timeline reports.",
@@ -413,13 +367,30 @@ def _queue_clean_command(
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 @click.option(
-    "--output-file",
-    "output_file_name",
-    help="Name of the aggregate statistics JSON file written under --queue.",
+    "--dandiset-id",
+    "dandiset_id",
+    help="Dandiset ID the aggregate statistics JSON is published into.",
     required=False,
     type=str,
-    default="queue_stats.json",
+    default=_JOB_CAPSULES_DANDISET_ID,
     show_default=True,
+)
+@click.option(
+    "--processing",
+    "processing_directory",
+    help="Directory for the temporary working tree used to publish the statistics JSON "
+    "(defaults to the system temporary location).",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--test",
+    "test",
+    help="Preserve the temporary working tree used to publish the statistics JSON instead of cleaning it up.",
+    required=False,
+    is_flag=True,
+    default=False,
 )
 @click.option(
     "--silent",
@@ -429,22 +400,24 @@ def _queue_clean_command(
     default=False,
 )
 def _queue_stats_command(
-    queue_directory: pathlib.Path,
     dandiset_directory: pathlib.Path,
-    output_file_name: str = "queue_stats.json",
+    dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
+    processing_directory: pathlib.Path | None = None,
+    test: bool = False,
     silent: bool = False,
 ) -> None:
-    """Write aggregate queue statistics from state.tsv and timeline reports."""
+    """Publish aggregate queue statistics from the live queue state."""
     _configure_logging(silent=silent)
 
-    state = QueueState.from_tsv(queue_directory / "state.tsv")
+    state = QueueState.from_dandi(dandiset_id=dandiset_id)
     state.aggregate_statistics(
-        queue_directory=queue_directory,
         dandiset_directory=dandiset_directory,
-        output_file_name=output_file_name,
+        dandiset_id=dandiset_id,
+        processing_directory=processing_directory,
+        test=test,
     )
     if not silent:
-        _styled_echo(text=f"\nWrote queue aggregate statistics: {queue_directory / output_file_name}", color="green")
+        _styled_echo(text=f"\nPublished derivatives/queue_stats.json to Dandiset {dandiset_id}.", color="green")
 
 
 # dandicompute queue pending [OPTIONS]
@@ -475,13 +448,6 @@ def _queue_pending_command(context: click.Context, silent: bool = False) -> None
 
 # dandicompute queue process [OPTIONS]
 @_queue_group.command(name="process")
-@click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
 @click.option(
     "--processing",
     "processing_directory",
@@ -523,7 +489,6 @@ def _queue_pending_command(context: click.Context, silent: bool = False) -> None
     show_default=True,
 )
 def _queue_process_command(
-    queue_directory: pathlib.Path,
     processing_directory: pathlib.Path,
     max_concurrent_aind_jobs: int = 2,
     silent: bool = False,
@@ -536,7 +501,6 @@ def _queue_process_command(
     _require_dandi_devel()
 
     queue_status = QueueState.process_queue(
-        queue_directory=queue_directory,
         processing_directory=processing_directory,
         max_concurrent_aind_jobs=max_concurrent_aind_jobs,
         jitter_seconds=jitter_seconds,
@@ -548,13 +512,6 @@ def _queue_process_command(
 
 # dandicompute queue prepare [OPTIONS]
 @_queue_group.command(name="prepare")
-@click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
 @click.option(
     "--pipeline",
     "pipeline_directory",
@@ -587,7 +544,6 @@ def _queue_process_command(
     default=False,
 )
 def _queue_prepare_command(
-    queue_directory: pathlib.Path,
     pipeline_directory: pathlib.Path | None = None,
     config_key: str = "default",
     limit: int | None = None,
@@ -599,7 +555,6 @@ def _queue_prepare_command(
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
 
     QueueState.prepare(
-        queue_directory=queue_directory,
         pipeline_directory=pipeline_directory,
         config_key=config_key,
         limit=limit,
@@ -623,11 +578,30 @@ def _issues_group() -> None:
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 @click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory.",
-    required=True,
+    "--dandiset-id",
+    "dandiset_id",
+    help="Dandiset ID the issue dump JSON is published into.",
+    required=False,
+    type=str,
+    default=_JOB_CAPSULES_DANDISET_ID,
+    show_default=True,
+)
+@click.option(
+    "--processing",
+    "processing_directory",
+    help="Directory for the temporary working tree used to publish the issue dump JSON "
+    "(defaults to the system temporary location).",
+    required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--test",
+    "test",
+    help="Preserve the temporary working tree used to publish the issue dump JSON instead of cleaning it up.",
+    required=False,
+    is_flag=True,
+    default=False,
 )
 @click.option(
     "--silent",
@@ -638,15 +612,22 @@ def _issues_group() -> None:
 )
 def _issues_dump_command(
     dandiset_directory: pathlib.Path,
-    queue_directory: pathlib.Path,
+    dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
+    processing_directory: pathlib.Path | None = None,
+    test: bool = False,
     silent: bool = False,
 ) -> None:
-    """Scan nextflow and slurm logs and write per-capsule issue records."""
+    """Scan nextflow and slurm logs and publish per-capsule issue records."""
     _configure_logging(silent=silent)
 
-    QueueState.dump_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
+    QueueState.dump_issues(
+        dandiset_directory=dandiset_directory,
+        dandiset_id=dandiset_id,
+        processing_directory=processing_directory,
+        test=test,
+    )
     if not silent:
-        _styled_echo(text=f"\nWrote issue dump: {queue_directory / 'issues_dump.json'}", color="green")
+        _styled_echo(text=f"\nPublished derivatives/issues_dump.json to Dandiset {dandiset_id}.", color="green")
 
 
 # dandicompute issues summarize [OPTIONS]
@@ -659,11 +640,30 @@ def _issues_dump_command(
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
 )
 @click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory.",
-    required=True,
+    "--dandiset-id",
+    "dandiset_id",
+    help="Dandiset ID the issue summary JSON (and its issue dump) is published into.",
+    required=False,
+    type=str,
+    default=_JOB_CAPSULES_DANDISET_ID,
+    show_default=True,
+)
+@click.option(
+    "--processing",
+    "processing_directory",
+    help="Directory for the temporary working tree used to publish the issue summary JSON "
+    "(defaults to the system temporary location).",
+    required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
+    default=None,
+)
+@click.option(
+    "--test",
+    "test",
+    help="Preserve the temporary working tree used to publish the issue summary JSON instead of cleaning it up.",
+    required=False,
+    is_flag=True,
+    default=False,
 )
 @click.option(
     "--silent",
@@ -674,15 +674,22 @@ def _issues_dump_command(
 )
 def _issues_summarize_command(
     dandiset_directory: pathlib.Path,
-    queue_directory: pathlib.Path,
+    dandiset_id: str = _JOB_CAPSULES_DANDISET_ID,
+    processing_directory: pathlib.Path | None = None,
+    test: bool = False,
     silent: bool = False,
 ) -> None:
     """Summarize discovered issue lines by descending occurrence count."""
     _configure_logging(silent=silent)
 
-    QueueState.summarize_issues(dandiset_directory=dandiset_directory, queue_directory=queue_directory)
+    QueueState.summarize_issues(
+        dandiset_directory=dandiset_directory,
+        dandiset_id=dandiset_id,
+        processing_directory=processing_directory,
+        test=test,
+    )
     if not silent:
-        _styled_echo(text=f"\nWrote issue summary: {queue_directory / 'issues_summary.json'}", color="green")
+        _styled_echo(text=f"\nPublished derivatives/issues_summary.json to Dandiset {dandiset_id}.", color="green")
 
 
 # dandicompute delete
@@ -766,14 +773,6 @@ def _delete_version_command(dandiset_directory: pathlib.Path, version: str, sile
     default=None,
 )
 @click.option(
-    "--queue",
-    "queue_directory",
-    help="Path to the queue root directory (containing state.tsv). Required with --status.",
-    required=False,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-    default=None,
-)
-@click.option(
     "--dandiset-id",
     "dandiset_id",
     help="Dandiset ID capsules are archived from.",
@@ -817,7 +816,6 @@ def _delete_version_command(dandiset_directory: pathlib.Path, version: str, sile
 def _archive_command(
     status: str | None,
     capsule_path: str | None,
-    queue_directory: pathlib.Path | None,
     dandiset_id: str,
     archive_dandiset_id: str,
     processing_directory: pathlib.Path | None = None,
@@ -845,11 +843,7 @@ def _archive_command(
             _styled_echo(text=f"\nArchived job capsule: {capsule_path}", color="green")
         return
 
-    if queue_directory is None:
-        message = "--queue is required when archiving by --status."
-        raise click.UsageError(message)
-
-    state = QueueState.from_tsv(queue_directory / "state.tsv")
+    state = QueueState.from_dandi(dandiset_id=dandiset_id)
     archived = state.archive_by_status(
         status=status,
         dandiset_id=dandiset_id,

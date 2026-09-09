@@ -1,4 +1,3 @@
-import json
 import pathlib
 from unittest import mock
 
@@ -15,32 +14,19 @@ from dandi_compute_code.queue import TEST_QUEUE_CONTENT_ID
 _GROUP = "dandi_compute_code._cli._dandicompute_group"
 
 
-def _make_queue_dir(tmp_path: pathlib.Path) -> pathlib.Path:
-    """A queue directory containing a minimal valid queue_config.json."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    (queue_dir / "queue_config.json").write_text(
-        json.dumps({"pipelines": {"test": {"version_priority": ["v1.0"], "params_priority": ["default"]}}})
-    )
-    return queue_dir
-
-
 @pytest.mark.ai_generated
-def test_cli_prepare_test_calls_prepare_with_test_content_id(tmp_path: pathlib.Path) -> None:
+def test_cli_prepare_test_calls_prepare_with_test_content_id() -> None:
     """dandicompute prepare aind --test calls QueueState.prepare with the known test content ID."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
     runner = CliRunner()
 
     with (
         mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
         mock.patch(f"{_GROUP}.QueueState.prepare") as mock_prepare,
     ):
-        result = runner.invoke(_dandicompute_group, ["prepare", "aind", "--test", "--queue", str(queue_dir)])
+        result = runner.invoke(_dandicompute_group, ["prepare", "aind", "--test"])
 
     assert result.exit_code == 0
     mock_prepare.assert_called_once_with(
-        queue_directory=queue_dir,
         content_ids=[TEST_QUEUE_CONTENT_ID],
         pipeline_directory=None,
         config_key="default",
@@ -48,10 +34,8 @@ def test_cli_prepare_test_calls_prepare_with_test_content_id(tmp_path: pathlib.P
 
 
 @pytest.mark.ai_generated
-def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
+def test_cli_prepare_test_passes_config_key() -> None:
     """dandicompute prepare aind --test forwards --config to QueueState.prepare."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
     runner = CliRunner()
 
     with (
@@ -60,26 +44,15 @@ def test_cli_prepare_test_passes_config_key(tmp_path: pathlib.Path) -> None:
     ):
         result = runner.invoke(
             _dandicompute_group,
-            ["prepare", "aind", "--test", "--queue", str(queue_dir), "--config", "mit+engaging+revision-1"],
+            ["prepare", "aind", "--test", "--config", "mit+engaging+revision-1"],
         )
 
     assert result.exit_code == 0
     mock_prepare.assert_called_once_with(
-        queue_directory=queue_dir,
         content_ids=[TEST_QUEUE_CONTENT_ID],
         pipeline_directory=None,
         config_key="mit+engaging+revision-1",
     )
-
-
-@pytest.mark.ai_generated
-def test_cli_prepare_test_required_queue_directory() -> None:
-    """dandicompute prepare aind --test requires --queue."""
-    runner = CliRunner()
-    with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
-        result = runner.invoke(_dandicompute_group, ["prepare", "aind", "--test"])
-    assert result.exit_code != 0
-    assert "--queue is required when using --test" in result.output
 
 
 @pytest.mark.ai_generated
@@ -113,8 +86,6 @@ def test_cli_aind_prepare_passes_config_key() -> None:
 @pytest.mark.ai_generated
 def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
     """dandicompute queue clean delegates to QueueState and reports removed paths."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
 
@@ -123,15 +94,15 @@ def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
     mock_state.clean_unsubmitted_capsules.return_value = fake_removed
     runner = CliRunner()
 
-    with mock.patch(f"{_GROUP}.QueueState.from_tsv", return_value=mock_state) as mock_from_tsv:
+    with mock.patch(f"{_GROUP}.QueueState.from_dandi", return_value=mock_state) as mock_from_dandi:
         result = runner.invoke(
             _dandicompute_group,
-            ["queue", "clean", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
+            ["queue", "clean", "--dandiset", str(dandiset_dir)],
             env={"DANDI_API_KEY": "test-key"},
         )
 
     assert result.exit_code == 0, result.output
-    mock_from_tsv.assert_called_once_with(queue_dir / "state.tsv")
+    mock_from_dandi.assert_called_once_with()
     mock_state.clean_unsubmitted_capsules.assert_called_once_with(dandiset_directory=dandiset_dir)
     assert "Cleaned 1 unsubmitted capsule" in result.output
 
@@ -139,8 +110,6 @@ def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
 @pytest.mark.ai_generated
 def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
     """dandicompute queue clean reports when no unsubmitted capsules are found."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
 
@@ -148,10 +117,10 @@ def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
     mock_state.clean_unsubmitted_capsules.return_value = []
     runner = CliRunner()
 
-    with mock.patch(f"{_GROUP}.QueueState.from_tsv", return_value=mock_state):
+    with mock.patch(f"{_GROUP}.QueueState.from_dandi", return_value=mock_state):
         result = runner.invoke(
             _dandicompute_group,
-            ["queue", "clean", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
+            ["queue", "clean", "--dandiset", str(dandiset_dir)],
             env={"DANDI_API_KEY": "test-key"},
         )
 
@@ -162,8 +131,6 @@ def test_cli_queue_clean_reports_nothing_found(tmp_path: pathlib.Path) -> None:
 @pytest.mark.ai_generated
 def test_cli_queue_stats_calls_helper_and_reports_output(tmp_path: pathlib.Path) -> None:
     """dandicompute queue stats delegates to QueueState.aggregate_statistics."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
 
@@ -171,26 +138,47 @@ def test_cli_queue_stats_calls_helper_and_reports_output(tmp_path: pathlib.Path)
     mock_state.aggregate_statistics.return_value = {"successful_asset_bytes_total": 0}
     runner = CliRunner()
 
-    with mock.patch(f"{_GROUP}.QueueState.from_tsv", return_value=mock_state):
+    with mock.patch(f"{_GROUP}.QueueState.from_dandi", return_value=mock_state) as mock_from_dandi:
         result = runner.invoke(
             _dandicompute_group,
-            ["queue", "stats", "--queue", str(queue_dir), "--dandiset", str(dandiset_dir)],
+            ["queue", "stats", "--dandiset", str(dandiset_dir)],
         )
 
     assert result.exit_code == 0, result.output
+    mock_from_dandi.assert_called_once_with(dandiset_id="001697")
     mock_state.aggregate_statistics.assert_called_once_with(
-        queue_directory=queue_dir,
         dandiset_directory=dandiset_dir,
-        output_file_name="queue_stats.json",
+        dandiset_id="001697",
+        processing_directory=None,
+        test=False,
     )
-    assert "Wrote queue aggregate statistics" in result.output
+    assert "Published derivatives/queue_stats.json" in result.output
+
+
+@pytest.mark.ai_generated
+def test_cli_queue_stats_forwards_custom_dandiset_id(tmp_path: pathlib.Path) -> None:
+    """dandicompute queue stats forwards --dandiset-id to QueueState.from_dandi/aggregate_statistics."""
+    dandiset_dir = tmp_path / "dandiset"
+    dandiset_dir.mkdir()
+
+    mock_state = mock.Mock()
+    mock_state.aggregate_statistics.return_value = {}
+    runner = CliRunner()
+
+    with mock.patch(f"{_GROUP}.QueueState.from_dandi", return_value=mock_state) as mock_from_dandi:
+        result = runner.invoke(
+            _dandicompute_group,
+            ["queue", "stats", "--dandiset", str(dandiset_dir), "--dandiset-id", "000123"],
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_from_dandi.assert_called_once_with(dandiset_id="000123")
+    assert mock_state.aggregate_statistics.call_args.kwargs["dandiset_id"] == "000123"
 
 
 @pytest.mark.ai_generated
 def test_cli_issues_dump_calls_helper(tmp_path: pathlib.Path) -> None:
     """dandicompute issues dump delegates to QueueState.dump_issues and reports output."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
 
@@ -198,19 +186,22 @@ def test_cli_issues_dump_calls_helper(tmp_path: pathlib.Path) -> None:
     with mock.patch(f"{_GROUP}.QueueState.dump_issues", return_value=[]) as mock_dump:
         result = runner.invoke(
             _dandicompute_group,
-            ["issues", "dump", "--directory", str(dandiset_dir), "--queue", str(queue_dir)],
+            ["issues", "dump", "--directory", str(dandiset_dir)],
         )
 
     assert result.exit_code == 0, result.output
-    mock_dump.assert_called_once_with(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
-    assert "Wrote issue dump" in result.output
+    mock_dump.assert_called_once_with(
+        dandiset_directory=dandiset_dir,
+        dandiset_id="001697",
+        processing_directory=None,
+        test=False,
+    )
+    assert "Published derivatives/issues_dump.json" in result.output
 
 
 @pytest.mark.ai_generated
 def test_cli_issues_summarize_calls_helper(tmp_path: pathlib.Path) -> None:
     """dandicompute issues summarize delegates to QueueState.summarize_issues and reports output."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
 
@@ -218,69 +209,25 @@ def test_cli_issues_summarize_calls_helper(tmp_path: pathlib.Path) -> None:
     with mock.patch(f"{_GROUP}.QueueState.summarize_issues", return_value={}) as mock_summarize:
         result = runner.invoke(
             _dandicompute_group,
-            ["issues", "summarize", "--directory", str(dandiset_dir), "--queue", str(queue_dir)],
+            ["issues", "summarize", "--directory", str(dandiset_dir)],
         )
 
     assert result.exit_code == 0, result.output
-    mock_summarize.assert_called_once_with(dandiset_directory=dandiset_dir, queue_directory=queue_dir)
-    assert "Wrote issue summary" in result.output
+    mock_summarize.assert_called_once_with(
+        dandiset_directory=dandiset_dir,
+        dandiset_id="001697",
+        processing_directory=None,
+        test=False,
+    )
+    assert "Published derivatives/issues_summary.json" in result.output
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize(
-    "subcommand",
-    [
-        "clean",
-        "stats",
-    ],
-)
-def test_cli_queue_subcommands_required_queue_directory(tmp_path: pathlib.Path, subcommand: str) -> None:
-    """Queue clean/stats commands require --queue."""
-    dandiset_dir = tmp_path / "dandiset"
-    dandiset_dir.mkdir()
-    args = ["queue", subcommand, "--dandiset", str(dandiset_dir)]
-    runner = CliRunner()
-    with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
-        result = runner.invoke(_dandicompute_group, args)
-    assert result.exit_code != 0
-    assert "Missing option '--queue'" in result.output
-
-
-@pytest.mark.ai_generated
-def test_cli_queue_process_required_queue_directory(tmp_path: pathlib.Path) -> None:
-    """Queue process command requires --queue."""
-    processing_dir = tmp_path / "processing"
-    processing_dir.mkdir()
-    runner = CliRunner()
-    with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
-        result = runner.invoke(
-            _dandicompute_group,
-            ["queue", "process", "--processing", str(processing_dir)],
-        )
-    assert result.exit_code != 0
-    assert "Missing option '--queue'" in result.output
-
-
-@pytest.mark.ai_generated
-def test_cli_queue_prepare_required_queue_directory() -> None:
-    """Queue prepare command requires --queue."""
-    runner = CliRunner()
-    with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
-        result = runner.invoke(_dandicompute_group, ["queue", "prepare"])
-    assert result.exit_code != 0
-    assert "Missing option '--queue'" in result.output
-
-
-@pytest.mark.ai_generated
-def test_cli_queue_process_requires_processing_directory(tmp_path: pathlib.Path) -> None:
+def test_cli_queue_process_requires_processing_directory() -> None:
     """Queue process command requires --processing."""
-    queue_dir = _make_queue_dir(tmp_path)
     runner = CliRunner()
     with mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}):
-        result = runner.invoke(
-            _dandicompute_group,
-            ["queue", "process", "--queue", str(queue_dir)],
-        )
+        result = runner.invoke(_dandicompute_group, ["queue", "process"])
     assert result.exit_code != 0
     assert "Missing option '--processing'" in result.output
 
@@ -288,7 +235,6 @@ def test_cli_queue_process_requires_processing_directory(tmp_path: pathlib.Path)
 @pytest.mark.ai_generated
 def test_cli_queue_process_passes_processing_directory(tmp_path: pathlib.Path) -> None:
     """dandicompute queue process forwards --processing to QueueState.process_queue."""
-    queue_dir = _make_queue_dir(tmp_path)
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
     runner = CliRunner()
@@ -296,13 +242,12 @@ def test_cli_queue_process_passes_processing_directory(tmp_path: pathlib.Path) -
     with mock.patch(f"{_GROUP}.QueueState.process_queue") as mock_process:
         result = runner.invoke(
             _dandicompute_group,
-            ["queue", "process", "--queue", str(queue_dir), "--processing", str(processing_dir)],
+            ["queue", "process", "--processing", str(processing_dir)],
             env={"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"},
         )
 
     assert result.exit_code == 0, result.output
     mock_process.assert_called_once_with(
-        queue_directory=queue_dir,
         processing_directory=processing_dir,
         max_concurrent_aind_jobs=2,
         jitter_seconds=30.0,
@@ -313,7 +258,6 @@ def test_cli_queue_process_passes_processing_directory(tmp_path: pathlib.Path) -
 @pytest.mark.ai_generated
 def test_cli_queue_process_passes_max_concurrent_aind_jobs(tmp_path: pathlib.Path) -> None:
     """dandicompute queue process forwards --max to QueueState.process_queue."""
-    queue_dir = _make_queue_dir(tmp_path)
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
     runner = CliRunner()
@@ -321,13 +265,12 @@ def test_cli_queue_process_passes_max_concurrent_aind_jobs(tmp_path: pathlib.Pat
     with mock.patch(f"{_GROUP}.QueueState.process_queue") as mock_process:
         result = runner.invoke(
             _dandicompute_group,
-            ["queue", "process", "--queue", str(queue_dir), "--processing", str(processing_dir), "--max", "4"],
+            ["queue", "process", "--processing", str(processing_dir), "--max", "4"],
             env={"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"},
         )
 
     assert result.exit_code == 0, result.output
     mock_process.assert_called_once_with(
-        queue_directory=queue_dir,
         processing_directory=processing_dir,
         max_concurrent_aind_jobs=4,
         jitter_seconds=30.0,
@@ -338,7 +281,6 @@ def test_cli_queue_process_passes_max_concurrent_aind_jobs(tmp_path: pathlib.Pat
 @pytest.mark.ai_generated
 def test_cli_queue_process_passes_test_flag(tmp_path: pathlib.Path) -> None:
     """dandicompute queue process forwards --test to QueueState.process_queue."""
-    queue_dir = _make_queue_dir(tmp_path)
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
     runner = CliRunner()
@@ -346,13 +288,12 @@ def test_cli_queue_process_passes_test_flag(tmp_path: pathlib.Path) -> None:
     with mock.patch(f"{_GROUP}.QueueState.process_queue") as mock_process:
         result = runner.invoke(
             _dandicompute_group,
-            ["queue", "process", "--queue", str(queue_dir), "--processing", str(processing_dir), "--test"],
+            ["queue", "process", "--processing", str(processing_dir), "--test"],
             env={"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"},
         )
 
     assert result.exit_code == 0, result.output
     mock_process.assert_called_once_with(
-        queue_directory=queue_dir,
         processing_directory=processing_dir,
         max_concurrent_aind_jobs=2,
         jitter_seconds=30.0,
@@ -363,7 +304,6 @@ def test_cli_queue_process_passes_test_flag(tmp_path: pathlib.Path) -> None:
 @pytest.mark.ai_generated
 def test_cli_queue_process_reports_when_no_jobs_waiting(tmp_path: pathlib.Path) -> None:
     """dandicompute queue process reports when no jobs are waiting for submission."""
-    queue_dir = _make_queue_dir(tmp_path)
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
     runner = CliRunner()
@@ -371,7 +311,7 @@ def test_cli_queue_process_reports_when_no_jobs_waiting(tmp_path: pathlib.Path) 
     with mock.patch(f"{_GROUP}.QueueState.process_queue", return_value="no-pending"):
         result = runner.invoke(
             _dandicompute_group,
-            ["queue", "process", "--queue", str(queue_dir), "--processing", str(processing_dir)],
+            ["queue", "process", "--processing", str(processing_dir)],
             env={"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"},
         )
 
@@ -382,14 +322,13 @@ def test_cli_queue_process_reports_when_no_jobs_waiting(tmp_path: pathlib.Path) 
 @pytest.mark.ai_generated
 def test_cli_queue_process_requires_dandi_devel(tmp_path: pathlib.Path) -> None:
     """Queue process command exits non-zero when DANDI_DEVEL is not set."""
-    queue_dir = _make_queue_dir(tmp_path)
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
     runner = CliRunner()
 
     result = runner.invoke(
         _dandicompute_group,
-        ["queue", "process", "--queue", str(queue_dir), "--processing", str(processing_dir)],
+        ["queue", "process", "--processing", str(processing_dir)],
         env={"DANDI_API_KEY": "test-key"},
     )
 
@@ -400,7 +339,6 @@ def test_cli_queue_process_requires_dandi_devel(tmp_path: pathlib.Path) -> None:
 @pytest.mark.ai_generated
 def test_cli_queue_process_passes_jitter_seconds(tmp_path: pathlib.Path) -> None:
     """dandicompute queue process forwards --jitter to QueueState.process_queue."""
-    queue_dir = _make_queue_dir(tmp_path)
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
     runner = CliRunner()
@@ -408,13 +346,12 @@ def test_cli_queue_process_passes_jitter_seconds(tmp_path: pathlib.Path) -> None
     with mock.patch(f"{_GROUP}.QueueState.process_queue") as mock_process:
         result = runner.invoke(
             _dandicompute_group,
-            ["queue", "process", "--queue", str(queue_dir), "--processing", str(processing_dir), "--jitter", "120.0"],
+            ["queue", "process", "--processing", str(processing_dir), "--jitter", "120.0"],
             env={"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"},
         )
 
     assert result.exit_code == 0, result.output
     mock_process.assert_called_once_with(
-        queue_directory=queue_dir,
         processing_directory=processing_dir,
         max_concurrent_aind_jobs=2,
         jitter_seconds=120.0,
@@ -459,7 +396,6 @@ def test_cli_queue_pending_silent_suppresses_output(tmp_path: pathlib.Path) -> N
 @pytest.mark.ai_generated
 def test_cli_queue_process_passes_zero_jitter(tmp_path: pathlib.Path) -> None:
     """dandicompute queue process forwards --jitter 0 to QueueState.process_queue."""
-    queue_dir = _make_queue_dir(tmp_path)
     processing_dir = tmp_path / "processing"
     processing_dir.mkdir()
     runner = CliRunner()
@@ -467,13 +403,12 @@ def test_cli_queue_process_passes_zero_jitter(tmp_path: pathlib.Path) -> None:
     with mock.patch(f"{_GROUP}.QueueState.process_queue") as mock_process:
         result = runner.invoke(
             _dandicompute_group,
-            ["queue", "process", "--queue", str(queue_dir), "--processing", str(processing_dir), "--jitter", "0"],
+            ["queue", "process", "--processing", str(processing_dir), "--jitter", "0"],
             env={"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"},
         )
 
     assert result.exit_code == 0, result.output
     mock_process.assert_called_once_with(
-        queue_directory=queue_dir,
         processing_directory=processing_dir,
         max_concurrent_aind_jobs=2,
         jitter_seconds=0.0,

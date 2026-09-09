@@ -1,5 +1,6 @@
 import json
 import pathlib
+from unittest import mock
 
 import pytest
 
@@ -17,56 +18,31 @@ def test_packaged_pipeline_configs_file_exists_and_validates() -> None:
 
 
 @pytest.mark.ai_generated
-def test_load_queue_config_falls_back_to_packaged_default_when_directory_has_no_config(
-    tmp_path: pathlib.Path,
-) -> None:
-    """load_queue_config uses the packaged pipeline_configs.json when --queue has neither file."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
+def test_load_queue_config_raises_when_packaged_config_fails_linkml_validation(tmp_path: pathlib.Path) -> None:
+    """load_queue_config raises when the packaged pipeline config violates LinkML constraints."""
+    invalid_config_file = tmp_path / "pipeline_configs.json"
+    invalid_queue_config = {
+        "pipelines": {
+            # Violates schema minimum_value: 0 constraint.
+            "test": {"version_priority": ["v1.0"], "params_priority": ["default"], "max_fail_per_dandiset": -1}
+        }
+    }
+    invalid_config_file.write_text(json.dumps(invalid_queue_config))
 
-    loaded = QueueState.load_queue_config(queue_directory=queue_dir)
-
-    assert loaded == json.loads(_PACKAGED_PIPELINE_CONFIGS_PATH.read_text())
-
-
-@pytest.mark.ai_generated
-def test_load_queue_config_prefers_pipeline_configs_json_in_queue_directory(tmp_path: pathlib.Path) -> None:
-    """load_queue_config prefers a queue-directory pipeline_configs.json over the packaged default."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    override_config = {"pipelines": {"custom": {"version_priority": ["v9.9"], "params_priority": ["default"]}}}
-    (queue_dir / "pipeline_configs.json").write_text(json.dumps(override_config))
-
-    loaded = QueueState.load_queue_config(queue_directory=queue_dir)
-
-    assert loaded == override_config
+    with (
+        mock.patch("dandi_compute_code.queue._queue_utils._PACKAGED_PIPELINE_CONFIGS_PATH", invalid_config_file),
+        pytest.raises(ValueError, match="LinkML validation failed"),
+    ):
+        QueueState.load_queue_config()
 
 
 @pytest.mark.ai_generated
-def test_load_queue_config_prefers_pipeline_configs_json_over_legacy_queue_config_json(
-    tmp_path: pathlib.Path,
-) -> None:
-    """load_queue_config prefers pipeline_configs.json over a legacy queue_config.json in the same directory."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    new_config = {"pipelines": {"new": {"version_priority": ["v1"], "params_priority": ["default"]}}}
-    legacy_config = {"pipelines": {"legacy": {"version_priority": ["v0"], "params_priority": ["default"]}}}
-    (queue_dir / "pipeline_configs.json").write_text(json.dumps(new_config))
-    (queue_dir / "queue_config.json").write_text(json.dumps(legacy_config))
+def test_load_queue_config_raises_when_packaged_config_missing(tmp_path: pathlib.Path) -> None:
+    """load_queue_config raises FileNotFoundError when the packaged pipeline config is missing."""
+    missing_config_file = tmp_path / "does-not-exist.json"
 
-    loaded = QueueState.load_queue_config(queue_directory=queue_dir)
-
-    assert loaded == new_config
-
-
-@pytest.mark.ai_generated
-def test_load_queue_config_still_supports_legacy_queue_config_json(tmp_path: pathlib.Path) -> None:
-    """load_queue_config still reads a legacy queue_config.json when pipeline_configs.json is absent."""
-    queue_dir = tmp_path / "queue"
-    queue_dir.mkdir()
-    legacy_config = {"pipelines": {"legacy": {"version_priority": ["v0"], "params_priority": ["default"]}}}
-    (queue_dir / "queue_config.json").write_text(json.dumps(legacy_config))
-
-    loaded = QueueState.load_queue_config(queue_directory=queue_dir)
-
-    assert loaded == legacy_config
+    with (
+        mock.patch("dandi_compute_code.queue._queue_utils._PACKAGED_PIPELINE_CONFIGS_PATH", missing_config_file),
+        pytest.raises(FileNotFoundError),
+    ):
+        QueueState.load_queue_config()

@@ -108,3 +108,34 @@ def test_queue_state_to_tsv_writes_file(tmp_path: pathlib.Path) -> None:
     state.to_tsv(output_file)
     assert output_file.exists()
     assert output_file.read_text() == state.to_tsv_string()
+
+
+@pytest.mark.ai_generated
+def test_queue_state_from_tsv_preserves_dataset_description_path(tmp_path: pathlib.Path) -> None:
+    """QueueState.from_tsv preserves dataset_description_path entries."""
+    state_file = tmp_path / "state.tsv"
+    dataset_description_path = {
+        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
+        "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/"
+        "dataset_description.json": "dataset-description-id"
+    }
+    entry = _make_entry(dataset_description_path=dataset_description_path)
+    QueueState(entries=[entry]).to_tsv(state_file)
+
+    queue_state = QueueState.from_tsv(state_file)
+
+    assert len(queue_state) == 1
+    assert queue_state.entries[0].dataset_description_path == dataset_description_path
+
+
+@pytest.mark.ai_generated
+def test_queue_state_empty_dataset_description_path_cell(tmp_path: pathlib.Path) -> None:
+    """QueueState.from_tsv converts an empty dataset_description_path cell to an empty dict."""
+    state_file = tmp_path / "state.tsv"
+    entry = _make_entry(dataset_description_path={})
+    QueueState(entries=[entry]).to_tsv(state_file)
+
+    queue_state = QueueState.from_tsv(state_file)
+
+    assert len(queue_state) == 1
+    assert queue_state.entries[0].dataset_description_path == {}

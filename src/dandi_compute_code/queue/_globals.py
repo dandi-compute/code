@@ -8,9 +8,8 @@ _AIND_EPHYS_PARAMS_REGISTRY_PATH = (
 _QUEUE_CONFIG_SCHEMA_PATH = pathlib.Path(__file__).parent / "schemas" / "queue_config.linkml.yaml"
 # Packaged pipeline configuration, committed directly to this repo. This is the canonical
 # source of truth for the queue's pipeline definitions -- it replaces the ``queue_config.json``
-# that previously lived only in the (soon to be retired) dandi-compute/queue repository. A
-# ``--queue`` directory may still supply its own ``pipeline_configs.json`` (or legacy
-# ``queue_config.json``) to override this default; see ``_load_queue_config``.
+# that previously lived only in the (soon to be retired) dandi-compute/queue repository. There
+# is no local override for this file; see ``_load_queue_config``.
 _PACKAGED_PIPELINE_CONFIGS_PATH = pathlib.Path(__file__).parent / "pipeline_configs.json"
 # TODO: consolidate this RE with the other globals and generalize to any job capsule
 _FLAT_ATTEMPT_DIR_RE = re.compile(r"^version-(?P<version>.+?)_codebase-[^_]+_params-[^_]+_config-[^_]+_attempt-\d+$")
