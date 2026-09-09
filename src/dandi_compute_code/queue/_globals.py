@@ -18,6 +18,10 @@ _QUALIFYING_AIND_CONTENT_IDS_URL = (
     "https://raw.githubusercontent.com/dandi-cache/qualifying-aind-content-ids/dist/"
     "derivatives/qualifying_aind_content_ids.jsonl.gz"
 )
+_QUALIFYING_LFP_CONTENT_IDS_URL = (
+    "https://raw.githubusercontent.com/dandi-cache/qualifying-lfp-content-ids/derivatives/"
+    "derivatives/qualifying_lfp_content_ids.jsonl"
+)
 
 try:
     _AIND_EPHYS_PARAMS_REGISTRY: dict = json.loads(_AIND_EPHYS_PARAMS_REGISTRY_PATH.read_text())

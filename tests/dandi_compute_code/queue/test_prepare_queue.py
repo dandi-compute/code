@@ -214,3 +214,62 @@ def test_prepare_queue_uses_explicit_content_ids_when_provided() -> None:
     mock_urlopen.assert_not_called()
     assert mock_prepare.call_count == 1
     assert mock_prepare.call_args.kwargs["content_id"] == "explicit-asset-001"
+
+
+_LFP_QUEUE_CONFIG = {"pipelines": {"lfp": {"version_priority": ["v0.4.0"], "params_priority": ["default"]}}}
+_MULTI_QUEUE_CONFIG = {
+    "pipelines": {
+        "aind+ephys": {"version_priority": ["v1.0"], "params_priority": ["default"]},
+        "lfp": {"version_priority": ["v0.4.0"], "params_priority": ["default"]},
+    }
+}
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_dispatches_lfp_to_prepare_lfp_job() -> None:
+    """prepare routes the 'lfp' pipeline to prepare_lfp_job, not the AIND builder."""
+    with (
+        mock.patch("dandi_compute_code.queue._queue_state._load_queue_config", return_value=_LFP_QUEUE_CONFIG),
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_lfp_job") as mock_lfp,
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_aind_ephys_job") as mock_aind,
+    ):
+        QueueState.prepare(content_ids=["asset-1", "asset-2"])
+
+    assert mock_aind.call_count == 0
+    assert mock_lfp.call_count == 2
+    assert {call.kwargs["content_id"] for call in mock_lfp.call_args_list} == {"asset-1", "asset-2"}
+    assert all(call.kwargs["pipeline_version"] == "v0.4.0" for call in mock_lfp.call_args_list)
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_lfp_skip_does_not_count_toward_limit() -> None:
+    """A prepare_lfp_job that returns None (capsule already exists) is not counted against --limit."""
+    with (
+        mock.patch("dandi_compute_code.queue._queue_state._load_queue_config", return_value=_LFP_QUEUE_CONFIG),
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_lfp_job", return_value=None) as mock_lfp,
+    ):
+        QueueState.prepare(content_ids=["asset-1", "asset-2", "asset-3"], limit=2)
+
+    assert mock_lfp.call_count == 3
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_only_pipeline_prepares_just_that_pipeline() -> None:
+    """only_pipeline restricts preparation to the named pipeline."""
+    with (
+        mock.patch("dandi_compute_code.queue._queue_state._load_queue_config", return_value=_MULTI_QUEUE_CONFIG),
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_lfp_job") as mock_lfp,
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_aind_ephys_job") as mock_aind,
+    ):
+        QueueState.prepare(content_ids=["asset-1"], only_pipeline="lfp")
+
+    assert mock_aind.call_count == 0
+    assert mock_lfp.call_count == 1
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_only_pipeline_unknown_raises() -> None:
+    """only_pipeline that is not configured raises a clear error."""
+    with mock.patch("dandi_compute_code.queue._queue_state._load_queue_config", return_value=_LFP_QUEUE_CONFIG):
+        with pytest.raises(ValueError, match="is not configured"):
+            QueueState.prepare(content_ids=["asset-1"], only_pipeline="does-not-exist")
