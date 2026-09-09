@@ -25,10 +25,10 @@ def timeline_one_step() -> str:
 
 
 @pytest.mark.ai_generated
-def test_aggregate_queue_statistics_publishes_queue_stats_json(
+def test_aggregate_queue_statistics_writes_queue_stats_json(
     example_queue_state: QueueState, tmp_path: pathlib.Path, timeline_two_steps: str
 ) -> None:
-    """aggregate_statistics publishes queue_stats.json with byte and timeline aggregates."""
+    """aggregate_statistics writes queue_stats.json with byte and timeline aggregates."""
     dandiset_dir = tmp_path / "dandiset"
 
     # sub-successful is the only entry with both output and a known source-asset size.

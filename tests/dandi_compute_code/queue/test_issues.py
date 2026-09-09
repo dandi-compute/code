@@ -11,7 +11,7 @@ _JOB_CAPSULES_DANDISET_ID = "001697"
 
 
 @pytest.mark.ai_generated
-def test_dump_issues_publishes_per_capsule_records(tmp_path: pathlib.Path) -> None:
+def test_dump_issues_writes_per_capsule_records(tmp_path: pathlib.Path) -> None:
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
 
@@ -76,7 +76,7 @@ def test_dump_issues_forwards_dandiset_id_and_relative_path(tmp_path: pathlib.Pa
 
 
 @pytest.mark.ai_generated
-def test_summarize_issues_publishes_descending_frequency(tmp_path: pathlib.Path) -> None:
+def test_summarize_issues_writes_descending_frequency(tmp_path: pathlib.Path) -> None:
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
 
@@ -102,7 +102,7 @@ def test_summarize_issues_publishes_descending_frequency(tmp_path: pathlib.Path)
 
     assert summary == {"3": ["error: common failure"], "1": ["error: unique failure"]}
 
-    # dump_issues (called internally) plus the summary itself are both published.
+    # dump_issues (called internally) plus the summary itself are both written.
     assert mock_write_file.call_count == 2
     relative_paths = {call.kwargs["relative_path"] for call in mock_write_file.call_args_list}
     assert relative_paths == {"derivatives/issues_dump.json", "derivatives/issues_summary.json"}
@@ -118,7 +118,7 @@ def test_summarize_issues_publishes_descending_frequency(tmp_path: pathlib.Path)
 
 @pytest.mark.ai_generated
 def test_summarize_issues_forwards_dandiset_id_to_dump_and_summary(tmp_path: pathlib.Path) -> None:
-    """summarize_issues forwards dandiset_id/processing_directory/test to both publishes."""
+    """summarize_issues forwards dandiset_id/processing_directory/test to both writes."""
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
     processing_dir = tmp_path / "processing"

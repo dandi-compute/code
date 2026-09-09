@@ -83,7 +83,7 @@ _STATE_TSV_FIELD_NAMES = [
     "job_completion_time",
 ]
 
-#: Default subpath (relative to a Dandiset root) that ``state.tsv`` is published to.
+#: Default subpath (relative to a Dandiset root) that ``state.tsv`` is written to.
 _STATE_TSV_RELATIVE_PATH = "derivatives/state.tsv"
 
 
@@ -796,7 +796,7 @@ class QueueState:
         test: bool = False,
     ) -> None:
         """
-        Publish this Dandiset's queue state as a ``state.tsv`` table within itself.
+        Write this Dandiset's queue state as a ``state.tsv`` table within itself.
 
         Builds the state from *dandiset_id*'s remote ``assets.jsonld`` metadata (see
         :meth:`from_dandi`) and uploads it as a tab-separated table to *relative_path* within
@@ -806,7 +806,7 @@ class QueueState:
         Intended to be called once for the job capsules ("source") Dandiset and once for the
         failed runs archive ("archived") Dandiset. There is no local queue directory or local
         state file involved -- the state is always rebuilt fresh from *dandiset_id*'s remote
-        ``assets.jsonld`` and republished directly.
+        ``assets.jsonld`` and rewritten directly.
 
         :param dandiset_id: The Dandiset whose ``assets.jsonld`` portrays the state, and which
             the table is written into. Defaults to the job capsules Dandiset.
@@ -840,10 +840,10 @@ class QueueState:
         test: bool = False,
     ) -> dict:
         """
-        Publish aggregate queue statistics JSON into a Dandiset and return the computed payload.
+        Write aggregate queue statistics JSON into a Dandiset and return the computed payload.
 
         Nextflow timeline reports are still located by walking *dandiset_directory* (a local
-        Dandiset clone) -- that part is unchanged. The resulting statistics are published to
+        Dandiset clone) -- that part is unchanged. The resulting statistics are written to
         *relative_path* within *dandiset_id* (default ``derivatives/queue_stats.json``) via
         :func:`~dandi_compute_code.dandiset.write_dandiset_file`, rather than written to local
         disk.
@@ -851,7 +851,7 @@ class QueueState:
         :param dandiset_directory: Local clone of the dandiset used to locate Nextflow timeline
             reports.
         :type dandiset_directory: pathlib.Path
-        :param dandiset_id: The Dandiset the statistics JSON is published into.
+        :param dandiset_id: The Dandiset the statistics JSON is written into.
         :type dandiset_id: str
         :param relative_path: Path (relative to the Dandiset root) the statistics JSON is
             written to.
@@ -1188,10 +1188,10 @@ class QueueState:
         test: bool = False,
     ) -> list[dict]:
         """
-        Scan nextflow/slurm logs and publish per-capsule error lines into a Dandiset.
+        Scan nextflow/slurm logs and write per-capsule error lines into a Dandiset.
 
         Logs are still located by walking *dandiset_directory* (a local Dandiset clone) --
-        that part is unchanged. The resulting records are published to *relative_path* within
+        that part is unchanged. The resulting records are written to *relative_path* within
         *dandiset_id* (default ``derivatives/issues_dump.json``) via
         :func:`~dandi_compute_code.dandiset.write_dandiset_file`, rather than written to local
         disk.
@@ -1245,10 +1245,10 @@ class QueueState:
         test: bool = False,
     ) -> dict[str, list[str]]:
         """
-        Publish a descending error-frequency summary (keys are counts, values are error strings).
+        Write a descending error-frequency summary (keys are counts, values are error strings).
 
-        Calls :meth:`dump_issues` (publishing its own dump to *dump_relative_path* within
-        *dandiset_id*), then publishes the summary to *relative_path* within *dandiset_id*
+        Calls :meth:`dump_issues` (writing its own dump to *dump_relative_path* within
+        *dandiset_id*), then writes the summary to *relative_path* within *dandiset_id*
         (default ``derivatives/issues_summary.json``) via
         :func:`~dandi_compute_code.dandiset.write_dandiset_file`.
         """

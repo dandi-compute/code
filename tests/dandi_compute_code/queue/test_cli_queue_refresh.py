@@ -12,8 +12,8 @@ _DANDI_ENV = {"DANDI_API_KEY": "test-key", "DANDI_DEVEL": "1"}
 
 
 @pytest.mark.ai_generated
-def test_cli_queue_refresh_publishes_tables_to_source_and_archived() -> None:
-    """dandicompute queue refresh republishes derivatives/state.tsv into both Dandisets."""
+def test_cli_queue_refresh_writes_tables_to_source_and_archived() -> None:
+    """dandicompute queue refresh rewrites derivatives/state.tsv into both Dandisets."""
     runner = CliRunner()
     with mock.patch("dandi_compute_code.queue._queue_state.QueueState.write_dandiset_state_table") as mock_write:
         result = runner.invoke(_dandicompute_group, ["queue", "refresh"], env=_DANDI_ENV)
@@ -61,7 +61,7 @@ def test_cli_queue_refresh_forwards_processing_and_test_flags() -> None:
 
 @pytest.mark.ai_generated
 def test_cli_queue_refresh_fails_without_api_key() -> None:
-    """dandicompute queue refresh errors immediately when DANDI_API_KEY is missing (it publishes to DANDI)."""
+    """dandicompute queue refresh errors immediately when DANDI_API_KEY is missing (it writes to DANDI)."""
     runner = CliRunner()
     env_without_key = {k: v for k, v in os.environ.items() if k != "DANDI_API_KEY"}
     with mock.patch.dict(os.environ, env_without_key, clear=True):

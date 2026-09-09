@@ -272,7 +272,7 @@ def _queue_group() -> None:
 @click.option(
     "--processing",
     "processing_directory",
-    help="Directory for the temporary working tree used to publish each state.tsv "
+    help="Directory for the temporary working tree used to write each state.tsv "
     "(defaults to the system temporary location).",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -281,7 +281,7 @@ def _queue_group() -> None:
 @click.option(
     "--test",
     "test",
-    help="Preserve the temporary working tree used to publish each state.tsv instead of cleaning it up.",
+    help="Preserve the temporary working tree used to write each state.tsv instead of cleaning it up.",
     required=False,
     is_flag=True,
     default=False,
@@ -301,9 +301,9 @@ def _queue_refresh_command(
     silent: bool = False,
 ) -> None:
     """
-    Republish state.tsv into both Dandisets.
+    Rewrite state.tsv into both Dandisets.
 
-    Ephemerally rebuilds and republishes derivatives/state.tsv within both the source and
+    Ephemerally rebuilds and rewrites derivatives/state.tsv within both the source and
     archived Dandisets themselves (see QueueState.write_dandiset_state_table), so each always
     reflects its current state fetched fresh from its own assets.jsonld.
     """
@@ -318,7 +318,7 @@ def _queue_refresh_command(
             test=test,
         )
         if not silent:
-            _styled_echo(text=f"\nPublished derivatives/state.tsv to Dandiset {target_dandiset_id}.", color="green")
+            _styled_echo(text=f"\nWrote derivatives/state.tsv to Dandiset {target_dandiset_id}.", color="green")
 
 
 # dandicompute queue clean [OPTIONS]
@@ -369,7 +369,7 @@ def _queue_clean_command(
 @click.option(
     "--dandiset-id",
     "dandiset_id",
-    help="Dandiset ID the aggregate statistics JSON is published into.",
+    help="Dandiset ID the aggregate statistics JSON is written into.",
     required=False,
     type=str,
     default=_JOB_CAPSULES_DANDISET_ID,
@@ -378,7 +378,7 @@ def _queue_clean_command(
 @click.option(
     "--processing",
     "processing_directory",
-    help="Directory for the temporary working tree used to publish the statistics JSON "
+    help="Directory for the temporary working tree used to write the statistics JSON "
     "(defaults to the system temporary location).",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -387,7 +387,7 @@ def _queue_clean_command(
 @click.option(
     "--test",
     "test",
-    help="Preserve the temporary working tree used to publish the statistics JSON instead of cleaning it up.",
+    help="Preserve the temporary working tree used to write the statistics JSON instead of cleaning it up.",
     required=False,
     is_flag=True,
     default=False,
@@ -406,7 +406,7 @@ def _queue_stats_command(
     test: bool = False,
     silent: bool = False,
 ) -> None:
-    """Publish aggregate queue statistics from the live queue state."""
+    """Write aggregate queue statistics from the live queue state."""
     _configure_logging(silent=silent)
 
     state = QueueState.from_dandi(dandiset_id=dandiset_id)
@@ -417,7 +417,7 @@ def _queue_stats_command(
         test=test,
     )
     if not silent:
-        _styled_echo(text=f"\nPublished derivatives/queue_stats.json to Dandiset {dandiset_id}.", color="green")
+        _styled_echo(text=f"\nWrote derivatives/queue_stats.json to Dandiset {dandiset_id}.", color="green")
 
 
 # dandicompute queue pending [OPTIONS]
@@ -580,7 +580,7 @@ def _issues_group() -> None:
 @click.option(
     "--dandiset-id",
     "dandiset_id",
-    help="Dandiset ID the issue dump JSON is published into.",
+    help="Dandiset ID the issue dump JSON is written into.",
     required=False,
     type=str,
     default=_JOB_CAPSULES_DANDISET_ID,
@@ -589,7 +589,7 @@ def _issues_group() -> None:
 @click.option(
     "--processing",
     "processing_directory",
-    help="Directory for the temporary working tree used to publish the issue dump JSON "
+    help="Directory for the temporary working tree used to write the issue dump JSON "
     "(defaults to the system temporary location).",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -598,7 +598,7 @@ def _issues_group() -> None:
 @click.option(
     "--test",
     "test",
-    help="Preserve the temporary working tree used to publish the issue dump JSON instead of cleaning it up.",
+    help="Preserve the temporary working tree used to write the issue dump JSON instead of cleaning it up.",
     required=False,
     is_flag=True,
     default=False,
@@ -617,7 +617,7 @@ def _issues_dump_command(
     test: bool = False,
     silent: bool = False,
 ) -> None:
-    """Scan nextflow and slurm logs and publish per-capsule issue records."""
+    """Scan nextflow and slurm logs and write per-capsule issue records."""
     _configure_logging(silent=silent)
 
     QueueState.dump_issues(
@@ -627,7 +627,7 @@ def _issues_dump_command(
         test=test,
     )
     if not silent:
-        _styled_echo(text=f"\nPublished derivatives/issues_dump.json to Dandiset {dandiset_id}.", color="green")
+        _styled_echo(text=f"\nWrote derivatives/issues_dump.json to Dandiset {dandiset_id}.", color="green")
 
 
 # dandicompute issues summarize [OPTIONS]
@@ -642,7 +642,7 @@ def _issues_dump_command(
 @click.option(
     "--dandiset-id",
     "dandiset_id",
-    help="Dandiset ID the issue summary JSON (and its issue dump) is published into.",
+    help="Dandiset ID the issue summary JSON (and its issue dump) is written into.",
     required=False,
     type=str,
     default=_JOB_CAPSULES_DANDISET_ID,
@@ -651,7 +651,7 @@ def _issues_dump_command(
 @click.option(
     "--processing",
     "processing_directory",
-    help="Directory for the temporary working tree used to publish the issue summary JSON "
+    help="Directory for the temporary working tree used to write the issue summary JSON "
     "(defaults to the system temporary location).",
     required=False,
     type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
@@ -660,7 +660,7 @@ def _issues_dump_command(
 @click.option(
     "--test",
     "test",
-    help="Preserve the temporary working tree used to publish the issue summary JSON instead of cleaning it up.",
+    help="Preserve the temporary working tree used to write the issue summary JSON instead of cleaning it up.",
     required=False,
     is_flag=True,
     default=False,
@@ -689,7 +689,7 @@ def _issues_summarize_command(
         test=test,
     )
     if not silent:
-        _styled_echo(text=f"\nPublished derivatives/issues_summary.json to Dandiset {dandiset_id}.", color="green")
+        _styled_echo(text=f"\nWrote derivatives/issues_summary.json to Dandiset {dandiset_id}.", color="green")
 
 
 # dandicompute delete

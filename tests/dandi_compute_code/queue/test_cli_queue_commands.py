@@ -152,7 +152,7 @@ def test_cli_queue_stats_calls_helper_and_reports_output(tmp_path: pathlib.Path)
         processing_directory=None,
         test=False,
     )
-    assert "Published derivatives/queue_stats.json" in result.output
+    assert "Wrote derivatives/queue_stats.json" in result.output
 
 
 @pytest.mark.ai_generated
@@ -196,7 +196,7 @@ def test_cli_issues_dump_calls_helper(tmp_path: pathlib.Path) -> None:
         processing_directory=None,
         test=False,
     )
-    assert "Published derivatives/issues_dump.json" in result.output
+    assert "Wrote derivatives/issues_dump.json" in result.output
 
 
 @pytest.mark.ai_generated
@@ -219,7 +219,7 @@ def test_cli_issues_summarize_calls_helper(tmp_path: pathlib.Path) -> None:
         processing_directory=None,
         test=False,
     )
-    assert "Published derivatives/issues_summary.json" in result.output
+    assert "Wrote derivatives/issues_summary.json" in result.output
 
 
 @pytest.mark.ai_generated
