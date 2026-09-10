@@ -47,7 +47,11 @@ from ._queue_utils import (
 )
 from ..aind_ephys_pipeline import UnmappedContentIDError, prepare_aind_ephys_job
 from ..dandiset import move_job_capsule, write_dandiset_file
-from ..dandiset._globals import _FAILED_RUNS_ARCHIVE_DANDISET_ID, _JOB_CAPSULES_DANDISET_ID
+from ..dandiset._globals import (
+    _FAILED_RUNS_ARCHIVE_DANDISET_ID,
+    _JOB_CAPSULES_DANDISET_ID,
+    _dandiset_derivatives_relative_dir,
+)
 from ..dandiset._load_assets_jsonld_metadata import (
     AssetMetadata,
     AssetsJsonldMetadata,
@@ -166,7 +170,7 @@ class JobEntry:
         pipeline_dir = (
             base_dir
             / "derivatives"
-            / f"dandiset-{self.job.dandiset_id}"
+            / pathlib.PurePosixPath(_dandiset_derivatives_relative_dir(self.job.dandiset_id))
             / pathlib.PurePosixPath(normalized_dandi_path)
             / f"pipeline-{self.job.pipeline}"
         )
@@ -189,7 +193,9 @@ class JobEntry:
         if nested_attempt_dir.is_dir():
             return nested_attempt_dir
 
-        dandiset_root = base_dir / "derivatives" / f"dandiset-{self.job.dandiset_id}"
+        dandiset_root = (
+            base_dir / "derivatives" / pathlib.PurePosixPath(_dandiset_derivatives_relative_dir(self.job.dandiset_id))
+        )
         if not dandiset_root.is_dir():
             return nested_attempt_dir
 
@@ -228,7 +234,8 @@ class JobEntry:
         normalized_dandi_path = self.job.dandi_path.removesuffix(".nwb")
 
         pipeline_dir = (
-            f"derivatives/dandiset-{self.job.dandiset_id}/{normalized_dandi_path}/pipeline-{self.job.pipeline}"
+            f"derivatives/{_dandiset_derivatives_relative_dir(self.job.dandiset_id)}"
+            f"/{normalized_dandi_path}/pipeline-{self.job.pipeline}"
         )
         flat_capsule_path = (
             f"{pipeline_dir}/version-{self.job.version}_codebase-{self.job.codebase}"
@@ -265,7 +272,7 @@ class JobEntry:
         if _has_assets_under(nested_capsule_path):
             return nested_capsule_path
 
-        dandiset_prefix = f"derivatives/dandiset-{self.job.dandiset_id}/"
+        dandiset_prefix = f"derivatives/{_dandiset_derivatives_relative_dir(self.job.dandiset_id)}/"
         if not any(path.startswith(dandiset_prefix) for path in asset_paths):
             return nested_capsule_path
 

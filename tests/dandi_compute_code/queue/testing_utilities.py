@@ -9,6 +9,7 @@ fixtures (temporary directories, environment and network setup) live in
 
 import pathlib
 
+from dandi_compute_code.dandiset._globals import _dandiset_derivatives_relative_dir
 from dandi_compute_code.queue import JobEntry
 
 
@@ -60,7 +61,7 @@ def write_attempt_logs(
     logs_dir = (
         dandiset_directory
         / "derivatives"
-        / f"dandiset-{dandiset_id}"
+        / pathlib.PurePosixPath(_dandiset_derivatives_relative_dir(dandiset_id))
         / f"sub-{subject}"
         / "pipeline-test"
         / f"version-v1.0_params-default_config-abc123_attempt-{attempt}"

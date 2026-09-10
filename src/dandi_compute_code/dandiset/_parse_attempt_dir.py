@@ -10,7 +10,8 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
     """
     Parse a single attempt directory into a flat record dict.
 
-    The expected path structure (relative to ``derivatives/dandiset-{dandiset_id}/``) is::
+    The expected path structure (relative to
+    ``derivatives/dandisets-{first 3 digits}/dandiset-{dandiset_id}/``) is::
 
         <dandi-path>/pipeline-{pipeline}/
             version-{version}_params-{params}_config-{config}_attempt-{attempt}/
