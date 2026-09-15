@@ -33,7 +33,7 @@ dandicompute queue clean --dandiset ./dandi/001697/
 To archive a failed job capsule by moving it from `001697` to the permanent archive `001873`:
 
 ```bash
-dandicompute archive --job derivatives/dandiset-000409/sub-mouse01/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1
+dandicompute archive --job derivatives/dandisets-000/dandiset-000409/sub-mouse01/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1
 ```
 
 

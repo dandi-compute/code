@@ -38,7 +38,7 @@ def move_job_capsule(
     ----------
     capsule_path : str
         Path of the job capsule folder relative to the Dandiset root (for
-        example ``derivatives/dandiset-000409/sub-mouse01/pipeline-aind+ephys/
+        example ``derivatives/dandisets-000/dandiset-000409/sub-mouse01/pipeline-aind+ephys/
         version-v1.0_params-default_config-abc123_attempt-1``).
     source_dandiset_id : str, optional
         Dandiset the capsule is moved from. Defaults to the job capsules

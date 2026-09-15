@@ -85,6 +85,7 @@ def test_aggregate_queue_statistics_found_timeline_via_fallback_attempt_resoluti
     attempt_dir = (
         dandiset_dir
         / "derivatives"
+        / "dandisets-001"
         / "dandiset-001849"
         / "sub-mouse01"
         / "pipeline-aind+ephys"

@@ -15,7 +15,8 @@ from dandi_compute_code.dandiset import move_job_capsule
 _SOURCE_DANDISET_ID = "001697"
 _TARGET_DANDISET_ID = "001873"
 _EXAMPLE_CAPSULE_PATH = (
-    "derivatives/dandiset-000409/sub-mouse01/pipeline-aind+ephys/version-v1.0_params-default_config-abc123_attempt-1"
+    "derivatives/dandisets-000/dandiset-000409/sub-mouse01/pipeline-aind+ephys/"
+    "version-v1.0_params-default_config-abc123_attempt-1"
 )
 
 

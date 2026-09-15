@@ -227,6 +227,7 @@ def test_clean_unsubmitted_capsules_removed_entry_via_fallback_attempt_resolutio
     attempt_dir = (
         dandiset_dir
         / "derivatives"
+        / "dandisets-001"
         / "dandiset-001849"
         / "sub-mouse01"
         / "pipeline-aind+ephys"

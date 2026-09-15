@@ -10,7 +10,7 @@ def delete_dandiset_version(dandiset_directory: pathlib.Path, version: str) -> l
     """
     Delete all ``version-{version}`` directories from the DANDI archive and the local filesystem.
 
-    Scans ``{dandiset_directory}/derivatives/dandiset-*/`` for directories named
+    Scans ``{dandiset_directory}/derivatives/dandisets-{first 3 digits}/dandiset-*/`` for directories named
     ``version-{version}`` at any depth, runs ``dandi delete`` on each one (answering
     the interactive confirmation prompt automatically), and then removes the local
     directory tree.

@@ -18,7 +18,7 @@ import dandi.upload
 import pydantic
 
 from ._handle_template import generate_aind_ephys_submission_script
-from ..dandiset._globals import _SANDBOX_DANDISET_ID
+from ..dandiset._globals import _SANDBOX_DANDISET_ID, _dandiset_derivatives_relative_dir
 
 _log = logging.getLogger(__name__)
 
@@ -276,7 +276,7 @@ def prepare_aind_ephys_job(
 
     codebase_version = importlib.metadata.version("dandi-compute-code")
     bidsy_pipeline_version = pipeline_version.replace("-", "+")
-    output_dandiset_path_base = f"derivatives/dandiset-{dandiset_id}/{output_dandi_path}/"
+    output_dandiset_path_base = f"derivatives/{_dandiset_derivatives_relative_dir(dandiset_id)}/{output_dandi_path}/"
     output_dandiset_path_base += (
         f"pipeline-aind+ephys/"
         f"version-{bidsy_pipeline_version}_codebase-v{codebase_version}"
