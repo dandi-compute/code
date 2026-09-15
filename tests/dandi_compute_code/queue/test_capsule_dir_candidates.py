@@ -20,12 +20,12 @@ from dandi_compute_code.queue import JobEntry
         ),
     ],
 )
-def test_attempt_dir_candidates_constructs_both_layouts(
+def test_capsule_dir_candidates_constructs_both_layouts(
     dandi_path: str,
     relative_prefix: pathlib.Path,
     tmp_path: pathlib.Path,
 ) -> None:
-    """JobEntry.attempt_dir_candidates returns both flat and legacy attempt directory paths."""
+    """JobEntry.capsule_dir_candidates returns both flat and legacy job capsule directory paths."""
     entry = {
         "dandiset_id": "000001",
         "dandi_path": dandi_path,
@@ -33,16 +33,13 @@ def test_attempt_dir_candidates_constructs_both_layouts(
         "version": "v1.0",
         "params": "abc1234",
         "config": "def5678",
-        "attempt": 2,
         "codebase": "v0.3.0",
     }
 
-    flat_path, legacy_path = JobEntry.from_dict(entry).attempt_dir_candidates(tmp_path)
+    flat_path, legacy_path = JobEntry.from_dict(entry).capsule_dir_candidates(tmp_path)
 
-    assert (
-        flat_path == tmp_path / relative_prefix / "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-2"
-    )
-    assert legacy_path == tmp_path / relative_prefix / "version-v1.0/params-abc1234_config-def5678_attempt-2"
+    assert flat_path == tmp_path / relative_prefix / "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678"
+    assert legacy_path == tmp_path / relative_prefix / "version-v1.0/params-abc1234_config-def5678"
 
 
 @pytest.mark.ai_generated
@@ -58,7 +55,6 @@ def test_attempt_dir_candidates_constructs_both_layouts(
                 "version": "v1.0",
                 "params": "abc1234",
                 "config": "def5678",
-                "attempt": 2,
                 "codebase": "v0.3.0",
             },
             # A JobEntry always carries dandi_path, so a missing key fails at construction.
@@ -73,7 +69,6 @@ def test_attempt_dir_candidates_constructs_both_layouts(
                 "version": "v1.0",
                 "params": "abc1234",
                 "config": "def5678",
-                "attempt": 2,
                 "codebase": "v0.3.0",
             },
             ValueError,
@@ -81,20 +76,20 @@ def test_attempt_dir_candidates_constructs_both_layouts(
         ),
     ],
 )
-def test_attempt_dir_candidates_requires_valid_dandi_path(
+def test_capsule_dir_candidates_requires_valid_dandi_path(
     entry: dict,
     expected_exception: type[Exception],
     expected_message: str,
     tmp_path: pathlib.Path,
 ) -> None:
-    """JobEntry.attempt_dir_candidates requires a valid dandi_path value."""
+    """JobEntry.capsule_dir_candidates requires a valid dandi_path value."""
     with pytest.raises(expected_exception, match=expected_message):
-        JobEntry.from_dict(entry).attempt_dir_candidates(tmp_path)
+        JobEntry.from_dict(entry).capsule_dir_candidates(tmp_path)
 
 
 @pytest.mark.ai_generated
-def test_attempt_dir_candidates_includes_codebase_in_flat_path(tmp_path: pathlib.Path) -> None:
-    """JobEntry.attempt_dir_candidates includes the _codebase- segment in the flat path."""
+def test_capsule_dir_candidates_includes_codebase_in_flat_path(tmp_path: pathlib.Path) -> None:
+    """JobEntry.capsule_dir_candidates includes the _codebase- segment in the flat path."""
     entry = {
         "dandiset_id": "000001",
         "dandi_path": "sub-mouse01",
@@ -102,11 +97,45 @@ def test_attempt_dir_candidates_includes_codebase_in_flat_path(tmp_path: pathlib
         "version": "v1.1.1",
         "params": "4af6a25",
         "config": "0d4bf36",
-        "attempt": 1,
         "codebase": "v0.3.17",
     }
-    flat_path, legacy_path = JobEntry.from_dict(entry).attempt_dir_candidates(tmp_path)
+    flat_path, legacy_path = JobEntry.from_dict(entry).capsule_dir_candidates(tmp_path)
 
     expected_prefix = tmp_path / "derivatives" / "dandisets-000" / "dandiset-000001" / "sub-mouse01" / "pipeline-test"
-    assert flat_path == expected_prefix / "version-v1.1.1_codebase-v0.3.17_params-4af6a25_config-0d4bf36_attempt-1"
-    assert legacy_path == expected_prefix / "version-v1.1.1" / "params-4af6a25_config-0d4bf36_attempt-1"
+    assert flat_path == expected_prefix / "version-v1.1.1_codebase-v0.3.17_params-4af6a25_config-0d4bf36"
+    assert legacy_path == expected_prefix / "version-v1.1.1" / "params-4af6a25_config-0d4bf36"
+
+
+def _example_entry() -> JobEntry:
+    return JobEntry.from_dict(
+        {
+            "dandiset_id": "000001",
+            "dandi_path": "sub-mouse01",
+            "pipeline": "test",
+            "version": "v1.0",
+            "params": "abc1234",
+            "config": "def5678",
+            "codebase": "v0.3.0",
+        }
+    )
+
+
+@pytest.mark.ai_generated
+def test_resolve_capsule_dir_accepts_legacy_attempt_suffix(tmp_path: pathlib.Path) -> None:
+    """resolve_capsule_dir finds a capsule directory written before attempts were retired."""
+    entry = _example_entry()
+    flat_path, _ = entry.capsule_dir_candidates(tmp_path)
+    legacy_path = flat_path.parent / f"{flat_path.name}_attempt-1"
+    legacy_path.mkdir(parents=True)
+
+    assert entry.resolve_capsule_dir(tmp_path) == legacy_path
+
+
+@pytest.mark.ai_generated
+def test_resolve_capsule_path_accepts_legacy_attempt_suffix() -> None:
+    """resolve_capsule_path finds a capsule path written before attempts were retired."""
+    entry = _example_entry()
+    flat_path, _ = entry.capsule_path_candidates()
+    legacy_path = f"{flat_path}_attempt-2"
+
+    assert entry.resolve_capsule_path([f"{legacy_path}/code/submit.sh"]) == legacy_path

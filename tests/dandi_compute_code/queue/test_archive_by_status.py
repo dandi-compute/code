@@ -8,20 +8,20 @@ from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.dandiset._globals import _FAILED_RUNS_ARCHIVE_DANDISET_ID, _JOB_CAPSULES_DANDISET_ID
 from dandi_compute_code.queue import QueueState
 
-#: For each archivable status, two distinct example entries (by dandi_path/attempt)
+#: For each archivable status, two distinct example entries (by dandi_path)
 #: that qualify for that status in the committed example queue.
 _STATUS_EXAMPLE_SELECTORS = {
     "failed": [
-        {"dandi_path": "sub-failed/ses-repeated", "attempt": 1},
-        {"dandi_path": "sub-failed/ses-repeated", "attempt": 2},
+        {"dandi_path": "sub-failed/ses-one"},
+        {"dandi_path": "sub-failed/ses-two"},
     ],
     "pending": [
         {"dandi_path": "sub-pending"},
         {"dandi_path": "sub-fresh"},
     ],
     "stalled": [
-        {"dandi_path": "sub-stalled/ses-repeated", "attempt": 1},
-        {"dandi_path": "sub-stalled/ses-repeated", "attempt": 2},
+        {"dandi_path": "sub-stalled/ses-one"},
+        {"dandi_path": "sub-stalled/ses-two"},
     ],
 }
 

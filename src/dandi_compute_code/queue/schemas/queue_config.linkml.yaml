@@ -3,7 +3,7 @@ name: dandi_compute_queue_config
 title: DANDI Compute Queue Config
 description: >-
   A LinkML schema describing a configuration structure for DANDI Compute pipelines,
-  including version priorities, parameter priorities, attempt limits,
+  including version priorities, parameter priorities, failure limits,
   and asset overrides.
 prefixes:
   linkml: https://w3id.org/linkml/
@@ -45,13 +45,6 @@ classes:
           (highest priority first).
         range: string
         multivalued: true
-        required: false
-      max_attempts_per_asset:
-        description: >-
-          The maximum number of times the pipeline should be retried
-          on a single asset.
-        range: integer
-        minimum_value: 0
         required: false
       asset_overrides:
         description: >-

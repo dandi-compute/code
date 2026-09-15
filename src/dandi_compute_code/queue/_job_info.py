@@ -1,5 +1,5 @@
 """
-``JobInfo`` — the immutable identity of one attempt capsule.
+``JobInfo`` — the immutable identity of one job capsule.
 
 Kept in its own module so both :mod:`._queue_state` and its private helpers
 (:mod:`._queue_utils`) can depend on it without coupling to each other.
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class JobInfo:
-    """Immutable identity of one attempt capsule."""
+    """Immutable identity of one job capsule."""
 
     dandiset_id: str
     dandi_path: str
@@ -20,7 +20,6 @@ class JobInfo:
     version: str
     params: str
     config: str
-    attempt: int
     codebase: str
 
     def to_dict(self) -> dict[str, object]:
@@ -32,6 +31,5 @@ class JobInfo:
             "version": self.version,
             "params": self.params,
             "config": self.config,
-            "attempt": self.attempt,
             "codebase": self.codebase,
         }

@@ -1,39 +1,40 @@
 import datetime
 import pathlib
 
-from ._globals import _ATTEMPT_DIR_RE
+from ._globals import _JOB_CAPSULE_DIR_RE
 from ._parse_content_id_from_submission_script import _parse_content_id_from_submission_script
 
 
-# TODO: rename to _parse_job_capsule_id
-def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
+def _parse_job_capsule_dir(capsule_dir: pathlib.Path, /) -> dict | None:
     """
-    Parse a single attempt directory into a flat record dict.
+    Parse a single job capsule directory into a flat record dict.
 
     The expected path structure (relative to
     ``derivatives/dandisets-{first 3 digits}/dandiset-{dandiset_id}/``) is::
 
         <dandi-path>/pipeline-{pipeline}/
-            version-{version}_params-{params}_config-{config}_attempt-{attempt}/
+            version-{version}_codebase-{codebase}_params-{params}_config-{config}/
 
     Legacy layout with an additional version directory is also accepted::
 
         <dandi-path>/pipeline-{pipeline}/version-{version}/
-            params-{params}_config-{config}_attempt-{attempt}/
+            params-{params}_config-{config}/
 
-    :param attempt_dir: The attempt directory (name must match ``params-*_config-*_attempt-*``).
-    :type attempt_dir: pathlib.Path
+    Both layouts also accept a trailing ``_attempt-{n}``, which capsules written before
+    attempts were retired still carry.
+
+    :param capsule_dir: The job capsule directory (name must match ``params-*_config-*``).
+    :type capsule_dir: pathlib.Path
     :returns: A flat dict with all entities and state flags, or ``None`` if the path
         does not match the expected structure.
     :rtype: dict or None
     """
-    attempt_name = attempt_dir.name
-    attempt_match = _ATTEMPT_DIR_RE.fullmatch(attempt_name)
-    if not attempt_match:
+    capsule_match = _JOB_CAPSULE_DIR_RE.fullmatch(capsule_dir.name)
+    if not capsule_match:
         return None
 
-    version_from_name = attempt_match.group("version_in_name")
-    version_or_pipeline_dir = attempt_dir.parent
+    version_from_name = capsule_match.group("version_in_name")
+    version_or_pipeline_dir = capsule_dir.parent
 
     if version_or_pipeline_dir.name.startswith("version-"):
         version = version_or_pipeline_dir.name[len("version-") :]
@@ -62,12 +63,12 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
         return None
     dandi_path = pathlib.PurePosixPath(*dandi_path_parts).as_posix()
 
-    has_code = (attempt_dir / "code").is_dir()
-    has_output = (attempt_dir / "derivatives").is_dir()
-    logs_dir = attempt_dir / "logs"
+    has_code = (capsule_dir / "code").is_dir()
+    has_output = (capsule_dir / "derivatives").is_dir()
+    logs_dir = capsule_dir / "logs"
     has_logs = logs_dir.is_dir() and any(f for f in logs_dir.iterdir() if f.name != "dataset_description.json")
-    created_at = datetime.datetime.fromtimestamp(attempt_dir.stat().st_ctime, tz=datetime.timezone.utc).isoformat()
-    content_id = _parse_content_id_from_submission_script(attempt_dir)
+    created_at = datetime.datetime.fromtimestamp(capsule_dir.stat().st_ctime, tz=datetime.timezone.utc).isoformat()
+    content_id = _parse_content_id_from_submission_script(capsule_dir)
 
     record = {
         "dandiset_id": dandiset_id,
@@ -75,9 +76,8 @@ def _parse_attempt_dir(attempt_dir: pathlib.Path) -> dict | None:
         "dandi_path": dandi_path,
         "pipeline": pipeline,
         "version": version,
-        "params": attempt_match.group("params"),
-        "config": attempt_match.group("config"),
-        "attempt": int(attempt_match.group("attempt")),
+        "params": capsule_match.group("params"),
+        "config": capsule_match.group("config"),
         "has_code": has_code,
         "has_output": has_output,
         "has_logs": has_logs,

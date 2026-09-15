@@ -15,7 +15,8 @@ from dandi_compute_code.queue import QueueState
 def test_from_dandi_reads_from_archive_dandiset_when_requested() -> None:
     """from_dandi(dandiset_id=archive) reads from the failed runs archive Dandiset metadata."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    attempt_path = (
+    # Still carries the legacy attempt suffix, which the archive is full of.
+    capsule_path = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
         "version-v1.0_codebase-v0.3.0_params-default_config-def5678_attempt-1/code/submit.sh"
     )
@@ -23,11 +24,11 @@ def test_from_dandi_reads_from_archive_dandiset_when_requested() -> None:
         return_value=AssetsJsonldMetadata(
             content_id_to_asset={},
             path_to_asset_metadata={
-                attempt_path: AssetMetadata(
-                    path=attempt_path,
+                capsule_path: AssetMetadata(
+                    path=capsule_path,
                     date_modified="2024-01-01T00:00:00+00:00",
                     content_size=1,
-                    content_id="attempt-id",
+                    content_id="capsule-id",
                 )
             },
         )
@@ -65,8 +66,8 @@ def test_from_dandi_reads_from_archive_dandiset_when_requested() -> None:
 
 
 @pytest.mark.ai_generated
-def test_from_dandi_returns_empty_when_no_attempts_in_archive() -> None:
-    """from_dandi(dandiset_id=archive) returns an empty state when no attempts are present."""
+def test_from_dandi_returns_empty_when_no_capsules_in_archive() -> None:
+    """from_dandi(dandiset_id=archive) returns an empty state when no job capsules are present."""
     with mock.patch(
         "dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata",
         return_value=AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata={}),

@@ -11,7 +11,6 @@ _ISSUE_EXAMPLE_QUEUE_CONFIG = {
         "aind+ephys": {
             "version_priority": ["v1.1.1"],
             "params_priority": ["default"],
-            "max_attempts_per_asset": 1,
             "asset_overrides": {"048d1ee9-83b7-491f-8f02-1ca615b1d455": None},
             "max_fail_per_dandiset": 10,
         }
