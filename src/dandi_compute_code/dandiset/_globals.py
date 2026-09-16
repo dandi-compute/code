@@ -1,19 +1,3 @@
-import re
-
-from ._job_id import _JOB_ID_RE
-
-#: Job capsule directory names predating the job ID, kept readable for the archived capsules
-#: that still carry them.
-_LEGACY_JOB_CAPSULE_DIR_RE = re.compile(
-    r"(?:version-(?P<version_in_name>.+?)_codebase-(?P<codebase>[^_]+)_)?"
-    # The config segment is absent on pipelines that have no config, such as ``lfp``.
-    r"params-(?P<params>[^_]+)(?:_config-(?P<config>[^_]+))?"
-    # Capsules formed before the attempt notion was retired carry a trailing attempt number.
-    r"(?:_attempt-(?P<attempt>\d+))?"
-)
-
-#: Any job capsule directory name, current (``job-{YYMMDD}+{hash}``) or legacy.
-_JOB_CAPSULE_DIR_RE = re.compile(rf"(?:{_JOB_ID_RE.pattern})|(?:{_LEGACY_JOB_CAPSULE_DIR_RE.pattern})")
 _SANDBOX_DANDISET_ID = "214527"
 _JOB_CAPSULES_DANDISET_ID = "001697"
 _FAILED_RUNS_ARCHIVE_DANDISET_ID = "001873"

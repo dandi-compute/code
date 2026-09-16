@@ -1,5 +1,5 @@
 """
-One-off migration of job capsule directories to the ``job-{YYMMDD}+{hash}`` naming.
+One-off migration of job capsule directories to the ``job-{YYMMDD}{hash}`` naming.
 
 Renames every legacy capsule directory in the job capsules Dandiset (``001697``) and the
 failed runs archive Dandiset (``001873``) to its job ID, and writes the ``DandiCompute``
@@ -56,7 +56,7 @@ _ASSETS_JSONLD_URL_TEMPLATE = "https://dandiarchive.s3.amazonaws.com/dandisets/{
 _PROVENANCE_KEY = "DandiCompute"
 
 #: A capsule directory that already carries a job ID.
-_JOB_ID_RE = re.compile(r"job-(?P<job_date>\d{6})\+(?P<job_hash>[0-9a-f]{6})")
+_JOB_ID_RE = re.compile(r"job-(?P<job_date>\d{6})(?P<job_hash>[0-9a-f]{6})")
 
 #: A legacy capsule directory name. The config segment is absent on pipelines that have no
 #: config, such as ``lfp``, and the attempt number is present on capsules formed before that
@@ -91,8 +91,8 @@ def compute_job_hash(
 
 
 def format_job_id(*, job_hash: str, date: datetime.date) -> str:
-    """Build the ``job-{YYMMDD}+{hash}`` directory name."""
-    job_id = f"job-{date:%y%m%d}+{job_hash}"
+    """Build the ``job-{YYMMDD}{hash}`` directory name."""
+    job_id = f"job-{date:%y%m%d}{job_hash}"
     return job_id
 
 

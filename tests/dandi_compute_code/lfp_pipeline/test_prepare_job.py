@@ -28,7 +28,7 @@ def test_build_job_id_is_a_dated_hash() -> None:
     )
 
     today = datetime.datetime.now(tz=datetime.timezone.utc).date()
-    assert re.fullmatch(rf"job-{today:%y%m%d}\+[0-9a-f]{{6}}", job_id) is not None
+    assert re.fullmatch(rf"job-{today:%y%m%d}[0-9a-f]{{6}}", job_id) is not None
 
 
 @pytest.mark.ai_generated
@@ -85,8 +85,8 @@ def test_find_existing_capsule_matches_an_earlier_date() -> None:
         params_id="2f6768c",
         content_id="content-aaa",
     )
-    job_hash = job_id.split("+")[-1]
-    existing_capsule_name = f"job-200101+{job_hash}"
+    job_hash = job_id.removeprefix("job-")[6:]
+    existing_capsule_name = f"job-200101{job_hash}"
 
     found = find_existing_lfp_capsule_path(
         asset_paths=[f"{pipeline_path}/{existing_capsule_name}/code/submit.sh"],
@@ -110,7 +110,7 @@ def test_find_existing_capsule_ignores_another_job() -> None:
     )
 
     found = find_existing_lfp_capsule_path(
-        asset_paths=[f"{pipeline_path}/job-200101+ffffff/code/submit.sh"],
+        asset_paths=[f"{pipeline_path}/job-200101ffffff/code/submit.sh"],
         pipeline_path=pipeline_path,
         job_id=job_id,
     )

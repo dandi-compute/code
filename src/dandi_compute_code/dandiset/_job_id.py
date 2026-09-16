@@ -1,10 +1,13 @@
 """
 The job ID that names a job capsule directory.
 
-A job capsule directory is named ``job-{YYMMDD}+{hash}``, where ``hash`` is the first six
+A job capsule directory is named ``job-{YYMMDD}{hash}``, where ``hash`` is the first six
 characters of the MD5 checksum of the fields that identify the job. The date makes the name
 readable at a glance and separates re-attempts of the same job across days, while the hash
 keeps capsules for different parameters, configs or assets apart within a single day.
+
+Both halves are fixed width, six characters each, so the two are unambiguous without a
+separator between them.
 
 Everything the name used to spell out (pipeline version, codebase version, parameters and
 config) is recorded in the capsule's ``dataset_description.json`` provenance and in the
@@ -15,8 +18,8 @@ import datetime
 import hashlib
 import re
 
-#: Job capsule directory name, e.g. ``job-260916+a1b2c3``.
-_JOB_ID_RE = re.compile(r"job-(?P<job_date>\d{6})\+(?P<job_hash>[0-9a-f]{6})")
+#: Job capsule directory name, e.g. ``job-260916a1b2c3``.
+_JOB_ID_RE = re.compile(r"job-(?P<job_date>\d{6})(?P<job_hash>[0-9a-f]{6})")
 
 #: Key under which job provenance is written into a capsule's ``dataset_description.json``.
 _PROVENANCE_KEY = "DandiCompute"
@@ -45,9 +48,9 @@ def _compute_job_hash(
 
 
 def _format_job_id(*, job_hash: str, date: datetime.date | None = None) -> str:
-    """Build the ``job-{YYMMDD}+{hash}`` directory name, defaulting to today's date."""
+    """Build the ``job-{YYMMDD}{hash}`` directory name, defaulting to today's date."""
     date = date if date is not None else datetime.datetime.now(tz=datetime.timezone.utc).date()
-    job_id = f"job-{date:%y%m%d}+{job_hash}"
+    job_id = f"job-{date:%y%m%d}{job_hash}"
     return job_id
 
 

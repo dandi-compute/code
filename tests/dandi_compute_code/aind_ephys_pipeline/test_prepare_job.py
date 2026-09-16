@@ -242,7 +242,7 @@ def test_prepare_aind_ephys_job_uses_simplified_job_id_format(
 
     capsule_dir_name = pathlib.Path(str(script_path)).parent.parent.name
     today = datetime.datetime.now(tz=datetime.timezone.utc).date()
-    assert re.fullmatch(rf"job-{today:%y%m%d}\+[0-9a-f]{{6}}", capsule_dir_name) is not None
+    assert re.fullmatch(rf"job-{today:%y%m%d}[0-9a-f]{{6}}", capsule_dir_name) is not None
     assert pathlib.Path(str(script_path)).parent.parent.parent.name == "pipeline-aind+ephys"
 
 
@@ -298,20 +298,11 @@ def test_prepare_aind_ephys_job_writes_job_provenance_in_dataset_description(
 
 
 @pytest.mark.ai_generated
-@pytest.mark.parametrize(
-    "existing_capsule_name",
-    [
-        pytest.param("job-200101+{job_hash}", id="job_id_from_an_earlier_date"),
-        pytest.param("version-v1.1.0_codebase-v0.1.0_params-{params}_config-{config}", id="legacy_flat_layout"),
-        pytest.param("version-v1.1.0/params-{params}_config-{config}", id="legacy_nested_layout"),
-    ],
-)
 def test_prepare_aind_ephys_job_skips_when_a_capsule_already_exists(
     tmp_path: pathlib.Path,
     fake_pipeline_dir: pathlib.Path,
-    existing_capsule_name: str,
 ) -> None:
-    """An existing capsule is recognised whatever its directory name and whatever date it carries."""
+    """A capsule prepared on an earlier date is recognised by its job hash, so nothing is formed twice."""
     content_id = "07200000-0000-0000-0000-000000000000"
     mapping = {content_id: {"000001": "sub-mouse01/sub-mouse01_ecephys.nwb"}}
 
@@ -350,13 +341,8 @@ def test_prepare_aind_ephys_job_skips_when_a_capsule_already_exists(
 
     capsule_directory = script_path.parent.parent
     pipeline_path = "derivatives/dandisets-000/dandiset-000001/sub-mouse01/sub-mouse01_ecephys/pipeline-aind+ephys"
-    dataset_description = json.loads((capsule_directory / "dataset_description.json").read_text())
-    provenance = dataset_description["DandiCompute"]
-    existing_capsule = existing_capsule_name.format(
-        job_hash=capsule_directory.name.split("+")[-1],
-        params=provenance["params"],
-        config=provenance["config"],
-    )
+    job_hash = capsule_directory.name.removeprefix("job-")[6:]
+    existing_capsule = f"job-200101{job_hash}"
 
     assert _run([f"{pipeline_path}/{existing_capsule}/code/submit.sh"]) is None
 

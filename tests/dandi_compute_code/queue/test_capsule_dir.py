@@ -4,6 +4,8 @@ import pytest
 
 from dandi_compute_code.queue import JobEntry
 
+_JOB_ID = "job-240101a1b2c3"
+
 
 @pytest.mark.ai_generated
 @pytest.mark.parametrize(
@@ -20,13 +22,14 @@ from dandi_compute_code.queue import JobEntry
         ),
     ],
 )
-def test_capsule_dir_candidates_constructs_both_layouts(
+def test_capsule_dir_is_the_job_id_under_the_pipeline_directory(
     dandi_path: str,
     relative_prefix: pathlib.Path,
     tmp_path: pathlib.Path,
 ) -> None:
-    """JobEntry.capsule_dir_candidates returns both flat and legacy job capsule directory paths."""
+    """JobEntry.capsule_dir names the capsule by its job ID alone."""
     entry = {
+        "job_id": _JOB_ID,
         "dandiset_id": "000001",
         "dandi_path": dandi_path,
         "pipeline": "test",
@@ -36,10 +39,48 @@ def test_capsule_dir_candidates_constructs_both_layouts(
         "codebase": "v0.3.0",
     }
 
-    flat_path, legacy_path = JobEntry.from_dict(entry).capsule_dir_candidates(tmp_path)
+    capsule_dir = JobEntry.from_dict(entry).capsule_dir(tmp_path)
 
-    assert flat_path == tmp_path / relative_prefix / "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678"
-    assert legacy_path == tmp_path / relative_prefix / "version-v1.0/params-abc1234_config-def5678"
+    assert capsule_dir == tmp_path / relative_prefix / _JOB_ID
+
+
+@pytest.mark.ai_generated
+def test_capsule_dir_name_carries_no_identity_entities(tmp_path: pathlib.Path) -> None:
+    """The directory name spells out nothing beyond the job ID."""
+    entry = {
+        "job_id": _JOB_ID,
+        "dandiset_id": "000001",
+        "dandi_path": "sub-mouse01",
+        "pipeline": "test",
+        "version": "v1.1.1",
+        "params": "4af6a25",
+        "config": "0d4bf36",
+        "codebase": "v0.3.17",
+    }
+
+    capsule_dir_name = JobEntry.from_dict(entry).capsule_dir(tmp_path).name
+
+    assert capsule_dir_name == _JOB_ID
+    for entity in ("version-", "_codebase-", "_params-", "_config-", "_attempt-"):
+        assert entity not in capsule_dir_name
+
+
+@pytest.mark.ai_generated
+def test_capsule_path_mirrors_capsule_dir(tmp_path: pathlib.Path) -> None:
+    """capsule_path is the POSIX-string counterpart of capsule_dir."""
+    entry = {
+        "job_id": _JOB_ID,
+        "dandiset_id": "000001",
+        "dandi_path": "sub-mouse01/ses-01",
+        "pipeline": "test",
+        "version": "v1.0",
+        "params": "abc1234",
+        "config": "def5678",
+        "codebase": "v0.3.0",
+    }
+    job_entry = JobEntry.from_dict(entry)
+
+    assert job_entry.capsule_path() == job_entry.capsule_dir(tmp_path).relative_to(tmp_path).as_posix()
 
 
 @pytest.mark.ai_generated
@@ -48,6 +89,7 @@ def test_capsule_dir_candidates_constructs_both_layouts(
     [
         (
             {
+                "job_id": _JOB_ID,
                 "dandiset_id": "000001",
                 "subject": "mouse01",
                 "session": "01",
@@ -63,6 +105,7 @@ def test_capsule_dir_candidates_constructs_both_layouts(
         ),
         (
             {
+                "job_id": _JOB_ID,
                 "dandiset_id": "000001",
                 "dandi_path": "",
                 "pipeline": "test",
@@ -76,31 +119,12 @@ def test_capsule_dir_candidates_constructs_both_layouts(
         ),
     ],
 )
-def test_capsule_dir_candidates_requires_valid_dandi_path(
+def test_capsule_dir_requires_valid_dandi_path(
     entry: dict,
     expected_exception: type[Exception],
     expected_message: str,
     tmp_path: pathlib.Path,
 ) -> None:
-    """JobEntry.capsule_dir_candidates requires a valid dandi_path value."""
+    """JobEntry.capsule_dir requires a valid dandi_path value."""
     with pytest.raises(expected_exception, match=expected_message):
-        JobEntry.from_dict(entry).capsule_dir_candidates(tmp_path)
-
-
-@pytest.mark.ai_generated
-def test_capsule_dir_candidates_includes_codebase_in_flat_path(tmp_path: pathlib.Path) -> None:
-    """JobEntry.capsule_dir_candidates includes the _codebase- segment in the flat path."""
-    entry = {
-        "dandiset_id": "000001",
-        "dandi_path": "sub-mouse01",
-        "pipeline": "test",
-        "version": "v1.1.1",
-        "params": "4af6a25",
-        "config": "0d4bf36",
-        "codebase": "v0.3.17",
-    }
-    flat_path, legacy_path = JobEntry.from_dict(entry).capsule_dir_candidates(tmp_path)
-
-    expected_prefix = tmp_path / "derivatives" / "dandisets-000" / "dandiset-000001" / "sub-mouse01" / "pipeline-test"
-    assert flat_path == expected_prefix / "version-v1.1.1_codebase-v0.3.17_params-4af6a25_config-0d4bf36"
-    assert legacy_path == expected_prefix / "version-v1.1.1" / "params-4af6a25_config-0d4bf36"
+        JobEntry.from_dict(entry).capsule_dir(tmp_path)

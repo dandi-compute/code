@@ -51,7 +51,7 @@ def build_lfp_job_id(
     content_id: str,
 ) -> str:
     """
-    Build the ``job-{YYMMDD}+{hash}`` directory name for one LFP job capsule.
+    Build the ``job-{YYMMDD}{hash}`` directory name for one LFP job capsule.
 
     The LFP pipeline has no config, so an empty config takes part in the hash. The codebase
     version is left out for the same reason it is on the AIND side: a job is the same logical

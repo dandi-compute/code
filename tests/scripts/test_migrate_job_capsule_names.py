@@ -141,7 +141,7 @@ def test_plan_migration_dates_the_job_id_from_the_submission_script() -> None:
     plan = _plan(["version-v1.1.0_codebase-v0.3.0_params-abc1234_config-def5678"])
 
     submit_date = datetime.datetime.fromisoformat(_SUBMIT_DATE).date()
-    assert plan[0][2]["job_id"].startswith(f"job-{submit_date:%y%m%d}+")
+    assert plan[0][2]["job_id"].startswith(f"job-{submit_date:%y%m%d}")
 
 
 @pytest.mark.ai_generated
@@ -162,13 +162,13 @@ def test_plan_migration_hash_matches_what_preparation_would_compute() -> None:
         config="def5678",
         content_id=_SOURCE_CONTENT_ID,
     )
-    assert plan[0][2]["job_id"].split("+")[-1] == expected_hash
+    assert plan[0][2]["job_id"].removeprefix("job-")[6:] == expected_hash
 
 
 @pytest.mark.ai_generated
 def test_plan_migration_ignores_already_migrated_capsules() -> None:
     """Capsules that already carry a job ID are left out of the plan."""
-    plan = _plan(["job-250607+abc123", "version-v1.1.0_codebase-v0.3.0_params-abc1234_config-def5678"])
+    plan = _plan(["job-250607abc123", "version-v1.1.0_codebase-v0.3.0_params-abc1234_config-def5678"])
 
     assert len(plan) == 1
     assert plan[0][0].endswith("version-v1.1.0_codebase-v0.3.0_params-abc1234_config-def5678")

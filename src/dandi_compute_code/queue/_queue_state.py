@@ -156,30 +156,9 @@ class JobEntry:
             self.job.config,
         )
 
-    @property
-    def _capsule_dir_names(self) -> tuple[str, ...]:
+    def capsule_dir(self, base_dir: pathlib.Path, /) -> pathlib.Path:
         """
-        Capsule directory names to try, relative to the pipeline directory and most
-        preferred first.
-
-        The job ID names the capsule outright. The two legacy names that spell the identity
-        out are kept as fallbacks for capsules formed before the job ID existed.
-        """
-        legacy_flat_name = (
-            f"version-{self.job.version}_codebase-{self.job.codebase}"
-            f"_params-{self.job.params}_config-{self.job.config}"
-        )
-        legacy_nested_name = f"version-{self.job.version}/params-{self.job.params}_config-{self.job.config}"
-        names = [self.job.job_id] if self.job.job_id else []
-        names += [legacy_flat_name, legacy_nested_name]
-        return tuple(names)
-
-    def capsule_dir_candidates(self, base_dir: pathlib.Path, /) -> tuple[pathlib.Path, ...]:
-        """
-        Return every candidate directory path for this job capsule, most preferred first.
-
-        The first entry is the ``job-{YYMMDD}+{hash}`` directory when this entry carries a job
-        ID, followed by the legacy flat and nested layouts.
+        Return this job capsule's directory path under *base_dir*.
 
         :param base_dir: Root of the local Dandiset tree to resolve paths under.
         :type base_dir: pathlib.Path
@@ -197,41 +176,39 @@ class JobEntry:
             / pathlib.PurePosixPath(normalized_dandi_path)
             / f"pipeline-{self.job.pipeline}"
         )
-        candidates = tuple(pipeline_dir / pathlib.PurePosixPath(name) for name in self._capsule_dir_names)
-        return candidates
+        return pipeline_dir / self.job.job_id
 
     def resolve_capsule_dir(self, base_dir: pathlib.Path, /) -> pathlib.Path:
-        """Resolve the best on-disk job capsule directory path for this entry."""
-        candidates = self.capsule_dir_candidates(base_dir)
-        fallback_capsule_dir = candidates[-1]
-        for candidate in candidates:
-            if candidate.is_dir():
-                return candidate
+        """
+        Resolve the on-disk job capsule directory path for this entry.
+
+        Falls back to searching every ``pipeline-*`` directory in the Dandiset for this
+        entry's job ID, which covers a recorded ``dandi_path`` that does not match the
+        on-disk layout.
+        """
+        capsule_dir = self.capsule_dir(base_dir)
+        if capsule_dir.is_dir():
+            return capsule_dir
 
         dandiset_root = (
             base_dir / "derivatives" / pathlib.PurePosixPath(_dandiset_derivatives_relative_dir(self.job.dandiset_id))
         )
         if not dandiset_root.is_dir():
-            return fallback_capsule_dir
+            return capsule_dir
 
         for pipeline_dir in sorted(dandiset_root.rglob(f"pipeline-{self.job.pipeline}")):
-            if not pipeline_dir.is_dir():
-                continue
-            for name in self._capsule_dir_names:
-                fallback_candidate = pipeline_dir / pathlib.PurePosixPath(name)
-                if fallback_candidate.is_dir():
-                    return fallback_candidate
+            fallback_capsule_dir = pipeline_dir / self.job.job_id
+            if fallback_capsule_dir.is_dir():
+                return fallback_capsule_dir
 
-        return fallback_capsule_dir
+        return capsule_dir
 
-    def capsule_path_candidates(self) -> tuple[str, ...]:
+    def capsule_path(self) -> str:
         """
-        Return every candidate path for this job capsule relative to the Dandiset root
-        (POSIX strings), most preferred first.
+        Return this job capsule's path relative to the Dandiset root (a POSIX string).
 
-        The remote-metadata counterpart of :meth:`capsule_dir_candidates`, used when
-        resolving a capsule's path against DANDI assets metadata rather than a local
-        Dandiset clone.
+        The remote-metadata counterpart of :meth:`capsule_dir`, used when resolving a
+        capsule's path against DANDI assets metadata rather than a local Dandiset clone.
 
         :raises ValueError: If this entry's ``dandi_path`` is an empty string.
         """
@@ -244,19 +221,18 @@ class JobEntry:
             f"derivatives/{_dandiset_derivatives_relative_dir(self.job.dandiset_id)}"
             f"/{normalized_dandi_path}/pipeline-{self.job.pipeline}"
         )
-        candidates = tuple(f"{pipeline_dir}/{name}" for name in self._capsule_dir_names)
-        return candidates
+        return f"{pipeline_dir}/{self.job.job_id}"
 
     def resolve_capsule_path(self, asset_paths: Collection[str], /) -> str:
         """
-        Resolve the best capsule path (relative to the Dandiset root) for this entry
-        against a known set of remote asset paths, e.g. the keys of
+        Resolve the capsule path (relative to the Dandiset root) for this entry against a
+        known set of remote asset paths, e.g. the keys of
         :attr:`~dandi_compute_code.dandiset.AssetsJsonldMetadata.path_to_asset_metadata`.
 
-        The remote-metadata counterpart of :meth:`resolve_capsule_dir`: the same
-        candidate ordering and fallback, but checked against *asset_paths* membership
-        instead of the local filesystem -- so this works purely from DANDI metadata,
-        without a local Dandiset clone.
+        The remote-metadata counterpart of :meth:`resolve_capsule_dir`: the same fallback
+        search, but checked against *asset_paths* membership instead of the local
+        filesystem -- so this works purely from DANDI metadata, without a local Dandiset
+        clone.
 
         :param asset_paths: Asset paths (POSIX strings) for the Dandiset this
             entry's capsule lives in.
@@ -266,15 +242,13 @@ class JobEntry:
         def _has_assets_under(prefix: str) -> bool:
             return any(path == prefix or path.startswith(f"{prefix}/") for path in asset_paths)
 
-        candidates = self.capsule_path_candidates()
-        fallback_capsule_path = candidates[-1]
-        for candidate in candidates:
-            if _has_assets_under(candidate):
-                return candidate
+        capsule_path = self.capsule_path()
+        if _has_assets_under(capsule_path):
+            return capsule_path
 
         dandiset_prefix = f"derivatives/{_dandiset_derivatives_relative_dir(self.job.dandiset_id)}/"
         if not any(path.startswith(dandiset_prefix) for path in asset_paths):
-            return fallback_capsule_path
+            return capsule_path
 
         pipeline_dir_marker = f"/pipeline-{self.job.pipeline}/"
         pipeline_dirs = sorted(
@@ -285,12 +259,11 @@ class JobEntry:
             }
         )
         for pipeline_dir in pipeline_dirs:
-            for name in self._capsule_dir_names:
-                fallback_candidate = f"{pipeline_dir}/{name}"
-                if _has_assets_under(fallback_candidate):
-                    return fallback_candidate
+            fallback_capsule_path = f"{pipeline_dir}/{self.job.job_id}"
+            if _has_assets_under(fallback_capsule_path):
+                return fallback_capsule_path
 
-        return fallback_capsule_path
+        return capsule_path
 
     def resolve_unsubmitted_capsule_dir(self, base_dir: pathlib.Path, /) -> pathlib.Path | None:
         """
@@ -313,6 +286,7 @@ class JobEntry:
     def from_dict(cls, data: dict, /) -> JobEntry:
         """Construct from a raw entry dict (as produced by :meth:`to_dict`)."""
         job = JobInfo(
+            job_id=data["job_id"],
             dandiset_id=data["dandiset_id"],
             dandi_path=data["dandi_path"],
             pipeline=data["pipeline"],
@@ -320,7 +294,6 @@ class JobEntry:
             params=data["params"],
             config=data["config"],
             codebase=data["codebase"],
-            job_id=data.get("job_id", ""),
         )
         return cls(
             job=job,
@@ -386,6 +359,7 @@ class JobEntry:
         strings ``"True"``/``"False"``) are parsed back to ``bool``.
         """
         job = JobInfo(
+            job_id=row["job_id"],
             dandiset_id=row["dandiset_id"],
             dandi_path=row["dandi_path"],
             pipeline=row["pipeline"],
@@ -393,7 +367,6 @@ class JobEntry:
             params=row["params"],
             config=row["config"],
             codebase=row["codebase"],
-            job_id=row.get("job_id", ""),
         )
 
         def _parse_bool(value: str) -> bool:
@@ -715,9 +688,7 @@ class QueueState:
 
         A job capsule directory name carries only the job ID, so the pipeline version,
         codebase version, parameters and config of each capsule are read back from the
-        provenance block in its ``dataset_description.json``. Legacy capsule directories that
-        spell those fields out in their name are read from the name directly and cost no
-        extra reads.
+        provenance block in its ``dataset_description.json``.
 
         :param metadata: Indexed assets metadata, as produced by
             :meth:`from_jsonld` or :meth:`from_dandi`.
@@ -998,8 +969,7 @@ class QueueState:
         ``"stalled"`` (:attr:`stalled` — submitted to the scheduler but no logs or
         output ever appeared). For each matching entry, resolves its capsule path
         against *dandiset_id*'s remote ``assets.jsonld`` (see
-        :meth:`JobEntry.resolve_capsule_path`, which accounts for both the current
-        flat job capsule directory layout and the legacy nested layout) and moves the
+        :meth:`JobEntry.resolve_capsule_path`) and moves the
         corresponding capsule from *dandiset_id* to *archive_dandiset_id* via
         :func:`~dandi_compute_code.dandiset.move_job_capsule`. Both Dandisets are
         addressed purely by ID -- everything is resolved and moved ephemerally over

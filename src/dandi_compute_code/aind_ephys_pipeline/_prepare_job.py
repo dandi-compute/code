@@ -38,32 +38,17 @@ def _find_existing_capsule_path(
     asset_paths: typing.Iterable[str],
     pipeline_dandiset_path: str,
     job_hash: str,
-    version: str,
-    params_id: str,
-    config_id: str,
 ) -> str | None:
     """
     Find an already formed job capsule for this job among *asset_paths*, if there is one.
 
-    A current capsule matches on its job hash alone, so a capsule prepared on an earlier date
-    is still recognised. The two legacy directory layouts are matched on the fields they spell
-    out, which excludes the codebase version for the same reason the job hash does.
+    Matching is on the job hash alone, so a capsule prepared on an earlier date is still
+    recognised.
     """
-    legacy_flat_prefix = f"version-{version}_codebase-"
-    legacy_flat_suffix = f"_params-{params_id}_config-{config_id}"
-    legacy_nested_path = f"version-{version}/params-{params_id}_config-{config_id}"
-
     for asset_path in asset_paths:
-        relative_path = asset_path.removeprefix(f"{pipeline_dandiset_path}/")
-        segments = relative_path.split("/")
-        capsule_name = segments[0]
-
+        capsule_name = asset_path.removeprefix(f"{pipeline_dandiset_path}/").split("/")[0]
         if _parse_job_hash(capsule_name) == job_hash:
             return f"{pipeline_dandiset_path}/{capsule_name}"
-        if capsule_name.startswith(legacy_flat_prefix) and capsule_name.endswith(legacy_flat_suffix):
-            return f"{pipeline_dandiset_path}/{capsule_name}"
-        if len(segments) > 1 and "/".join(segments[:2]) == legacy_nested_path:
-            return f"{pipeline_dandiset_path}/{legacy_nested_path}"
 
     return None
 
@@ -343,9 +328,6 @@ def prepare_aind_ephys_job(
         asset_paths=(asset.path for asset in dandiset.get_assets_with_path_prefix(path=f"{pipeline_dandiset_path}/")),
         pipeline_dandiset_path=pipeline_dandiset_path,
         job_hash=job_hash,
-        version=bidsy_pipeline_version,
-        params_id=params_id,
-        config_id=config_id,
     )
     if existing_capsule_path is not None:
         _log.info(f"A job capsule already exists at {existing_capsule_path}; skipping preparation.")

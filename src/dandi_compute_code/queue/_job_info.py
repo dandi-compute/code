@@ -14,6 +14,9 @@ from dataclasses import dataclass
 class JobInfo:
     """Immutable identity of one job capsule."""
 
+    #: The ``job-{YYMMDD}{hash}`` directory name of the capsule.
+    job_id: str
+
     dandiset_id: str
     dandi_path: str
     pipeline: str
@@ -21,10 +24,6 @@ class JobInfo:
     params: str
     config: str
     codebase: str
-
-    #: The ``job-{YYMMDD}+{hash}`` directory name of the capsule. Empty for legacy capsules
-    #: whose directory name spells the identity out instead.
-    job_id: str = ""
 
     def to_dict(self) -> dict[str, object]:
         """Serialise the identity fields to a plain dict."""

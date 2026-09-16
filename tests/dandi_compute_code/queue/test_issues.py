@@ -19,7 +19,7 @@ def test_dump_issues_writes_per_capsule_records(tmp_path: pathlib.Path) -> None:
         dandiset_directory=dandiset_dir,
         dandiset_id="000001",
         subject="mouse01",
-        config="abc123",
+        job_id="job-240101aa0001",
         nextflow_lines=["INFO start", "ERROR ~ Process failed"],
         slurm_lines_by_file={"job-123_slurm.log": ["slurm ok", "srun: error: node failure"]},
     )
@@ -27,7 +27,7 @@ def test_dump_issues_writes_per_capsule_records(tmp_path: pathlib.Path) -> None:
         dandiset_directory=dandiset_dir,
         dandiset_id="000001",
         subject="mouse02",
-        config="abc123",
+        job_id="job-240101aa0002",
         nextflow_lines=["INFO only"],
         slurm_lines_by_file={"job-456_slurm.log": ["all good"]},
     )
@@ -36,7 +36,7 @@ def test_dump_issues_writes_per_capsule_records(tmp_path: pathlib.Path) -> None:
         records = QueueState.dump_issues(dandiset_directory=dandiset_dir)
 
     assert len(records) == 1
-    assert records[0]["capsule_path"].endswith("version-v1.0_codebase-v0.3.0_params-default_config-abc123")
+    assert records[0]["capsule_path"].endswith("job-240101aa0001")
     assert records[0]["nextflow_errors"] == ["ERROR ~ Process failed"]
     assert records[0]["slurm_errors"] == {"job-123_slurm.log": ["srun: error: node failure"]}
 
@@ -84,7 +84,7 @@ def test_summarize_issues_writes_descending_frequency(tmp_path: pathlib.Path) ->
         dandiset_directory=dandiset_dir,
         dandiset_id="000001",
         subject="mouse01",
-        config="abc123",
+        job_id="job-240101aa0001",
         nextflow_lines=["error: common failure", "error: unique failure"],
         slurm_lines_by_file={"job-001_slurm.log": ["error: common failure"]},
     )
@@ -92,7 +92,7 @@ def test_summarize_issues_writes_descending_frequency(tmp_path: pathlib.Path) ->
         dandiset_directory=dandiset_dir,
         dandiset_id="000002",
         subject="mouse02",
-        config="abc123",
+        job_id="job-240101aa0002",
         nextflow_lines=["error: common failure"],
         slurm_lines_by_file={"job-002_slurm.log": ["done"]},
     )

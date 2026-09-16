@@ -10,6 +10,7 @@ from dandi_compute_code.queue import JobEntry, JobInfo, QueueState
 
 def _make_entry(**overrides: object) -> JobEntry:
     job_kwargs = {
+        "job_id": "job-250101abc123",
         "dandiset_id": "001849",
         "dandi_path": "sub-mouse01/sub-mouse01_ecephys.nwb",
         "pipeline": "aind+ephys",

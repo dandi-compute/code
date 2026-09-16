@@ -9,7 +9,7 @@ Contains essential code for orchestrating computation submission and queue manag
 Each run of a pipeline over one asset lives in its own job capsule directory:
 
 ```
-derivatives/dandisets-{first 3 digits}/dandiset-{dandiset_id}/{dandi path}/pipeline-{pipeline}/job-{YYMMDD}+{hash}
+derivatives/dandisets-{first 3 digits}/dandiset-{dandiset_id}/{dandi path}/pipeline-{pipeline}/job-{YYMMDD}{hash}
 ```
 
 The job ID is the whole name. `YYMMDD` is the date the capsule was prepared, which keeps the name readable and separates re-attempts of the same job across days. The hash is the first six characters of the MD5 checksum of the fields that identify the job, so capsules for different parameters, configs, versions or assets stay apart.
@@ -21,7 +21,7 @@ Everything the name used to spell out is recorded in two places instead:
 - the `DandiCompute` provenance block in the capsule's `dataset_description.json`
 - the `derivatives/state.tsv` summary table, which reads that provenance back
 
-Capsules prepared before the job ID existed still carry their old `version-..._codebase-..._params-..._config-...` names, with or without a trailing `_attempt-N`. Those are read from the name directly and remain fully supported.
+The job ID is the only capsule layout this package understands. Capsules prepared before it existed carry older names and are invisible to the queue until they are migrated.
 
 ### Migrating legacy capsules
 
@@ -68,7 +68,7 @@ dandicompute queue clean --dandiset ./dandi/001697/
 To archive a failed job capsule by moving it from `001697` to the permanent archive `001873`:
 
 ```bash
-dandicompute archive --job derivatives/dandisets-000/dandiset-000409/sub-mouse01/pipeline-aind+ephys/job-260916+a1b2c3
+dandicompute archive --job derivatives/dandisets-000/dandiset-000409/sub-mouse01/pipeline-aind+ephys/job-260916a1b2c3
 ```
 
 

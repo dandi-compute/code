@@ -15,7 +15,6 @@ import json
 import logging
 import pathlib
 import random
-import re
 import urllib.error
 import urllib.request
 from collections.abc import Collection
@@ -26,7 +25,6 @@ import linkml_runtime.utils.schemaview
 
 from ._globals import _DURATION_PART_RE, _PACKAGED_PIPELINE_CONFIGS_PATH, _QUEUE_CONFIG_SCHEMA_PATH
 from ._job_info import JobInfo
-from ..dandiset._globals import _JOB_CAPSULE_DIR_RE
 from ..dandiset._job_id import _JOB_ID_RE, _PROVENANCE_KEY
 from ..dandiset._load_assets_jsonld_metadata import (
     AssetMetadata,
@@ -39,18 +37,6 @@ _log = logging.getLogger(__name__)
 
 _UPSTREAM_JSONLD_URL_TEMPLATE = "https://dandiarchive.s3.amazonaws.com/dandisets/{dandiset_id}/draft/assets.jsonld"
 
-# Capsules formed before the attempt notion was retired carry a trailing attempt number.
-# It no longer identifies anything, but it must still be tolerated so those capsules stay visible.
-# The config segment is absent on pipelines that have no config, such as ``lfp``.
-_FLAT_CAPSULE_RE = re.compile(
-    r"^version-(?P<version>.+?)"
-    r"_codebase-(?P<codebase>[^_]+)"
-    r"_params-(?P<params>[^_]+)"
-    r"(?:_config-(?P<config>[^_]+))?"
-    r"(?:_attempt-\d+)?$"
-)
-_NESTED_CAPSULE_RE = re.compile(r"^params-(?P<params>[^_]+)(?:_config-(?P<config>[^_]+))?(?:_attempt-\d+)?$")
-
 
 def _find_segment_index(parts: tuple[str, ...], prefix: str, start: int = 0) -> int | None:
     """Return the index of the first part starting with ``prefix`` at or after ``start``."""
@@ -60,36 +46,9 @@ def _find_segment_index(parts: tuple[str, ...], prefix: str, start: int = 0) -> 
     return None
 
 
-def _parse_job_id_capsule(parts: tuple[str, ...], index: int) -> tuple[dict[str, str] | None, int] | None:
-    """Parse a single-segment ``job-{YYMMDD}+{hash}`` directory."""
-    if _JOB_ID_RE.fullmatch(parts[index]) is None:
-        return None
-    return None, index
-
-
-def _parse_flat_capsule(parts: tuple[str, ...], index: int) -> tuple[dict[str, str] | None, int] | None:
-    """Parse a legacy single-segment ``version-..._codebase-..._params-..._config-...`` directory."""
-    match = _FLAT_CAPSULE_RE.fullmatch(parts[index])
-    if match is None:
-        return None
-    return match.groupdict(), index
-
-
-def _parse_nested_capsule(parts: tuple[str, ...], index: int) -> tuple[dict[str, str] | None, int] | None:
-    """Parse a legacy ``version-X / params-..._config-...`` directory pair."""
-    if not parts[index].startswith("version-") or index + 1 >= len(parts):
-        return None
-    match = _NESTED_CAPSULE_RE.fullmatch(parts[index + 1])
-    if match is None:
-        return None
-    fields = match.groupdict()
-    fields["version"] = parts[index][len("version-") :]
-    return fields, index + 1
-
-
 @dataclass(frozen=True)
 class _CapsuleLocation:
-    """Where one job capsule sits in a Dandiset, and what its directory name reveals."""
+    """Where one job capsule sits in a Dandiset."""
 
     dandiset_id: str
     dandi_path: str
@@ -97,18 +56,13 @@ class _CapsuleLocation:
     capsule_path: str
     job_id: str
 
-    #: ``version`` / ``codebase`` / ``params`` / ``config`` read straight from a legacy
-    #: directory name. ``None`` for a ``job-`` capsule, whose identity lives in its
-    #: ``dataset_description.json`` provenance instead.
-    name_fields: dict[str, str] | None
-
 
 def _parse_capsule_location(asset_path: str, /) -> tuple[_CapsuleLocation, str] | None:
     """
     Parse an asset path of the form
-    ``derivatives/dandiset-XXX/.../pipeline-NAME/<capsule-dir>/<subpath>`` into a
+    ``derivatives/dandiset-XXX/.../pipeline-NAME/job-{YYMMDD}{hash}/<subpath>`` into a
     :class:`_CapsuleLocation` and the subpath beneath the job capsule directory. Returns
-    ``None`` if the path does not match any supported layout.
+    ``None`` if the path does not match that layout.
     """
     parts = pathlib.PurePosixPath(asset_path).parts
 
@@ -128,25 +82,19 @@ def _parse_capsule_location(asset_path: str, /) -> tuple[_CapsuleLocation, str] 
     if capsule_dir_index >= len(parts):
         return None
 
-    parsed = (
-        _parse_job_id_capsule(parts, capsule_dir_index)
-        or _parse_flat_capsule(parts, capsule_dir_index)
-        or _parse_nested_capsule(parts, capsule_dir_index)
-    )
-    if parsed is None:
+    job_id = parts[capsule_dir_index]
+    if _JOB_ID_RE.fullmatch(job_id) is None:
         return None
-    name_fields, capsule_directory_index = parsed
 
     dandi_path = "/".join(parts[dandiset_index + 1 : pipeline_index]) + ".nwb"
-    subpath = "/".join(parts[capsule_directory_index + 1 :])
+    subpath = "/".join(parts[capsule_dir_index + 1 :])
 
     location = _CapsuleLocation(
         dandiset_id=parts[dandiset_index][len("dandiset-") :],
         dandi_path=dandi_path,
         pipeline=pipeline,
-        capsule_path="/".join(parts[: capsule_directory_index + 1]),
-        job_id=parts[capsule_dir_index] if name_fields is None else "",
-        name_fields=name_fields,
+        capsule_path="/".join(parts[: capsule_dir_index + 1]),
+        job_id=job_id,
     )
     return location, subpath
 
@@ -229,9 +177,9 @@ class _CapsuleProvenanceCache:
     """
     Per-call cache of job provenance read from each capsule's ``dataset_description.json``.
 
-    A ``job-`` capsule directory name carries only the job ID, so the pipeline version,
-    codebase version, parameters and config are read back from the provenance block written
-    into the capsule at preparation time.
+    A capsule directory name carries only the job ID, so the pipeline version, codebase
+    version, parameters and config are read back from the provenance block written into the
+    capsule at preparation time.
     """
 
     def __init__(self, metadata: AssetsJsonldMetadata, /) -> None:
@@ -265,27 +213,23 @@ class _CapsuleProvenanceCache:
 
 
 def _resolve_job_info(*, location: _CapsuleLocation, provenance_cache: _CapsuleProvenanceCache) -> JobInfo:
-    """Build the full job identity for a capsule from its directory name or its provenance."""
-    if location.name_fields is not None:
-        fields: dict = location.name_fields
-    else:
-        fields = provenance_cache.get(location.capsule_path)
-        if not fields:
-            _log.warning(
-                "No job provenance for capsule %s; version, codebase, params and config are left blank",
-                location.capsule_path,
-            )
+    """Build the full job identity for a capsule from its provenance."""
+    fields = provenance_cache.get(location.capsule_path)
+    if not fields:
+        _log.warning(
+            "No job provenance for capsule %s; version, codebase, params and config are left blank",
+            location.capsule_path,
+        )
 
     job_info = JobInfo(
+        job_id=location.job_id,
         dandiset_id=location.dandiset_id,
         dandi_path=location.dandi_path,
         pipeline=location.pipeline,
         version=str(fields.get("version") or ""),
         params=str(fields.get("params") or ""),
         config=str(fields.get("config") or ""),
-        # The legacy nested layout carries no codebase segment.
         codebase=str(fields.get("codebase") or ""),
-        job_id=location.job_id,
     )
     return job_info
 
@@ -370,13 +314,7 @@ def _finalize_job_capsule_records(
     ``asset_size_bytes``) from the upstream dandiset's ``assets.jsonld``, and ``created_at`` /
     ``job_completion_time`` from local timestamps.
     """
-    provenance_cache.prefetch(
-        [
-            capsule_path
-            for capsule_path, location in collection.locations_by_capsule.items()
-            if location.name_fields is None
-        ]
-    )
+    provenance_cache.prefetch(collection.locations_by_capsule)
 
     finalized: list[dict[str, object]] = []
     for capsule_path, record in collection.records_by_capsule.items():
@@ -573,7 +511,7 @@ def _list_capsule_log_directories(*, dandiset_directory: pathlib.Path) -> list[p
     return sorted(
         path
         for path in derivatives_root.rglob("logs")
-        if path.is_dir() and _JOB_CAPSULE_DIR_RE.fullmatch(path.parent.name) is not None
+        if path.is_dir() and _JOB_ID_RE.fullmatch(path.parent.name) is not None
     )
 
 

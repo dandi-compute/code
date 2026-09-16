@@ -60,8 +60,7 @@ def _download_side_effect(command: list, **kwargs: object) -> mock.MagicMock:
 
 
 _EXAMPLE_CODE_DIR_PATH = (
-    "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys"
-    "/pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-default_config-abc123/code"
+    "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys" "/pipeline-aind+ephys/job-240101abc123/code"
 )
 
 
@@ -349,12 +348,9 @@ def test_submit_next_submits_up_to_max_submissions(tmp_path: pathlib.Path) -> No
     processing_dir.mkdir()
 
     code_dir_paths = [
-        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys"
-        "/pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-default_config-abc123/code",
-        "derivatives/dandiset-001697/sub-mouse02/sub-mouse02_ecephys"
-        "/pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-default_config-abc123/code",
-        "derivatives/dandiset-001697/sub-mouse03/sub-mouse03_ecephys"
-        "/pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-default_config-abc123/code",
+        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys" "/pipeline-aind+ephys/job-240101abc123/code",
+        "derivatives/dandiset-001697/sub-mouse02/sub-mouse02_ecephys" "/pipeline-aind+ephys/job-240101abc123/code",
+        "derivatives/dandiset-001697/sub-mouse03/sub-mouse03_ecephys" "/pipeline-aind+ephys/job-240101abc123/code",
     ]
     metadata = _make_metadata_with_submit_sh(*code_dir_paths)
 
@@ -394,8 +390,7 @@ def test_submit_next_skips_candidates_with_submitted_in_metadata(tmp_path: pathl
 
     submitted_path = _EXAMPLE_CODE_DIR_PATH
     second_path = (
-        "derivatives/dandiset-001697/sub-mouse02/sub-mouse02_ecephys"
-        "/pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-default_config-abc123/code"
+        "derivatives/dandiset-001697/sub-mouse02/sub-mouse02_ecephys" "/pipeline-aind+ephys/job-240101abc123/code"
     )
 
     path_to_asset_metadata = {}
