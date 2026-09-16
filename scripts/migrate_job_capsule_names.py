@@ -1,10 +1,24 @@
 """
 One-off migration of job capsule directories to the ``job-{YYMMDD}{hash}`` naming.
 
-Renames every legacy capsule directory in the job capsules Dandiset (``001697``) and the
-failed runs archive Dandiset (``001873``) to its job ID, and writes the ``DandiCompute``
-provenance block into each capsule's ``dataset_description.json`` so the pipeline version,
-codebase version, parameters and config the old name spelled out are preserved.
+Works against local Dandiset clones sitting next to each other, so the renames happen on
+disk first, the uploads go up in batches, and the legacy structure is only torn down once
+you have looked at the result. Four phases, run in order::
+
+    python migrate_job_capsule_names.py plan     # what would be renamed; changes nothing
+    python migrate_job_capsule_names.py rename   # rename on disk, write a manifest
+    python migrate_job_capsule_names.py upload   # batch-upload the new paths
+    python migrate_job_capsule_names.py clean    # delete the legacy paths
+
+``rename`` is purely local. It renames each legacy capsule directory to its job ID and writes
+the ``DandiCompute`` provenance block into the capsule's ``dataset_description.json``, so the
+pipeline version, codebase version, parameters and config the old name spelled out are
+preserved. It records every rename in a manifest next to the clones, which the later phases
+read, so you can inspect or edit it before anything reaches the archive.
+
+``upload`` pushes only the new paths, batched per Dandiset. Nothing is deleted at this point,
+so the archive briefly carries both names. Check that the new capsules look right, then run
+``clean`` to remove the legacy paths from the archive and prune the emptied local parents.
 
 All legacy layouts are handled, with or without a trailing ``_attempt-N``::
 
@@ -12,22 +26,19 @@ All legacy layouts are handled, with or without a trailing ``_attempt-N``::
     pipeline-{pipeline}/version-{version}/params-{params}_config-{config}
     pipeline-{pipeline}/version-{version}_codebase-{codebase}_params-{params}
 
-The ``YYMMDD`` of each migrated capsule is taken from the modification date of its
+The ``YYMMDD`` of each migrated capsule comes from the modification time of its
 ``code/submit.sh``, so a capsule keeps the date it was originally prepared. Its hash is what
 preparation computes for the same job, so a migrated job is never formed a second time.
 
 This script is deliberately standalone. It imports nothing from ``dandi_compute_code``, so it
 runs against whatever version of the package is (or is not) installed. It needs only the
-standard library, plus the ``dandi`` command line client on PATH when applying.
+standard library, plus the ``dandi`` command line client on PATH for ``upload`` and ``clean``.
 
-Runs as a dry run by default, printing every planned rename and changing nothing. Pass
-``--apply`` to perform the migration. Requires ``DANDI_API_KEY`` when applying.
+The clones are expected to sit under ``--root`` (the working directory by default), one
+directory per Dandiset, as ``dandi download`` lays them out::
 
-Usage::
-
-    python migrate_job_capsule_names.py
-    python migrate_job_capsule_names.py --apply
-    python migrate_job_capsule_names.py --apply --dandiset 001697
+    ./001697/derivatives/...
+    ./001873/derivatives/...
 """
 
 import argparse
@@ -42,15 +53,14 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
-import urllib.error
-import urllib.request
 
 _log = logging.getLogger("migrate_job_capsule_names")
 
 _JOB_CAPSULES_DANDISET_ID = "001697"
 _FAILED_RUNS_ARCHIVE_DANDISET_ID = "001873"
-_ASSETS_JSONLD_URL_TEMPLATE = "https://dandiarchive.s3.amazonaws.com/dandisets/{dandiset_id}/draft/assets.jsonld"
+
+#: Where ``rename`` records what it did, and what ``upload`` and ``clean`` read back.
+_MANIFEST_NAME = "job-capsule-migration.json"
 
 #: Key under which job provenance is written into a capsule's ``dataset_description.json``.
 _PROVENANCE_KEY = "DandiCompute"
@@ -66,6 +76,9 @@ _LEGACY_CAPSULE_DIR_RE = re.compile(
     r"params-(?P<params>[^_]+)(?:_config-(?P<config>[^_]+))?"
     r"(?:_attempt-(?P<attempt>\d+))?"
 )
+
+#: How many paths to hand a single ``dandi`` invocation.
+_BATCH_SIZE = 100
 
 
 def compute_job_hash(
@@ -96,76 +109,51 @@ def format_job_id(*, job_hash: str, date: datetime.date) -> str:
     return job_id
 
 
-def fetch_assets(dandiset_id: str, /) -> list[dict]:
+def read_content_id(capsule_dir: pathlib.Path, /) -> str:
     """
-    Fetch a Dandiset's draft ``assets.jsonld``.
+    Read the source asset's content ID out of a capsule's ``code/submit.sh``.
 
-    This is the only place the script touches the network for metadata, so tests can replace
-    it wholesale.
-
-    :return: The raw asset dicts, or an empty list when the metadata cannot be read.
-    :rtype: list[dict]
+    The submission script points at the source blob by path, whose file name is the content
+    ID. Reading it here keeps the whole plan offline.
     """
-    url = _ASSETS_JSONLD_URL_TEMPLATE.format(dandiset_id=dandiset_id)
-    try:
-        with urllib.request.urlopen(url, timeout=60) as response:
-            assets = json.load(response)
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exception:
-        _log.warning("Unable to load metadata from %s: %s", url, exception)
-        return []
-
-    if not isinstance(assets, list):
-        _log.warning("Expected a JSON array from %s, got %s", url, type(assets).__name__)
-        return []
-    return [asset for asset in assets if isinstance(asset, dict)]
-
-
-def _content_id_of(asset: dict, /) -> str:
-    """Pull the blob or zarr content ID out of an asset's content URLs."""
-    content_urls = asset.get("contentUrl")
-    for url in content_urls if isinstance(content_urls, list) else []:
-        if isinstance(url, str) and ("/blobs/" in url or "/zarr/" in url):
-            return url.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0]
+    submission_script = capsule_dir / "code" / "submit.sh"
+    if not submission_script.is_file():
+        return ""
+    for line in submission_script.read_text(errors="replace").splitlines():
+        if line.startswith("NWB_FILE_PATH="):
+            nwb_file_path = line.split("=", maxsplit=1)[1].strip().strip('"').strip("'")
+            return pathlib.PurePosixPath(nwb_file_path).name
     return ""
 
 
-class _SourceContentIds:
-    """Per-run cache of source content IDs, keyed by upstream Dandiset."""
-
-    def __init__(self) -> None:
-        self._cache: dict[str, dict[str, str]] = {}
-
-    def get(self, *, dandiset_id: str, dandi_path: str) -> str:
-        if dandiset_id not in self._cache:
-            self._cache[dandiset_id] = {
-                asset["path"]: _content_id_of(asset)
-                for asset in fetch_assets(dandiset_id)
-                if isinstance(asset.get("path"), str)
-            }
-        content_id = self._cache[dandiset_id].get(dandi_path, "")
-        if not content_id:
-            _log.warning(
-                "No upstream asset for dandiset-%s %s; hashing with an empty content ID",
-                dandiset_id,
-                dandi_path,
-            )
-        return content_id
-
-
-def parse_legacy_capsule(asset_path: str, /) -> tuple[str, dict] | None:
+def read_prepared_date(capsule_dir: pathlib.Path, /) -> datetime.date:
     """
-    Parse one asset path into its legacy capsule path and the identity its name spells out.
+    Read the date a capsule was prepared from its ``code/submit.sh`` modification time.
 
-    :return: ``(capsule_path, identity)``, or ``None`` when the path is not inside a legacy
-        job capsule directory.
-    :rtype: tuple[str, dict] or None
+    ``dandi download`` preserves the archive's modification times, so a freshly downloaded
+    clone carries the original preparation date. Falls back to today when the script is
+    missing.
     """
-    parts = pathlib.PurePosixPath(asset_path).parts
+    submission_script = capsule_dir / "code" / "submit.sh"
+    if not submission_script.is_file():
+        _log.warning("No code/submit.sh in %s; dating its job ID today", capsule_dir)
+        return datetime.datetime.now(tz=datetime.timezone.utc).date()
+    timestamp = submission_script.stat().st_mtime
+    return datetime.datetime.fromtimestamp(timestamp, tz=datetime.timezone.utc).date()
 
-    dandiset_index = next(
-        (index for index, part in enumerate(parts) if part.startswith("dandiset-")),
-        None,
-    )
+
+def parse_legacy_capsule(*, capsule_dir: pathlib.Path, dandiset_root: pathlib.Path) -> dict | None:
+    """
+    Parse a legacy capsule directory into the identity its name spells out.
+
+    :param capsule_dir: The capsule directory inside the local clone.
+    :param dandiset_root: The clone's root, i.e. the directory named after the Dandiset.
+    :return: The identity, or ``None`` when *capsule_dir* is not a legacy job capsule.
+    :rtype: dict or None
+    """
+    parts = capsule_dir.relative_to(dandiset_root).parts
+
+    dandiset_index = next((index for index, part in enumerate(parts) if part.startswith("dandiset-")), None)
     if dandiset_index is None:
         return None
 
@@ -195,6 +183,8 @@ def parse_legacy_capsule(asset_path: str, /) -> tuple[str, dict] | None:
     version = match.group("version_in_name") or version_from_parent
     if not version:
         return None
+    if capsule_index + 1 != len(parts):
+        return None
 
     identity = {
         "dandiset_id": parts[dandiset_index][len("dandiset-") :],
@@ -207,88 +197,74 @@ def parse_legacy_capsule(asset_path: str, /) -> tuple[str, dict] | None:
         "config": match.group("config") or "",
         "pipeline_path": "/".join(parts[: pipeline_index + 1]),
     }
-    capsule_path = "/".join(parts[: capsule_index + 1])
-    return capsule_path, identity
+    return identity
 
 
-def find_legacy_capsules(*, dandiset_id: str) -> dict[str, dict]:
+def find_legacy_capsules(dandiset_root: pathlib.Path, /) -> list[pathlib.Path]:
     """
-    Find every legacy job capsule directory in *dandiset_id*.
+    Find every legacy job capsule directory in a local clone.
 
-    :return: Capsule path (relative to the Dandiset root) mapped to its parsed identity, each
-        carrying the ``code/submit.sh`` timestamp as ``submit_date``.
-    :rtype: dict[str, dict]
+    A capsule is recognised by holding a ``code`` directory under a ``pipeline-*`` ancestor,
+    which avoids walking into the (potentially large) capsule contents.
+
+    :return: Capsule directories, sorted.
+    :rtype: list[pathlib.Path]
     """
-    capsules: dict[str, dict] = {}
-    submit_dates: dict[str, str] = {}
+    derivatives_root = dandiset_root / "derivatives"
+    if not derivatives_root.is_dir():
+        _log.warning("No derivatives directory under %s", dandiset_root)
+        return []
 
-    for asset in fetch_assets(dandiset_id):
-        asset_path = asset.get("path")
-        if not isinstance(asset_path, str):
-            continue
-        parsed = parse_legacy_capsule(asset_path)
-        if parsed is None:
-            continue
-        capsule_path, identity = parsed
-        capsules.setdefault(capsule_path, identity)
-        if asset_path == f"{capsule_path}/code/submit.sh":
-            date_modified = asset.get("dateModified")
-            if isinstance(date_modified, str):
-                submit_dates[capsule_path] = date_modified
-
-    for capsule_path, identity in capsules.items():
-        identity["submit_date"] = submit_dates.get(capsule_path, "")
-    return capsules
+    capsule_dirs = {
+        code_dir.parent for code_dir in derivatives_root.rglob("code") if code_dir.is_dir() and code_dir.name == "code"
+    }
+    return sorted(capsule_dirs)
 
 
-def build_job_id(*, identity: dict, content_id: str) -> str:
-    """Build the job ID a legacy capsule migrates to, dated by its ``code/submit.sh``."""
-    job_hash = compute_job_hash(
-        dandiset_id=identity["dandiset_id"],
-        dandi_path=identity["dandi_path"],
-        pipeline=identity["pipeline"],
-        version=identity["version"],
-        params=identity["params"],
-        config=identity["config"],
-        content_id=content_id,
-    )
-    submit_date = identity["submit_date"]
-    date = (
-        datetime.datetime.fromisoformat(submit_date.replace("Z", "+00:00")).date()
-        if submit_date
-        else datetime.datetime.now(tz=datetime.timezone.utc).date()
-    )
-    job_id = format_job_id(job_hash=job_hash, date=date)
-    return job_id
-
-
-def plan_migration(*, dandiset_id: str) -> list[tuple[str, str, dict]]:
+def plan_migration(*, dandiset_root: pathlib.Path) -> list[dict]:
     """
-    Build the list of renames for *dandiset_id*.
+    Build the list of renames for one local clone.
 
     Capsules that map onto the same job ID are left out. That happens when two legacy capsules
     describe the same logical job and differ only in the codebase version, which the job hash
-    deliberately ignores. Migrating both would merge them into one directory, so they are
+    deliberately ignores. Renaming both onto one directory would merge them, so they are
     reported and skipped for a human to resolve.
 
-    :return: ``(old_capsule_path, new_capsule_path, identity)`` triples, sorted by old path.
-    :rtype: list[tuple[str, str, dict]]
+    :return: One record per planned rename, each with ``old_path``, ``new_path``, ``job_id``
+        and the parsed ``identity``. Paths are relative to *dandiset_root*.
+    :rtype: list[dict]
     """
-    capsules = find_legacy_capsules(dandiset_id=dandiset_id)
-    source_content_ids = _SourceContentIds()
+    candidates: list[dict] = []
+    for capsule_dir in find_legacy_capsules(dandiset_root):
+        identity = parse_legacy_capsule(capsule_dir=capsule_dir, dandiset_root=dandiset_root)
+        if identity is None:
+            continue
 
-    candidates: list[tuple[str, str, dict]] = []
-    for capsule_path, identity in sorted(capsules.items()):
-        content_id = source_content_ids.get(
+        identity["content_id"] = read_content_id(capsule_dir)
+        if not identity["content_id"]:
+            _log.warning("No content ID readable from %s; hashing with an empty content ID", capsule_dir)
+
+        job_hash = compute_job_hash(
             dandiset_id=identity["dandiset_id"],
             dandi_path=identity["dandi_path"],
+            pipeline=identity["pipeline"],
+            version=identity["version"],
+            params=identity["params"],
+            config=identity["config"],
+            content_id=identity["content_id"],
         )
-        identity["content_id"] = content_id
-        job_id = build_job_id(identity=identity, content_id=content_id)
+        job_id = format_job_id(job_hash=job_hash, date=read_prepared_date(capsule_dir))
         identity["job_id"] = job_id
-        candidates.append((capsule_path, f"{identity['pipeline_path']}/{job_id}", identity))
+        candidates.append(
+            {
+                "old_path": capsule_dir.relative_to(dandiset_root).as_posix(),
+                "new_path": f"{identity['pipeline_path']}/{job_id}",
+                "job_id": job_id,
+                "identity": identity,
+            }
+        )
 
-    counts = collections.Counter(new_path for _, new_path, _ in candidates)
+    counts = collections.Counter(record["new_path"] for record in candidates)
     colliding = {new_path for new_path, count in counts.items() if count > 1}
     for new_path in sorted(colliding):
         _log.warning(
@@ -297,20 +273,12 @@ def plan_migration(*, dandiset_id: str) -> list[tuple[str, str, dict]]:
             counts[new_path],
             new_path,
         )
-        for old_path, candidate_path, _ in candidates:
-            if candidate_path == new_path:
-                _log.warning("  colliding capsule: %s", old_path)
+        for record in candidates:
+            if record["new_path"] == new_path:
+                _log.warning("  colliding capsule: %s", record["old_path"])
 
-    plan = [entry for entry in candidates if entry[1] not in colliding]
+    plan = [record for record in candidates if record["new_path"] not in colliding]
     return plan
-
-
-def _run(command: list[str], *, cwd: pathlib.Path | None = None, input_text: str | None = None) -> None:
-    """Run a subprocess, raising with its output when it fails."""
-    result = subprocess.run(command, capture_output=True, text=True, cwd=cwd, input=input_text)
-    if result.returncode != 0:
-        message = f"command failed: {' '.join(command)}\nstdout: {result.stdout}\nstderr: {result.stderr}"
-        raise RuntimeError(message)
 
 
 def write_provenance(*, capsule_dir: pathlib.Path, identity: dict) -> None:
@@ -337,34 +305,198 @@ def write_provenance(*, capsule_dir: pathlib.Path, identity: dict) -> None:
     dataset_description_file.write_text(json.dumps(dataset_description, indent=2) + "\n")
 
 
-def migrate_capsule(*, dandiset_id: str, old_path: str, new_path: str, identity: dict) -> None:
+def rename_capsules(*, dandiset_root: pathlib.Path, plan: list[dict]) -> list[dict]:
     """
-    Rename one capsule in place on the archive.
+    Rename each planned capsule on disk and write its provenance block.
 
-    The capsule subtree is downloaded, copied to its new path with the provenance block written
-    into ``dataset_description.json``, uploaded, and only then deleted from its old path, so a
-    failed upload never destroys the original.
+    Purely local. Nothing is uploaded or deleted here, so a bad plan costs only a re-download.
+
+    :return: The records that were renamed.
+    :rtype: list[dict]
     """
-    working_root = pathlib.Path(tempfile.mkdtemp(prefix="migrate-capsule-"))
-    try:
-        _run(["dandi", "download", "--preserve-tree", f"dandi://dandi/{dandiset_id}/{old_path}/"], cwd=working_root)
-        _run(["dandi", "download", "--download", "dandiset.yaml", f"dandi://dandi/{dandiset_id}/"], cwd=working_root)
+    renamed: list[dict] = []
+    for record in plan:
+        source_dir = dandiset_root / record["old_path"]
+        target_dir = dandiset_root / record["new_path"]
+        if target_dir.exists():
+            _log.warning("Skipping %s: %s already exists", record["old_path"], record["new_path"])
+            continue
+        if not source_dir.is_dir():
+            _log.warning("Skipping %s: no longer on disk", record["old_path"])
+            continue
 
-        dandiset_root = working_root / dandiset_id
-        source_dir = dandiset_root / old_path
-        target_dir = dandiset_root / new_path
         target_dir.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(source_dir, target_dir)
-        write_provenance(capsule_dir=target_dir, identity=identity)
+        source_dir.rename(target_dir)
+        write_provenance(capsule_dir=target_dir, identity=record["identity"])
+        _log.info("Renamed %s -> %s", record["old_path"], record["new_path"])
+        renamed.append(record)
 
-        _run(["dandi", "upload", "--allow-any-path", new_path], cwd=dandiset_root)
-        _run(["dandi", "delete", str(source_dir)], input_text="y\n")
-    finally:
-        shutil.rmtree(working_root, ignore_errors=True)
+    for record in renamed:
+        _remove_empty_parents(start=(dandiset_root / record["old_path"]).parent, stop=dandiset_root / "derivatives")
+    return renamed
+
+
+def _remove_empty_parents(*, start: pathlib.Path, stop: pathlib.Path) -> None:
+    """Remove empty directories from *start* upwards, stopping below *stop*."""
+    if stop not in start.parents:
+        return
+    current = start
+    while current != stop:
+        if not current.is_dir():
+            break
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        current = current.parent
+
+
+def _batched(items: list[str], size: int) -> list[list[str]]:
+    return [items[index : index + size] for index in range(0, len(items), size)]
+
+
+def _run(command: list[str], *, cwd: pathlib.Path | None = None, input_text: str | None = None) -> None:
+    """Run a subprocess, raising with its output when it fails."""
+    result = subprocess.run(command, capture_output=True, text=True, cwd=cwd, input=input_text)
+    if result.returncode != 0:
+        message = f"command failed: {' '.join(command)}\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        raise RuntimeError(message)
+
+
+def upload_new_paths(*, dandiset_root: pathlib.Path, new_paths: list[str]) -> None:
+    """Upload the renamed capsules, in batches, from the clone's root."""
+    for batch in _batched(new_paths, _BATCH_SIZE):
+        _log.info("Uploading %d path(s) from %s", len(batch), dandiset_root)
+        _run(["dandi", "upload", "--allow-any-path", *batch], cwd=dandiset_root)
+
+
+def delete_legacy_paths(*, dandiset_id: str, old_paths: list[str]) -> None:
+    """Delete the legacy capsule paths from the archive, in batches."""
+    for batch in _batched(old_paths, _BATCH_SIZE):
+        urls = [f"dandi://dandi/{dandiset_id}/{old_path}/" for old_path in batch]
+        _log.info("Deleting %d legacy path(s) from dandiset-%s", len(batch), dandiset_id)
+        _run(["dandi", "delete", *urls], input_text="y\n")
+
+
+def manifest_path(root: pathlib.Path, /) -> pathlib.Path:
+    return root / _MANIFEST_NAME
+
+
+def load_manifest(root: pathlib.Path, /) -> dict:
+    """Read the manifest written by ``rename``, or raise when it is missing."""
+    path = manifest_path(root)
+    if not path.is_file():
+        message = f"No migration manifest at {path}. Run the `rename` phase first."
+        raise RuntimeError(message)
+    return json.loads(path.read_text())
+
+
+def _resolve_dandiset_root(*, root: pathlib.Path, dandiset_id: str) -> pathlib.Path | None:
+    dandiset_root = root / dandiset_id
+    if not dandiset_root.is_dir():
+        _log.warning("No local clone at %s; skipping dandiset-%s", dandiset_root, dandiset_id)
+        return None
+    return dandiset_root
+
+
+def _print_plan(*, dandiset_id: str, plan: list[dict]) -> None:
+    print(f"\ndandiset-{dandiset_id}: {len(plan)} legacy job capsule(s)")
+    for record in plan:
+        print(f"  {record['old_path']}\n    -> {record['new_path']}")
+
+
+def _phase_plan(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
+    for dandiset_id in dandiset_ids:
+        dandiset_root = _resolve_dandiset_root(root=root, dandiset_id=dandiset_id)
+        if dandiset_root is None:
+            continue
+        _print_plan(dandiset_id=dandiset_id, plan=plan_migration(dandiset_root=dandiset_root))
+    print("\nNothing was changed. Run the `rename` phase to apply this on disk.")
+    return 0
+
+
+def _phase_rename(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
+    manifest = {
+        "generated_at": datetime.datetime.now(tz=datetime.timezone.utc).isoformat(),
+        "root": str(root),
+        "dandisets": {},
+    }
+    for dandiset_id in dandiset_ids:
+        dandiset_root = _resolve_dandiset_root(root=root, dandiset_id=dandiset_id)
+        if dandiset_root is None:
+            continue
+        plan = plan_migration(dandiset_root=dandiset_root)
+        renamed = rename_capsules(dandiset_root=dandiset_root, plan=plan)
+        manifest["dandisets"][dandiset_id] = renamed
+        _print_plan(dandiset_id=dandiset_id, plan=renamed)
+
+    manifest_path(root).write_text(json.dumps(manifest, indent=2) + "\n")
+    total = sum(len(records) for records in manifest["dandisets"].values())
+    print(f"\nRenamed {total} job capsule(s) on disk. Manifest: {manifest_path(root)}")
+    print("Review the renamed capsules, then run the `upload` phase.")
+    return 0
+
+
+def _phase_upload(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
+    manifest = load_manifest(root)
+    uploaded_total = 0
+    for dandiset_id in dandiset_ids:
+        records = manifest["dandisets"].get(dandiset_id, [])
+        if not records:
+            continue
+        dandiset_root = _resolve_dandiset_root(root=root, dandiset_id=dandiset_id)
+        if dandiset_root is None:
+            continue
+        upload_new_paths(dandiset_root=dandiset_root, new_paths=[record["new_path"] for record in records])
+        uploaded_total += len(records)
+
+    print(f"\nUploaded {uploaded_total} job capsule(s).")
+    print("The archive now carries both the new and the legacy paths. Check the new capsules,")
+    print("then run the `clean` phase to remove the legacy structure.")
+    return 0
+
+
+def _phase_clean(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
+    manifest = load_manifest(root)
+    deleted_total = 0
+    for dandiset_id in dandiset_ids:
+        records = manifest["dandisets"].get(dandiset_id, [])
+        if not records:
+            continue
+        delete_legacy_paths(dandiset_id=dandiset_id, old_paths=[record["old_path"] for record in records])
+        deleted_total += len(records)
+
+        dandiset_root = _resolve_dandiset_root(root=root, dandiset_id=dandiset_id)
+        if dandiset_root is None:
+            continue
+        for record in records:
+            legacy_dir = dandiset_root / record["old_path"]
+            if legacy_dir.is_dir():
+                shutil.rmtree(legacy_dir)
+            _remove_empty_parents(start=legacy_dir.parent, stop=dandiset_root / "derivatives")
+
+    print(f"\nDeleted {deleted_total} legacy job capsule path(s).")
+    print("Refresh the state tables with `dandicompute queue refresh`.")
+    return 0
+
+
+_PHASES = {
+    "plan": _phase_plan,
+    "rename": _phase_rename,
+    "upload": _phase_upload,
+    "clean": _phase_clean,
+}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("phase", choices=list(_PHASES), help="Which phase to run. See the module docstring.")
+    parser.add_argument(
+        "--root",
+        type=pathlib.Path,
+        default=pathlib.Path.cwd(),
+        help="Directory holding the local Dandiset clones. Defaults to the working directory.",
+    )
     parser.add_argument(
         "--dandiset",
         dest="dandiset_ids",
@@ -372,36 +504,21 @@ def main() -> int:
         default=None,
         help="Dandiset to migrate. Repeatable. Defaults to both 001697 and 001873.",
     )
-    parser.add_argument("--apply", action="store_true", help="Perform the migration instead of a dry run.")
     arguments = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    root = arguments.root.expanduser().resolve()
     dandiset_ids = arguments.dandiset_ids or [_JOB_CAPSULES_DANDISET_ID, _FAILED_RUNS_ARCHIVE_DANDISET_ID]
 
-    if arguments.apply and not os.environ.get("DANDI_API_KEY", "").strip():
+    if arguments.phase in ("upload", "clean") and not os.environ.get("DANDI_API_KEY", "").strip():
         _log.error("`DANDI_API_KEY` environment variable is not set or is blank.")
         return 1
 
-    migrated_total = 0
-    for dandiset_id in dandiset_ids:
-        plan = plan_migration(dandiset_id=dandiset_id)
-        print(f"\ndandiset-{dandiset_id}: {len(plan)} legacy job capsule(s)")
-        for old_path, new_path, _ in plan:
-            print(f"  {old_path}\n    -> {new_path}")
-
-        if not arguments.apply:
-            continue
-        for old_path, new_path, identity in plan:
-            _log.info("Migrating %s -> %s", old_path, new_path)
-            migrate_capsule(dandiset_id=dandiset_id, old_path=old_path, new_path=new_path, identity=identity)
-            migrated_total += 1
-
-    if arguments.apply:
-        print(f"\nMigrated {migrated_total} job capsule(s).")
-        print("Refresh the state tables with `dandicompute queue refresh` once this finishes.")
-    else:
-        print("\nDry run; nothing was changed. Re-run with --apply to perform the migration.")
-    return 0
+    try:
+        return _PHASES[arguments.phase](root=root, dandiset_ids=dandiset_ids)
+    except RuntimeError as exception:
+        _log.error("%s", exception)
+        return 1
 
 
 if __name__ == "__main__":

@@ -25,19 +25,31 @@ The job ID is the only capsule layout this package understands. Capsules prepare
 
 ### Migrating legacy capsules
 
-`scripts/migrate_job_capsule_names.py` renames every legacy capsule in `001697` and `001873` to its job ID and writes the `DandiCompute` provenance block into each one. It is a standalone script that imports nothing from this package, so it can be copied anywhere and run against whatever version of `dandi-compute-code` is installed, or none at all. It needs only the standard library, plus the `dandi` command line client on PATH when applying. The `YYMMDD` of a migrated capsule comes from the modification date of its `code/submit.sh`, so it keeps the date it was originally prepared, and its hash matches what preparation would compute today, so a migrated job is never formed a second time.
+`scripts/migrate_job_capsule_names.py` migrates the capsules already on the archive. It works against local clones of the Dandisets sitting next to each other, so the renames happen on disk first, the uploads go up in batches, and the legacy structure is only torn down once you have looked at the result.
 
-It is a dry run by default, printing every planned rename and changing nothing:
+Download the clones, then run the four phases in order from the directory holding them:
 
 ```bash
-python scripts/migrate_job_capsule_names.py
-python scripts/migrate_job_capsule_names.py --apply
+dandi download DANDI:001697
+dandi download DANDI:001873
+
+python migrate_job_capsule_names.py plan     # what would be renamed; changes nothing
+python migrate_job_capsule_names.py rename   # rename on disk, write a manifest
+python migrate_job_capsule_names.py upload   # batch-upload the new paths
+python migrate_job_capsule_names.py clean    # delete the legacy paths
 ```
 
-Each capsule is uploaded to its new path before the old path is deleted, so a failed upload never destroys the original. Run `dandicompute queue refresh` afterwards to rebuild the state tables.
+`rename` is purely local, so a bad plan costs only a re-download. It records every rename in `job-capsule-migration.json` next to the clones, which `upload` and `clean` read back, so you can inspect or edit it before anything reaches the archive. `upload` pushes only the new paths and deletes nothing, so the archive briefly carries both names. Check the new capsules, then `clean` removes the legacy paths.
 
-Two legacy capsules that describe the same logical job and differ only in codebase version map to the same job ID, since the hash ignores the codebase version. Migrating both would merge them into one directory, so they are reported and skipped. Archive or delete all but one, then re-run.
+Use `--root` when the clones are somewhere other than the working directory, and `--dandiset` to migrate one Dandiset at a time.
 
+The script is standalone. It imports nothing from this package, so it can be copied anywhere and run against whatever version of `dandi-compute-code` is installed, or none at all. It needs only the standard library, plus the `dandi` client on PATH for `upload` and `clean`.
+
+A migrated capsule keeps the date it was originally prepared, taken from the modification time of its `code/submit.sh`, and its content ID is read from that same script, so planning is entirely offline. Its hash is what preparation computes for the same job, so a migrated job is never formed a second time.
+
+Two legacy capsules that describe the same logical job and differ only in codebase version map to the same job ID, since the hash ignores the codebase version. Renaming both onto one directory would merge them, so they are reported and skipped. Archive or delete all but one, then re-run.
+
+Run `dandicompute queue refresh` after `clean` to rebuild the state tables.
 
 ## Manual dispatch commands on MIT Engaging
 
