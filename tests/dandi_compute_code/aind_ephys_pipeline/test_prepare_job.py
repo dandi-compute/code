@@ -5,10 +5,12 @@ Tests focus on BIDS entity parsing from Dandiset path components, which is the
 logic that resolves the ``sub-`` label used in the output directory hierarchy.
 """
 
+import datetime
 import importlib.metadata
 import json
 import os
 import pathlib
+import re
 from unittest import mock
 
 import pytest
@@ -209,7 +211,7 @@ def test_prepare_aind_ephys_job_uses_simplified_job_id_format(
     tmp_path: pathlib.Path,
     fake_pipeline_dir: pathlib.Path,
 ) -> None:
-    """prepare_aind_ephys_job produces a job ID without commit hashes and with a _codebase-vX.Y.Z entity."""
+    """prepare_aind_ephys_job names the job capsule directory `job-{YYMMDD}+{hash}` and nothing else."""
     content_id = "07000000-0000-0000-0000-000000000000"
     mapping = {content_id: {"000001": "sub-mouse01/sub-mouse01_ecephys.nwb"}}
 
@@ -238,15 +240,125 @@ def test_prepare_aind_ephys_job_uses_simplified_job_id_format(
             pipeline_directory=fake_pipeline_dir,
         )
 
-    script_path_str = str(script_path)
-    # No short commit hashes in the version entity
-    assert "+aaaaaaa" not in script_path_str
-    # No _date- entity
-    assert "_date-" not in script_path_str
-    # Codebase version entity present
-    assert f"_codebase-v{importlib.metadata.version('dandi-compute-code')}" in script_path_str
-    # Version uses BIDSy format (hyphens replaced with plus)
-    assert "version-v1.1.0_" in script_path_str
+    capsule_dir_name = pathlib.Path(str(script_path)).parent.parent.name
+    today = datetime.datetime.now(tz=datetime.timezone.utc).date()
+    assert re.fullmatch(rf"job-{today:%y%m%d}\+[0-9a-f]{{6}}", capsule_dir_name) is not None
+    assert pathlib.Path(str(script_path)).parent.parent.parent.name == "pipeline-aind+ephys"
+
+
+@pytest.mark.ai_generated
+def test_prepare_aind_ephys_job_writes_job_provenance_in_dataset_description(
+    tmp_path: pathlib.Path,
+    fake_pipeline_dir: pathlib.Path,
+) -> None:
+    """dataset_description.json records everything the capsule directory name no longer spells out."""
+    content_id = "07100000-0000-0000-0000-000000000000"
+    mapping = {content_id: {"000001": "sub-mouse01/sub-mouse01_ecephys.nwb"}}
+
+    temp_dir = tmp_path / "tmpdir"
+    temp_dir.mkdir()
+
+    mock_dandiset = mock.MagicMock()
+    mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
+
+    with (
+        mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
+        mock.patch("subprocess.check_output", side_effect=_git_check_output),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient") as mock_client,
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.download.download"),
+        mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.upload.upload"),
+        mock.patch("tempfile.mkdtemp", return_value=str(temp_dir)),
+        mock.patch.dict(os.environ, {"DANDI_API_KEY": "fake-key"}),
+    ):
+        mock_client.return_value.get_dandiset.return_value = mock_dandiset
+
+        script_path = prepare_aind_ephys_job(
+            pipeline_version="v1.1.0",
+            content_id=content_id,
+            config_key="default",
+            parameters_key="original",
+            pipeline_directory=fake_pipeline_dir,
+        )
+
+    capsule_directory = script_path.parent.parent
+    dataset_description = json.loads((capsule_directory / "dataset_description.json").read_text())
+    provenance = dataset_description["DandiCompute"]
+
+    assert provenance["job_id"] == capsule_directory.name
+    assert provenance["dandiset_id"] == "000001"
+    assert provenance["dandi_path"] == "sub-mouse01/sub-mouse01_ecephys.nwb"
+    assert provenance["content_id"] == content_id
+    assert provenance["pipeline"] == "aind+ephys"
+    assert provenance["version"] == "v1.1.0"
+    assert provenance["codebase"] == f"v{importlib.metadata.version('dandi-compute-code')}"
+    assert provenance["params_key"] == "original"
+    assert provenance["config_key"] == "default"
+    assert re.fullmatch(r"[0-9a-f]{7}", provenance["params"]) is not None
+    assert re.fullmatch(r"[0-9a-f]{7}", provenance["config"]) is not None
+
+
+@pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    "existing_capsule_name",
+    [
+        pytest.param("job-200101+{job_hash}", id="job_id_from_an_earlier_date"),
+        pytest.param("version-v1.1.0_codebase-v0.1.0_params-{params}_config-{config}", id="legacy_flat_layout"),
+        pytest.param("version-v1.1.0/params-{params}_config-{config}", id="legacy_nested_layout"),
+    ],
+)
+def test_prepare_aind_ephys_job_skips_when_a_capsule_already_exists(
+    tmp_path: pathlib.Path,
+    fake_pipeline_dir: pathlib.Path,
+    existing_capsule_name: str,
+) -> None:
+    """An existing capsule is recognised whatever its directory name and whatever date it carries."""
+    content_id = "07200000-0000-0000-0000-000000000000"
+    mapping = {content_id: {"000001": "sub-mouse01/sub-mouse01_ecephys.nwb"}}
+
+    temp_dir = tmp_path / "tmpdir"
+    temp_dir.mkdir()
+
+    mock_dandiset = mock.MagicMock()
+    mock_dandiset.get_assets_with_path_prefix.return_value = iter([])
+
+    def _run(existing_asset_paths: list[str]) -> pathlib.Path | None:
+        mock_dandiset.get_assets_with_path_prefix.return_value = iter(
+            [mock.MagicMock(path=path) for path in existing_asset_paths]
+        )
+        with (
+            mock.patch("urllib.request.urlopen", _make_urlopen_mock(mapping)),
+            mock.patch("subprocess.check_output", side_effect=_git_check_output),
+            mock.patch(
+                "dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.dandiapi.DandiAPIClient"
+            ) as mock_client,
+            mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.download.download"),
+            mock.patch("dandi_compute_code.aind_ephys_pipeline._prepare_job.dandi.upload.upload"),
+            mock.patch("tempfile.mkdtemp", return_value=str(temp_dir)),
+            mock.patch.dict(os.environ, {"DANDI_API_KEY": "fake-key"}),
+        ):
+            mock_client.return_value.get_dandiset.return_value = mock_dandiset
+            return prepare_aind_ephys_job(
+                pipeline_version="v1.1.0",
+                content_id=content_id,
+                config_key="default",
+                parameters_key="original",
+                pipeline_directory=fake_pipeline_dir,
+            )
+
+    script_path = _run([])
+    assert script_path is not None
+
+    capsule_directory = script_path.parent.parent
+    pipeline_path = "derivatives/dandisets-000/dandiset-000001/sub-mouse01/sub-mouse01_ecephys/pipeline-aind+ephys"
+    dataset_description = json.loads((capsule_directory / "dataset_description.json").read_text())
+    provenance = dataset_description["DandiCompute"]
+    existing_capsule = existing_capsule_name.format(
+        job_hash=capsule_directory.name.split("+")[-1],
+        params=provenance["params"],
+        config=provenance["config"],
+    )
+
+    assert _run([f"{pipeline_path}/{existing_capsule}/code/submit.sh"]) is None
 
 
 @pytest.mark.ai_generated

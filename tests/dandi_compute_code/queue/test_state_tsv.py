@@ -96,7 +96,7 @@ def test_queue_state_to_tsv_string_empty_state_has_only_header() -> None:
     tsv_text = state.to_tsv_string()
     lines = tsv_text.splitlines()
     assert len(lines) == 1
-    assert lines[0].split("\t")[0] == "dandiset_id"
+    assert lines[0].split("\t")[0] == "job_id"
 
 
 @pytest.mark.ai_generated

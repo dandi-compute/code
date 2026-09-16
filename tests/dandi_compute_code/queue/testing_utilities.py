@@ -29,9 +29,11 @@ def create_job_capsule_directory(
     The layout is derived from the entry itself (via the public
     ``JobEntry.capsule_dir_candidates``) so the directory tree always matches the
     ground-truth example state rather than a separately specified set of coordinates.
+    The preferred candidate is used, which is the ``job-`` directory whenever the entry
+    carries a job ID. Pass *legacy_nested* to materialize the legacy nested layout instead.
     """
-    flat_capsule_dir, nested_capsule_dir = entry.capsule_dir_candidates(base_dir)
-    capsule_dir = nested_capsule_dir if legacy_nested else flat_capsule_dir
+    candidates = entry.capsule_dir_candidates(base_dir)
+    capsule_dir = candidates[-1] if legacy_nested else candidates[0]
     capsule_dir.mkdir(parents=True)
     if with_code:
         code_dir = capsule_dir / "code"

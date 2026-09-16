@@ -4,6 +4,26 @@ Contains essential code for orchestrating computation submission and queue manag
 
 
 
+## Job capsules
+
+Each run of a pipeline over one asset lives in its own job capsule directory:
+
+```
+derivatives/dandisets-{first 3 digits}/dandiset-{dandiset_id}/{dandi path}/pipeline-{pipeline}/job-{YYMMDD}+{hash}
+```
+
+The job ID is the whole name. `YYMMDD` is the date the capsule was prepared, which keeps the name readable and separates re-attempts of the same job across days. The hash is the first six characters of the MD5 checksum of the fields that identify the job, so capsules for different parameters, configs, versions or assets stay apart.
+
+The codebase version is deliberately left out of the hash. A job is the same logical job no matter which release of this package formed it, which is how the queue decides that a capsule already exists and must not be formed a second time.
+
+Everything the name used to spell out is recorded in two places instead:
+
+- the `DandiCompute` provenance block in the capsule's `dataset_description.json`
+- the `derivatives/state.tsv` summary table, which reads that provenance back
+
+Capsules prepared before the job ID existed still carry their old `version-..._codebase-..._params-..._config-...` names. Those are read from the name directly and remain fully supported.
+
+
 ## Manual dispatch commands on MIT Engaging
 
 To run manually with confirmation to trigger (for debugging):
@@ -33,7 +53,7 @@ dandicompute queue clean --dandiset ./dandi/001697/
 To archive a failed job capsule by moving it from `001697` to the permanent archive `001873`:
 
 ```bash
-dandicompute archive --job derivatives/dandisets-000/dandiset-000409/sub-mouse01/pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-default_config-abc123
+dandicompute archive --job derivatives/dandisets-000/dandiset-000409/sub-mouse01/pipeline-aind+ephys/job-260916+a1b2c3
 ```
 
 

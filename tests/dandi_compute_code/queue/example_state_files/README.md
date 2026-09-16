@@ -7,6 +7,9 @@ Each row is one job capsule, matching the format produced by `QueueState.to_tsv`
 Tests load the file through the fixtures in `../conftest.py` and select the entry they need by its `dandi_path`, which is named to describe the scenario it covers.
 Rows that share a `dandi_path` are told apart by their `config`.
 
+`job_id` is the `job-{YYMMDD}+{hash}` directory name of the capsule.
+It is blank for the one row that covers a legacy capsule, whose directory name spells the pipeline version, codebase version, parameters and config out instead.
+
 The empty-queue case is written inline by the few tests that need it rather than kept as a file.
 
 The point in the job lifecycle is encoded by the presence flags:

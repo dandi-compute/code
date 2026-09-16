@@ -22,9 +22,14 @@ class JobInfo:
     config: str
     codebase: str
 
+    #: The ``job-{YYMMDD}+{hash}`` directory name of the capsule. Empty for legacy capsules
+    #: whose directory name spells the identity out instead.
+    job_id: str = ""
+
     def to_dict(self) -> dict[str, object]:
         """Serialise the identity fields to a plain dict."""
         return {
+            "job_id": self.job_id,
             "dandiset_id": self.dandiset_id,
             "dandi_path": self.dandi_path,
             "pipeline": self.pipeline,

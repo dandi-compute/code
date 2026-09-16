@@ -10,6 +10,7 @@ parsing).
 from __future__ import annotations
 
 import collections
+import concurrent.futures
 import json
 import logging
 import pathlib
@@ -17,6 +18,7 @@ import random
 import re
 import urllib.error
 import urllib.request
+from collections.abc import Collection
 from dataclasses import dataclass
 
 import linkml_runtime.processing.referencevalidator
@@ -25,6 +27,7 @@ import linkml_runtime.utils.schemaview
 from ._globals import _DURATION_PART_RE, _PACKAGED_PIPELINE_CONFIGS_PATH, _QUEUE_CONFIG_SCHEMA_PATH
 from ._job_info import JobInfo
 from ..dandiset._globals import _JOB_CAPSULE_DIR_RE
+from ..dandiset._job_id import _JOB_ID_RE, _PROVENANCE_KEY
 from ..dandiset._load_assets_jsonld_metadata import (
     AssetMetadata,
     AssetsJsonldMetadata,
@@ -53,16 +56,23 @@ def _find_segment_index(parts: tuple[str, ...], prefix: str, start: int = 0) -> 
     return None
 
 
-def _parse_flat_capsule(parts: tuple[str, ...], index: int) -> tuple[dict[str, str], int] | None:
-    """Parse a single-segment ``version-..._codebase-..._params-..._config-...`` directory."""
+def _parse_job_id_capsule(parts: tuple[str, ...], index: int) -> tuple[dict[str, str] | None, int] | None:
+    """Parse a single-segment ``job-{YYMMDD}+{hash}`` directory."""
+    if _JOB_ID_RE.fullmatch(parts[index]) is None:
+        return None
+    return None, index
+
+
+def _parse_flat_capsule(parts: tuple[str, ...], index: int) -> tuple[dict[str, str] | None, int] | None:
+    """Parse a legacy single-segment ``version-..._codebase-..._params-..._config-...`` directory."""
     match = _FLAT_CAPSULE_RE.fullmatch(parts[index])
     if match is None:
         return None
     return match.groupdict(), index
 
 
-def _parse_nested_capsule(parts: tuple[str, ...], index: int) -> tuple[dict[str, str], int] | None:
-    """Parse a ``version-X / params-..._config-...`` directory pair."""
+def _parse_nested_capsule(parts: tuple[str, ...], index: int) -> tuple[dict[str, str] | None, int] | None:
+    """Parse a legacy ``version-X / params-..._config-...`` directory pair."""
     if not parts[index].startswith("version-") or index + 1 >= len(parts):
         return None
     match = _NESTED_CAPSULE_RE.fullmatch(parts[index + 1])
@@ -73,12 +83,28 @@ def _parse_nested_capsule(parts: tuple[str, ...], index: int) -> tuple[dict[str,
     return fields, index + 1
 
 
-def _parse_capsule_identity(asset_path: str, /) -> tuple[JobInfo, str] | None:
+@dataclass(frozen=True)
+class _CapsuleLocation:
+    """Where one job capsule sits in a Dandiset, and what its directory name reveals."""
+
+    dandiset_id: str
+    dandi_path: str
+    pipeline: str
+    capsule_path: str
+    job_id: str
+
+    #: ``version`` / ``codebase`` / ``params`` / ``config`` read straight from a legacy
+    #: directory name. ``None`` for a ``job-`` capsule, whose identity lives in its
+    #: ``dataset_description.json`` provenance instead.
+    name_fields: dict[str, str] | None
+
+
+def _parse_capsule_location(asset_path: str, /) -> tuple[_CapsuleLocation, str] | None:
     """
     Parse an asset path of the form
     ``derivatives/dandiset-XXX/.../pipeline-NAME/<capsule-dir>/<subpath>`` into a
-    :class:`JobInfo` and the subpath beneath the job capsule directory. Returns
-    ``None`` if the path does not match either supported layout.
+    :class:`_CapsuleLocation` and the subpath beneath the job capsule directory. Returns
+    ``None`` if the path does not match any supported layout.
     """
     parts = pathlib.PurePosixPath(asset_path).parts
 
@@ -98,25 +124,27 @@ def _parse_capsule_identity(asset_path: str, /) -> tuple[JobInfo, str] | None:
     if capsule_dir_index >= len(parts):
         return None
 
-    parsed = _parse_flat_capsule(parts, capsule_dir_index) or _parse_nested_capsule(parts, capsule_dir_index)
+    parsed = (
+        _parse_job_id_capsule(parts, capsule_dir_index)
+        or _parse_flat_capsule(parts, capsule_dir_index)
+        or _parse_nested_capsule(parts, capsule_dir_index)
+    )
     if parsed is None:
         return None
-    fields, capsule_directory_index = parsed
+    name_fields, capsule_directory_index = parsed
 
     dandi_path = "/".join(parts[dandiset_index + 1 : pipeline_index]) + ".nwb"
     subpath = "/".join(parts[capsule_directory_index + 1 :])
 
-    job_info = JobInfo(
+    location = _CapsuleLocation(
         dandiset_id=parts[dandiset_index][len("dandiset-") :],
         dandi_path=dandi_path,
         pipeline=pipeline,
-        version=fields["version"],
-        params=fields["params"],
-        config=fields["config"],
-        # The legacy nested layout carries no codebase segment.
-        codebase=fields.get("codebase") or "",
+        capsule_path="/".join(parts[: capsule_directory_index + 1]),
+        job_id=parts[capsule_dir_index] if name_fields is None else "",
+        name_fields=name_fields,
     )
-    return job_info, subpath
+    return location, subpath
 
 
 def _subpath_is_under(subpath: str, directory: str) -> bool:
@@ -176,9 +204,90 @@ class _UpstreamMetadataCache:
         return self._cache[dandiset_id]
 
 
-def _new_capsule_record(job: JobInfo, /) -> dict[str, object]:
+def _read_asset_json(asset: dict[str, object], /) -> dict:
+    """Download and parse a small JSON asset from its DANDI blob URL."""
+    content_urls = asset.get("contentUrl")
+    for url in content_urls if isinstance(content_urls, list) else []:
+        if not isinstance(url, str) or "/blobs/" not in url:
+            continue
+        try:
+            with urllib.request.urlopen(url, timeout=30) as response:
+                payload = json.load(response)
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exception:
+            _log.warning("Unable to read JSON asset from %s: %s", url, exception)
+            continue
+        if isinstance(payload, dict):
+            return payload
+    return {}
+
+
+class _CapsuleProvenanceCache:
+    """
+    Per-call cache of job provenance read from each capsule's ``dataset_description.json``.
+
+    A ``job-`` capsule directory name carries only the job ID, so the pipeline version,
+    codebase version, parameters and config are read back from the provenance block written
+    into the capsule at preparation time.
+    """
+
+    def __init__(self, metadata: AssetsJsonldMetadata, /) -> None:
+        self._metadata = metadata
+        self._cache: dict[str, dict] = {}
+
+    def prefetch(self, capsule_paths: Collection[str], /, *, max_workers: int = 8) -> None:
+        """Warm the cache for many capsules at once, since each entry costs one HTTP request."""
+        missing = [capsule_path for capsule_path in capsule_paths if capsule_path not in self._cache]
+        if not missing:
+            return
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(max_workers, len(missing))) as executor:
+            for capsule_path, provenance in zip(missing, executor.map(self._load, missing)):
+                self._cache[capsule_path] = provenance
+
+    def get(self, capsule_path: str, /) -> dict:
+        if capsule_path not in self._cache:
+            self._cache[capsule_path] = self._load(capsule_path)
+        return self._cache[capsule_path]
+
+    def _load(self, capsule_path: str, /) -> dict:
+        asset_metadata = self._metadata.path_to_asset_metadata.get(f"{capsule_path}/dataset_description.json")
+        if asset_metadata is None:
+            _log.warning("Job capsule %s has no dataset_description.json asset", capsule_path)
+            return {}
+        asset = self._metadata.content_id_to_asset.get(asset_metadata.content_id)
+        if asset is None:
+            return {}
+        provenance = _read_asset_json(asset).get(_PROVENANCE_KEY)
+        return provenance if isinstance(provenance, dict) else {}
+
+
+def _resolve_job_info(*, location: _CapsuleLocation, provenance_cache: _CapsuleProvenanceCache) -> JobInfo:
+    """Build the full job identity for a capsule from its directory name or its provenance."""
+    if location.name_fields is not None:
+        fields: dict = location.name_fields
+    else:
+        fields = provenance_cache.get(location.capsule_path)
+        if not fields:
+            _log.warning(
+                "No job provenance for capsule %s; version, codebase, params and config are left blank",
+                location.capsule_path,
+            )
+
+    job_info = JobInfo(
+        dandiset_id=location.dandiset_id,
+        dandi_path=location.dandi_path,
+        pipeline=location.pipeline,
+        version=str(fields.get("version") or ""),
+        params=str(fields.get("params") or ""),
+        config=str(fields.get("config") or ""),
+        # The legacy nested layout carries no codebase segment.
+        codebase=str(fields.get("codebase") or ""),
+        job_id=location.job_id,
+    )
+    return job_info
+
+
+def _new_capsule_record() -> dict[str, object]:
     return {
-        **job.to_dict(),
         "has_code": False,
         "has_been_submitted": False,
         "has_output": False,
@@ -191,29 +300,33 @@ def _new_capsule_record(job: JobInfo, /) -> dict[str, object]:
 
 @dataclass
 class _JobCapsuleCollection:
-    """Bookkeeping accumulated while walking ``assets.jsonld`` once."""
+    """Bookkeeping accumulated while walking ``assets.jsonld`` once, keyed by capsule path."""
 
-    records_by_capsule: dict[JobInfo, dict[str, object]]
-    log_timestamps_by_capsule: dict[JobInfo, list[str]]
-    submit_sh_timestamps_by_capsule: dict[JobInfo, str]
+    records_by_capsule: dict[str, dict[str, object]]
+    locations_by_capsule: dict[str, _CapsuleLocation]
+    log_timestamps_by_capsule: dict[str, list[str]]
+    submit_sh_timestamps_by_capsule: dict[str, str]
 
 
 def _collect_job_capsules(local_metadata: AssetsJsonldMetadata, /) -> _JobCapsuleCollection:
     """
-    Walk every asset path, group by job capsule identity, record presence flags, and
+    Walk every asset path, group by job capsule directory, record presence flags, and
     capture the ``code/submit.sh`` timestamp per capsule (used for ``created_at``).
     """
-    records_by_capsule: dict[JobInfo, dict[str, object]] = {}
-    log_timestamps_by_capsule: dict[JobInfo, list[str]] = {}
-    submit_sh_timestamps_by_capsule: dict[JobInfo, str] = {}
+    records_by_capsule: dict[str, dict[str, object]] = {}
+    locations_by_capsule: dict[str, _CapsuleLocation] = {}
+    log_timestamps_by_capsule: dict[str, list[str]] = {}
+    submit_sh_timestamps_by_capsule: dict[str, str] = {}
 
     for asset_path, asset_metadata in local_metadata.path_to_asset_metadata.items():
-        parsed = _parse_capsule_identity(asset_path)
+        parsed = _parse_capsule_location(asset_path)
         if parsed is None:
             continue
-        job_info, subpath = parsed
+        location, subpath = parsed
+        capsule_path = location.capsule_path
 
-        record = records_by_capsule.setdefault(job_info, _new_capsule_record(job_info))
+        locations_by_capsule.setdefault(capsule_path, location)
+        record = records_by_capsule.setdefault(capsule_path, _new_capsule_record())
 
         if _subpath_is_under(subpath, "code"):
             record["has_code"] = True
@@ -229,13 +342,14 @@ def _collect_job_capsules(local_metadata: AssetsJsonldMetadata, /) -> _JobCapsul
             if log_relative_path and log_relative_path != "dataset_description.json":
                 record["has_logs"] = True
                 record["log_paths"][asset_path] = asset_metadata.content_id
-                log_timestamps_by_capsule.setdefault(job_info, []).append(asset_metadata.date_modified)
+                log_timestamps_by_capsule.setdefault(capsule_path, []).append(asset_metadata.date_modified)
 
         if subpath == "code/submit.sh":
-            submit_sh_timestamps_by_capsule[job_info] = asset_metadata.date_modified
+            submit_sh_timestamps_by_capsule[capsule_path] = asset_metadata.date_modified
 
     return _JobCapsuleCollection(
         records_by_capsule=records_by_capsule,
+        locations_by_capsule=locations_by_capsule,
         log_timestamps_by_capsule=log_timestamps_by_capsule,
         submit_sh_timestamps_by_capsule=submit_sh_timestamps_by_capsule,
     )
@@ -245,14 +359,27 @@ def _finalize_job_capsule_records(
     *,
     collection: _JobCapsuleCollection,
     upstream_cache: _UpstreamMetadataCache,
+    provenance_cache: _CapsuleProvenanceCache,
 ) -> list[dict[str, object]]:
     """
-    Attach source-asset fields (``content_id``, ``asset_size_bytes``) from the
-    upstream dandiset's ``assets.jsonld``, and ``created_at`` /
+    Resolve each capsule's full identity, then attach source-asset fields (``content_id``,
+    ``asset_size_bytes``) from the upstream dandiset's ``assets.jsonld``, and ``created_at`` /
     ``job_completion_time`` from local timestamps.
     """
+    provenance_cache.prefetch(
+        [
+            capsule_path
+            for capsule_path, location in collection.locations_by_capsule.items()
+            if location.name_fields is None
+        ]
+    )
+
     finalized: list[dict[str, object]] = []
-    for job_info, record in collection.records_by_capsule.items():
+    for capsule_path, record in collection.records_by_capsule.items():
+        location = collection.locations_by_capsule[capsule_path]
+        job_info = _resolve_job_info(location=location, provenance_cache=provenance_cache)
+        record.update(job_info.to_dict())
+
         upstream_metadata = upstream_cache.get(job_info.dandiset_id)
         source_metadata = upstream_metadata.path_to_asset_metadata.get(job_info.dandi_path)
 
@@ -269,12 +396,12 @@ def _finalize_job_capsule_records(
             content_id = source_metadata.content_id
             asset_size_bytes = source_metadata.content_size
 
-        completion_times = collection.log_timestamps_by_capsule.get(job_info, [])
+        completion_times = collection.log_timestamps_by_capsule.get(capsule_path, [])
         record.update(
             {
                 "content_id": content_id,
                 "asset_size_bytes": asset_size_bytes,
-                "created_at": collection.submit_sh_timestamps_by_capsule.get(job_info),
+                "created_at": collection.submit_sh_timestamps_by_capsule.get(capsule_path),
                 "job_completion_time": max(completion_times) if completion_times else None,
             }
         )
@@ -282,13 +409,14 @@ def _finalize_job_capsule_records(
     return finalized
 
 
-def _sort_key(record: dict[str, object]) -> tuple[str, str, str]:
+def _sort_key(record: dict[str, object]) -> tuple[str, str, str, str]:
     # content_id may be None for capsules whose upstream source wasn't resolvable;
     # coerce to "" so sorting stays total.
     return (
         str(record["dandiset_id"]),
         str(record["dandi_path"]),
         str(record["content_id"]) if record["content_id"] is not None else "",
+        str(record["job_id"]),
     )
 
 
