@@ -13,18 +13,18 @@ _FAILED_RUNS_ARCHIVE_DANDISET_ID = "001873"
 def test_write_dandiset_state_table_builds_state_and_uploads() -> None:
     """write_dandiset_state_table builds the state from the given Dandiset and uploads a TSV."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    attempt_path = (
+    capsule_path = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-aind+ephys/"
-        "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/code/submit.sh"
+        "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678/code/submit.sh"
     )
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={},
         path_to_asset_metadata={
-            attempt_path: AssetMetadata(
-                path=attempt_path,
+            capsule_path: AssetMetadata(
+                path=capsule_path,
                 date_modified="2025-01-01T00:00:00+00:00",
                 content_size=1,
-                content_id="attempt-code-id",
+                content_id="capsule-code-id",
             )
         },
     )

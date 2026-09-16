@@ -16,7 +16,6 @@ def _make_entry(**overrides: object) -> JobEntry:
         "version": "v1.0",
         "params": "abc1234",
         "config": "def5678",
-        "attempt": 1,
         "codebase": "v0.3.0",
     }
     entry_kwargs = {
@@ -116,7 +115,7 @@ def test_queue_state_from_tsv_preserves_dataset_description_path(tmp_path: pathl
     state_file = tmp_path / "state.tsv"
     dataset_description_path = {
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/"
-        "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678_attempt-1/"
+        "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678/"
         "dataset_description.json": "dataset-description-id"
     }
     entry = _make_entry(dataset_description_path=dataset_description_path)

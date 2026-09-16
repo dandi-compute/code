@@ -2,7 +2,7 @@
 Private helpers for the :mod:`._queue_state` model.
 
 This companion module holds the lower-level utilities the ``QueueState`` /
-``JobEntry`` model depends on (assets-path parsing, attempt-record construction,
+``JobEntry`` model depends on (assets-path parsing, capsule-record construction,
 upstream-metadata lookup, queue-config validation, content-id ordering, and log
 parsing).
 """
@@ -24,6 +24,7 @@ import linkml_runtime.utils.schemaview
 
 from ._globals import _DURATION_PART_RE, _PACKAGED_PIPELINE_CONFIGS_PATH, _QUEUE_CONFIG_SCHEMA_PATH
 from ._job_info import JobInfo
+from ..dandiset._globals import _JOB_CAPSULE_DIR_RE
 from ..dandiset._load_assets_jsonld_metadata import (
     AssetMetadata,
     AssetsJsonldMetadata,
@@ -35,14 +36,13 @@ _log = logging.getLogger(__name__)
 
 _UPSTREAM_JSONLD_URL_TEMPLATE = "https://dandiarchive.s3.amazonaws.com/dandisets/{dandiset_id}/draft/assets.jsonld"
 
-_FLAT_ATTEMPT_RE = re.compile(
+_FLAT_CAPSULE_RE = re.compile(
     r"^version-(?P<version>.+?)"
     r"_codebase-(?P<codebase>[^_]+)"
     r"_params-(?P<params>[^_]+)"
-    r"_config-(?P<config>[^_]+)"
-    r"_attempt-(?P<attempt>\d+)$"
+    r"_config-(?P<config>[^_]+)$"
 )
-_NESTED_ATTEMPT_RE = re.compile(r"^params-(?P<params>[^_]+)_config-(?P<config>[^_]+)_attempt-(?P<attempt>\d+)$")
+_NESTED_CAPSULE_RE = re.compile(r"^params-(?P<params>[^_]+)_config-(?P<config>[^_]+)$")
 
 
 def _find_segment_index(parts: tuple[str, ...], prefix: str, start: int = 0) -> int | None:
@@ -53,19 +53,19 @@ def _find_segment_index(parts: tuple[str, ...], prefix: str, start: int = 0) -> 
     return None
 
 
-def _parse_flat_attempt(parts: tuple[str, ...], index: int) -> tuple[dict[str, str], int] | None:
-    """Parse a single-segment ``version-..._params-..._config-..._attempt-N`` directory."""
-    match = _FLAT_ATTEMPT_RE.fullmatch(parts[index])
+def _parse_flat_capsule(parts: tuple[str, ...], index: int) -> tuple[dict[str, str], int] | None:
+    """Parse a single-segment ``version-..._codebase-..._params-..._config-...`` directory."""
+    match = _FLAT_CAPSULE_RE.fullmatch(parts[index])
     if match is None:
         return None
     return match.groupdict(), index
 
 
-def _parse_nested_attempt(parts: tuple[str, ...], index: int) -> tuple[dict[str, str], int] | None:
-    """Parse a ``version-X / params-..._config-..._attempt-N`` directory pair."""
+def _parse_nested_capsule(parts: tuple[str, ...], index: int) -> tuple[dict[str, str], int] | None:
+    """Parse a ``version-X / params-..._config-...`` directory pair."""
     if not parts[index].startswith("version-") or index + 1 >= len(parts):
         return None
-    match = _NESTED_ATTEMPT_RE.fullmatch(parts[index + 1])
+    match = _NESTED_CAPSULE_RE.fullmatch(parts[index + 1])
     if match is None:
         return None
     fields = match.groupdict()
@@ -73,11 +73,11 @@ def _parse_nested_attempt(parts: tuple[str, ...], index: int) -> tuple[dict[str,
     return fields, index + 1
 
 
-def _parse_attempt_identity(asset_path: str) -> tuple[JobInfo, str] | None:
+def _parse_capsule_identity(asset_path: str, /) -> tuple[JobInfo, str] | None:
     """
     Parse an asset path of the form
-    ``derivatives/dandiset-XXX/.../pipeline-NAME/<attempt-dir>/<subpath>`` into a
-    :class:`JobInfo` and the subpath beneath the attempt directory. Returns
+    ``derivatives/dandiset-XXX/.../pipeline-NAME/<capsule-dir>/<subpath>`` into a
+    :class:`JobInfo` and the subpath beneath the job capsule directory. Returns
     ``None`` if the path does not match either supported layout.
     """
     parts = pathlib.PurePosixPath(asset_path).parts
@@ -94,17 +94,17 @@ def _parse_attempt_identity(asset_path: str) -> tuple[JobInfo, str] | None:
     if not pipeline:
         return None
 
-    attempt_dir_index = pipeline_index + 1
-    if attempt_dir_index >= len(parts):
+    capsule_dir_index = pipeline_index + 1
+    if capsule_dir_index >= len(parts):
         return None
 
-    parsed = _parse_flat_attempt(parts, attempt_dir_index) or _parse_nested_attempt(parts, attempt_dir_index)
+    parsed = _parse_flat_capsule(parts, capsule_dir_index) or _parse_nested_capsule(parts, capsule_dir_index)
     if parsed is None:
         return None
-    fields, attempt_directory_index = parsed
+    fields, capsule_directory_index = parsed
 
     dandi_path = "/".join(parts[dandiset_index + 1 : pipeline_index]) + ".nwb"
-    subpath = "/".join(parts[attempt_directory_index + 1 :])
+    subpath = "/".join(parts[capsule_directory_index + 1 :])
 
     job_info = JobInfo(
         dandiset_id=parts[dandiset_index][len("dandiset-") :],
@@ -113,8 +113,8 @@ def _parse_attempt_identity(asset_path: str) -> tuple[JobInfo, str] | None:
         version=fields["version"],
         params=fields["params"],
         config=fields["config"],
-        attempt=int(fields["attempt"]),
-        codebase=fields["codebase"],
+        # The legacy nested layout carries no codebase segment.
+        codebase=fields.get("codebase") or "",
     )
     return job_info, subpath
 
@@ -176,7 +176,7 @@ class _UpstreamMetadataCache:
         return self._cache[dandiset_id]
 
 
-def _new_attempt_record(job: JobInfo) -> dict[str, object]:
+def _new_capsule_record(job: JobInfo, /) -> dict[str, object]:
     return {
         **job.to_dict(),
         "has_code": False,
@@ -190,30 +190,30 @@ def _new_attempt_record(job: JobInfo) -> dict[str, object]:
 
 
 @dataclass
-class _AttemptCollection:
+class _JobCapsuleCollection:
     """Bookkeeping accumulated while walking ``assets.jsonld`` once."""
 
-    records_by_attempt: dict[JobInfo, dict[str, object]]
-    log_timestamps_by_attempt: dict[JobInfo, list[str]]
-    submit_sh_timestamps_by_attempt: dict[JobInfo, str]
+    records_by_capsule: dict[JobInfo, dict[str, object]]
+    log_timestamps_by_capsule: dict[JobInfo, list[str]]
+    submit_sh_timestamps_by_capsule: dict[JobInfo, str]
 
 
-def _collect_attempts(local_metadata: AssetsJsonldMetadata) -> _AttemptCollection:
+def _collect_job_capsules(local_metadata: AssetsJsonldMetadata, /) -> _JobCapsuleCollection:
     """
-    Walk every asset path, group by attempt identity, record presence flags, and
-    capture the ``code/submit.sh`` timestamp per attempt (used for ``created_at``).
+    Walk every asset path, group by job capsule identity, record presence flags, and
+    capture the ``code/submit.sh`` timestamp per capsule (used for ``created_at``).
     """
-    records_by_attempt: dict[JobInfo, dict[str, object]] = {}
-    log_timestamps_by_attempt: dict[JobInfo, list[str]] = {}
-    submit_sh_timestamps_by_attempt: dict[JobInfo, str] = {}
+    records_by_capsule: dict[JobInfo, dict[str, object]] = {}
+    log_timestamps_by_capsule: dict[JobInfo, list[str]] = {}
+    submit_sh_timestamps_by_capsule: dict[JobInfo, str] = {}
 
     for asset_path, asset_metadata in local_metadata.path_to_asset_metadata.items():
-        parsed = _parse_attempt_identity(asset_path)
+        parsed = _parse_capsule_identity(asset_path)
         if parsed is None:
             continue
         job_info, subpath = parsed
 
-        record = records_by_attempt.setdefault(job_info, _new_attempt_record(job_info))
+        record = records_by_capsule.setdefault(job_info, _new_capsule_record(job_info))
 
         if _subpath_is_under(subpath, "code"):
             record["has_code"] = True
@@ -229,21 +229,21 @@ def _collect_attempts(local_metadata: AssetsJsonldMetadata) -> _AttemptCollectio
             if log_relative_path and log_relative_path != "dataset_description.json":
                 record["has_logs"] = True
                 record["log_paths"][asset_path] = asset_metadata.content_id
-                log_timestamps_by_attempt.setdefault(job_info, []).append(asset_metadata.date_modified)
+                log_timestamps_by_capsule.setdefault(job_info, []).append(asset_metadata.date_modified)
 
         if subpath == "code/submit.sh":
-            submit_sh_timestamps_by_attempt[job_info] = asset_metadata.date_modified
+            submit_sh_timestamps_by_capsule[job_info] = asset_metadata.date_modified
 
-    return _AttemptCollection(
-        records_by_attempt=records_by_attempt,
-        log_timestamps_by_attempt=log_timestamps_by_attempt,
-        submit_sh_timestamps_by_attempt=submit_sh_timestamps_by_attempt,
+    return _JobCapsuleCollection(
+        records_by_capsule=records_by_capsule,
+        log_timestamps_by_capsule=log_timestamps_by_capsule,
+        submit_sh_timestamps_by_capsule=submit_sh_timestamps_by_capsule,
     )
 
 
-def _finalize_attempt_records(
+def _finalize_job_capsule_records(
     *,
-    collection: _AttemptCollection,
+    collection: _JobCapsuleCollection,
     upstream_cache: _UpstreamMetadataCache,
 ) -> list[dict[str, object]]:
     """
@@ -252,7 +252,7 @@ def _finalize_attempt_records(
     ``job_completion_time`` from local timestamps.
     """
     finalized: list[dict[str, object]] = []
-    for job_info, record in collection.records_by_attempt.items():
+    for job_info, record in collection.records_by_capsule.items():
         upstream_metadata = upstream_cache.get(job_info.dandiset_id)
         source_metadata = upstream_metadata.path_to_asset_metadata.get(job_info.dandi_path)
 
@@ -269,12 +269,12 @@ def _finalize_attempt_records(
             content_id = source_metadata.content_id
             asset_size_bytes = source_metadata.content_size
 
-        completion_times = collection.log_timestamps_by_attempt.get(job_info, [])
+        completion_times = collection.log_timestamps_by_capsule.get(job_info, [])
         record.update(
             {
                 "content_id": content_id,
                 "asset_size_bytes": asset_size_bytes,
-                "created_at": collection.submit_sh_timestamps_by_attempt.get(job_info),
+                "created_at": collection.submit_sh_timestamps_by_capsule.get(job_info),
                 "job_completion_time": max(completion_times) if completion_times else None,
             }
         )
@@ -283,7 +283,7 @@ def _finalize_attempt_records(
 
 
 def _sort_key(record: dict[str, object]) -> tuple[str, str, str]:
-    # content_id may be None for attempts whose upstream source wasn't resolvable;
+    # content_id may be None for capsules whose upstream source wasn't resolvable;
     # coerce to "" so sorting stays total.
     return (
         str(record["dandiset_id"]),
@@ -433,12 +433,16 @@ def _extract_error_lines(*, log_file: pathlib.Path) -> list[str]:
 
 
 def _list_capsule_log_directories(*, dandiset_directory: pathlib.Path) -> list[pathlib.Path]:
-    """Return sorted ``logs/`` directories that belong to attempt capsules."""
+    """Return sorted ``logs/`` directories that belong to job capsules."""
     derivatives_root = dandiset_directory / "derivatives"
     if not derivatives_root.is_dir():
         return []
 
-    return sorted(path for path in derivatives_root.rglob("logs") if path.is_dir() and "_attempt-" in path.parent.name)
+    return sorted(
+        path
+        for path in derivatives_root.rglob("logs")
+        if path.is_dir() and _JOB_CAPSULE_DIR_RE.fullmatch(path.parent.name) is not None
+    )
 
 
 def _remove_empty_parents(*, start: pathlib.Path, stop: pathlib.Path) -> None:
