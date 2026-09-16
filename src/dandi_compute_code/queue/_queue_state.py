@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from ._fetch_qualifying_aind_content_ids import _fetch_qualifying_aind_content_ids
+from ._fetch_qualifying_lfp_content_ids import _fetch_qualifying_lfp_content_ids
 from ._globals import _AIND_EPHYS_PARAMS_REGISTRY
 from ._job_info import JobInfo
 from ._queue_utils import (
@@ -58,6 +59,7 @@ from ..dandiset._load_assets_jsonld_metadata import (
     _build_asset_metadata,
     load_assets_jsonld_metadata,
 )
+from ..lfp_pipeline import prepare_lfp_job
 
 _log = logging.getLogger(__name__)
 
@@ -1117,6 +1119,7 @@ class QueueState:
         config_key: str = "default",
         content_ids: list[str] | None = None,
         limit: int | None = None,
+        only_pipeline: str | None = None,
     ) -> int:
         """
         En-masse preparation of qualifying assets based on the packaged pipeline config.
@@ -1136,21 +1139,38 @@ class QueueState:
         :param content_ids: Explicit content IDs to prepare; when provided, the
             qualifying list is not fetched from the network.
         :param limit: If provided, form at most *limit* job capsules in total.
+        :param only_pipeline: If provided, prepare only this pipeline instead of
+            every pipeline in the config. Raises if the name is not configured.
         :returns: The number of job capsules that were formed.
         :rtype: int
         """
         queue_config = _load_queue_config()
-
-        if content_ids is None:
-            fetched_content_ids = _fetch_qualifying_aind_content_ids()
-            content_ids = _order_content_ids_for_uniform_dandiset_sampling(content_ids=fetched_content_ids)
+        pipelines = queue_config.get("pipelines", {})
+        if only_pipeline is not None and only_pipeline not in pipelines:
+            configured = list(pipelines.keys())
+            message = f"Pipeline '{only_pipeline}' is not configured. Configured pipelines are: {configured}."
+            raise ValueError(message)
 
         state = cls.from_dandi()
         existing_capsule_keys = state._existing_capsule_keys()
         content_id_to_dandiset_ids = state.content_id_to_dandiset_ids()
 
         prepared_count = 0
-        for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
+        for pipeline_name, pipeline_data in pipelines.items():
+            if only_pipeline is not None and pipeline_name != only_pipeline:
+                continue
+            if limit is not None and prepared_count >= limit:
+                break
+            if content_ids is not None:
+                pipeline_content_ids = content_ids
+            elif pipeline_name == "lfp":
+                pipeline_content_ids = _order_content_ids_for_uniform_dandiset_sampling(
+                    content_ids=_fetch_qualifying_lfp_content_ids()
+                )
+            else:
+                pipeline_content_ids = _order_content_ids_for_uniform_dandiset_sampling(
+                    content_ids=_fetch_qualifying_aind_content_ids()
+                )
             for version in pipeline_data.get("version_priority", []):
                 max_fail = pipeline_data.get("max_fail_per_dandiset")
                 capped_dandiset_ids = (
@@ -1162,7 +1182,7 @@ class QueueState:
                 for params in pipeline_data.get("params_priority", []):
                     params_id = cls.resolve_params_key_to_id(pipeline_name, params)
 
-                    for content_id in content_ids:
+                    for content_id in pipeline_content_ids:
                         if limit is not None and prepared_count >= limit:
                             _log.info(f"Reached the preparation limit of {limit} job capsules.")
                             return prepared_count
@@ -1182,14 +1202,22 @@ class QueueState:
 
                         _log.info(f"Preparing content ID: {content_id}")
                         try:
-                            script_file_path = prepare_aind_ephys_job(
-                                content_id=content_id,
-                                parameters_key=params,
-                                pipeline_version=version,
-                                pipeline_directory=pipeline_directory,
-                                config_key=config_key,
-                                silent=True,
-                            )
+                            if pipeline_name == "lfp":
+                                script_file_path = prepare_lfp_job(
+                                    content_id=content_id,
+                                    parameters_key=params,
+                                    pipeline_version=version,
+                                    silent=True,
+                                )
+                            else:
+                                script_file_path = prepare_aind_ephys_job(
+                                    content_id=content_id,
+                                    parameters_key=params,
+                                    pipeline_version=version,
+                                    pipeline_directory=pipeline_directory,
+                                    config_key=config_key,
+                                    silent=True,
+                                )
                         except UnmappedContentIDError as error:
                             _log.warning(f"Skipping preparation for {label}: {error}")
                             continue

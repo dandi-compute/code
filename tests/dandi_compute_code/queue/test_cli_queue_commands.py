@@ -34,6 +34,25 @@ def test_cli_prepare_test_calls_prepare_with_test_content_id() -> None:
 
 
 @pytest.mark.ai_generated
+def test_cli_queue_prepare_forwards_pipeline_as_only_pipeline() -> None:
+    """dandicompute queue prepare --pipeline <name> forwards only_pipeline to QueueState.prepare."""
+    runner = CliRunner()
+
+    with (
+        mock.patch.dict("os.environ", {"DANDI_API_KEY": "test-key"}),
+        mock.patch(f"{_GROUP}.QueueState.prepare") as mock_prepare,
+    ):
+        result = runner.invoke(_dandicompute_group, ["queue", "prepare", "--pipeline", "lfp", "--limit", "5"])
+
+    assert result.exit_code == 0
+    mock_prepare.assert_called_once_with(
+        config_key="default",
+        limit=5,
+        only_pipeline="lfp",
+    )
+
+
+@pytest.mark.ai_generated
 def test_cli_prepare_test_passes_config_key() -> None:
     """dandicompute prepare aind --test forwards --config to QueueState.prepare."""
     runner = CliRunner()
