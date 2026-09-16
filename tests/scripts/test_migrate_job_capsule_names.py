@@ -65,7 +65,9 @@ def _plan(capsule_names: list[str], *, pipeline_path: str = _AIND_PIPELINE_PATH)
     script = _load_script()
     with (
         mock.patch.object(
-            script, "load_assets_jsonld_metadata", return_value=_metadata_for(capsule_names, pipeline_path=pipeline_path)
+            script,
+            "load_assets_jsonld_metadata",
+            return_value=_metadata_for(capsule_names, pipeline_path=pipeline_path),
         ),
         mock.patch.object(script, "_load_upstream_assets_jsonld_metadata", return_value=_upstream_metadata()),
     ):
@@ -90,9 +92,7 @@ def _plan(capsule_names: list[str], *, pipeline_path: str = _AIND_PIPELINE_PATH)
         pytest.param(
             "version-v1.0.0/params-abc1234_config-def5678_attempt-3", "v1.0.0", "", "def5678", id="nested_attempt"
         ),
-        pytest.param(
-            "version-v1.1.0_codebase-v0.3.0_params-abc1234", "v1.1.0", "v0.3.0", "", id="flat_without_config"
-        ),
+        pytest.param("version-v1.1.0_codebase-v0.3.0_params-abc1234", "v1.1.0", "v0.3.0", "", id="flat_without_config"),
     ],
 )
 def test_plan_migration_parses_every_legacy_layout(
