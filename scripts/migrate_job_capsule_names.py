@@ -53,6 +53,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 _log = logging.getLogger("migrate_job_capsule_names")
 
@@ -200,14 +201,61 @@ def parse_legacy_capsule(*, capsule_dir: pathlib.Path, dandiset_root: pathlib.Pa
     return identity
 
 
-def find_legacy_capsules(dandiset_root: pathlib.Path, /) -> list[pathlib.Path]:
+class _Progress:
     """
-    Find every legacy job capsule directory in a local clone.
+    A one-line progress report on stderr, so a long scan is never a silent wait.
 
-    A capsule is recognised by holding a ``code`` directory under a ``pipeline-*`` ancestor,
-    which avoids walking into the (potentially large) capsule contents.
+    Writes an updating line when stderr is a terminal, and periodic log lines otherwise, so
+    piping the output to a file stays readable. Always reports what it is working on, which is
+    what makes a stall diagnosable.
+    """
 
-    :return: Capsule directories, sorted.
+    def __init__(self, label: str, /, *, interval: float = 0.4) -> None:
+        self._label = label
+        self._interval = interval
+        self._count = 0
+        self._started = time.monotonic()
+        self._last_report = 0.0
+        self._is_terminal = sys.stderr.isatty()
+
+    def advance(self, detail: str = "", /) -> None:
+        self._count += 1
+        now = time.monotonic()
+        if now - self._last_report < self._interval:
+            return
+        self._last_report = now
+        self._write(detail)
+
+    def _write(self, detail: str, /) -> None:
+        elapsed = time.monotonic() - self._started
+        message = f"{self._label}: {self._count} ({elapsed:.0f}s)"
+        if detail:
+            message = f"{message}  {detail}"
+        if self._is_terminal:
+            sys.stderr.write(f"\r\033[K{message[:160]}")
+            sys.stderr.flush()
+        else:
+            _log.info("%s", message)
+
+    def close(self, detail: str = "", /) -> int:
+        """Finish the line and return the count reached."""
+        self._last_report = 0.0
+        self._write(detail)
+        if self._is_terminal:
+            sys.stderr.write("\n")
+            sys.stderr.flush()
+        return self._count
+
+
+def find_pipeline_directories(dandiset_root: pathlib.Path, /) -> list[pathlib.Path]:
+    """
+    Find every ``pipeline-*`` directory in a local clone.
+
+    The walk is pruned at each ``pipeline-*`` directory, so it never descends into the
+    capsules themselves. That matters: a capsule's ``derivatives`` and ``logs`` trees hold the
+    bulk of the clone, and walking them would dominate the scan.
+
+    :return: Pipeline directories, sorted.
     :rtype: list[pathlib.Path]
     """
     derivatives_root = dandiset_root / "derivatives"
@@ -215,9 +263,49 @@ def find_legacy_capsules(dandiset_root: pathlib.Path, /) -> list[pathlib.Path]:
         _log.warning("No derivatives directory under %s", dandiset_root)
         return []
 
-    capsule_dirs = {
-        code_dir.parent for code_dir in derivatives_root.rglob("code") if code_dir.is_dir() and code_dir.name == "code"
-    }
+    progress = _Progress(f"Scanning {dandiset_root.name} for pipeline directories")
+    pipeline_dirs: list[pathlib.Path] = []
+    for current, subdirectory_names, _ in os.walk(derivatives_root):
+        current_dir = pathlib.Path(current)
+        progress.advance(current_dir.name)
+        if current_dir.name.startswith("pipeline-"):
+            pipeline_dirs.append(current_dir)
+            # Everything below is capsule contents; there is nothing to find down there.
+            subdirectory_names.clear()
+
+    progress.close(f"found {len(pipeline_dirs)} pipeline directories")
+    return sorted(pipeline_dirs)
+
+
+def _iter_capsule_candidates(pipeline_dir: pathlib.Path, /):
+    """
+    Yield the directories directly under *pipeline_dir* that could be job capsules.
+
+    The nested layout puts capsules one level further down, under a bare ``version-``
+    directory, so that one level is descended into and nothing else is.
+    """
+    for child in sorted(pipeline_dir.iterdir()):
+        if not child.is_dir():
+            continue
+        is_capsule_name = (
+            _JOB_ID_RE.fullmatch(child.name) is not None or _LEGACY_CAPSULE_DIR_RE.fullmatch(child.name) is not None
+        )
+        if not is_capsule_name and child.name.startswith("version-"):
+            yield from (grandchild for grandchild in sorted(child.iterdir()) if grandchild.is_dir())
+        else:
+            yield child
+
+
+def find_legacy_capsules(dandiset_root: pathlib.Path, /) -> list[pathlib.Path]:
+    """
+    Find every legacy job capsule directory in a local clone.
+
+    :return: Capsule directories, sorted.
+    :rtype: list[pathlib.Path]
+    """
+    capsule_dirs = []
+    for pipeline_dir in find_pipeline_directories(dandiset_root):
+        capsule_dirs.extend(_iter_capsule_candidates(pipeline_dir))
     return sorted(capsule_dirs)
 
 
@@ -234,10 +322,21 @@ def plan_migration(*, dandiset_root: pathlib.Path) -> list[dict]:
         and the parsed ``identity``. Paths are relative to *dandiset_root*.
     :rtype: list[dict]
     """
+    capsule_dirs = find_legacy_capsules(dandiset_root)
+    progress = _Progress(f"Examining {dandiset_root.name} capsules")
+    already_migrated = 0
+    unrecognised: list[pathlib.Path] = []
+
     candidates: list[dict] = []
-    for capsule_dir in find_legacy_capsules(dandiset_root):
+    for capsule_dir in capsule_dirs:
+        progress.advance(capsule_dir.name)
+        if _JOB_ID_RE.fullmatch(capsule_dir.name) is not None:
+            already_migrated += 1
+            continue
+
         identity = parse_legacy_capsule(capsule_dir=capsule_dir, dandiset_root=dandiset_root)
         if identity is None:
+            unrecognised.append(capsule_dir)
             continue
 
         identity["content_id"] = read_content_id(capsule_dir)
@@ -263,6 +362,12 @@ def plan_migration(*, dandiset_root: pathlib.Path) -> list[dict]:
                 "identity": identity,
             }
         )
+
+    progress.close(
+        f"{len(candidates)} to migrate, {already_migrated} already migrated, {len(unrecognised)} unrecognised"
+    )
+    for capsule_dir in unrecognised:
+        _log.warning("Not a recognised job capsule, leaving alone: %s", capsule_dir)
 
     counts = collections.Counter(record["new_path"] for record in candidates)
     colliding = {new_path for new_path, count in counts.items() if count > 1}

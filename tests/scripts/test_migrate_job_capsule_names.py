@@ -333,3 +333,48 @@ def test_phases_requiring_the_archive_fail_without_a_manifest(tmp_path: pathlib.
 
     with pytest.raises(RuntimeError, match="No migration manifest"):
         script._PHASES[phase](root=tmp_path, dandiset_ids=[_DANDISET_ID])
+
+
+@pytest.mark.ai_generated
+def test_scan_does_not_descend_into_capsule_contents(tmp_path: pathlib.Path) -> None:
+    """
+    The scan stops at each `pipeline-*` directory.
+
+    A capsule's own output tree can hold the bulk of a clone, and walking it dominates the
+    scan on a slow mount. A stray `code` directory inside a capsule's output must therefore
+    neither be visited nor mistaken for a capsule of its own.
+    """
+    script = _load_script()
+    root = _clone(tmp_path, [_LEGACY_FLAT_NAME], with_output=True)
+    dandiset_root = root / _DANDISET_ID
+    capsule_dir = dandiset_root / _AIND_PIPELINE_PATH / _LEGACY_FLAT_NAME
+    decoy = capsule_dir / "derivatives" / "nested" / "code"
+    decoy.mkdir(parents=True)
+
+    capsules = script.find_legacy_capsules(dandiset_root)
+
+    assert capsules == [capsule_dir]
+
+
+@pytest.mark.ai_generated
+def test_scan_visits_far_fewer_entries_than_walking_everything(tmp_path: pathlib.Path) -> None:
+    """The pruned scan is bounded by the tree's shape, not by how much output the capsules hold."""
+    script = _load_script()
+    root = _clone(tmp_path, [_LEGACY_FLAT_NAME], with_output=True)
+    dandiset_root = root / _DANDISET_ID
+    output_dir = dandiset_root / _AIND_PIPELINE_PATH / _LEGACY_FLAT_NAME / "derivatives"
+    for index in range(200):
+        (output_dir / f"part-{index:04d}.dat").write_text("x")
+
+    visited: list[pathlib.Path] = []
+    real_scandir = os.scandir
+
+    def _counting_scandir(path):
+        visited.append(pathlib.Path(path))
+        return real_scandir(path)
+
+    with mock.patch.object(os, "scandir", _counting_scandir):
+        script.find_legacy_capsules(dandiset_root)
+
+    assert not any(str(path).endswith("derivatives") and "pipeline-" in str(path) for path in visited)
+    assert len(visited) < 20
