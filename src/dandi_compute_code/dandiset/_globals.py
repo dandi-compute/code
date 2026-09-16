@@ -1,10 +1,9 @@
 import re
 
-# TODO: rename _ATTEMPT_DIR_RE to JOB_CAPSULE_ID_PATTERN
-_ATTEMPT_DIR_RE = re.compile(
-    r"(?:version-(?P<version_in_name>.+?)_codebase-(?P<codebase>[^_]+)_)?params-(?P<params>[^_]+)_config-(?P<config>[^_]+)_attempt-(?P<attempt>\d+)"
+_JOB_CAPSULE_DIR_RE = re.compile(
+    r"(?:version-(?P<version_in_name>.+?)_codebase-(?P<codebase>[^_]+)_)?"
+    r"params-(?P<params>[^_]+)_config-(?P<config>[^_]+)"
 )
-_ATTEMPT_SUFFIX_RE = re.compile(r"_attempt-\d+$")
 _SANDBOX_DANDISET_ID = "214527"
 _JOB_CAPSULES_DANDISET_ID = "001697"
 _FAILED_RUNS_ARCHIVE_DANDISET_ID = "001873"

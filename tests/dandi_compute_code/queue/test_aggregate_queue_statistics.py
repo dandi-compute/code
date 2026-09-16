@@ -4,7 +4,7 @@ from datetime import datetime
 from unittest import mock
 
 import pytest
-from testing_utilities import create_attempt_directory
+from testing_utilities import create_job_capsule_directory
 
 from dandi_compute_code.queue import QueueState
 
@@ -32,10 +32,10 @@ def test_aggregate_queue_statistics_writes_queue_stats_json(
     dandiset_dir = tmp_path / "dandiset"
 
     # sub-successful is the only entry with both output and a known source-asset size.
-    attempt_dir = create_attempt_directory(
+    capsule_dir = create_job_capsule_directory(
         base_dir=dandiset_dir, entry=example_queue_state.entry_for(dandi_path="sub-successful"), with_logs=True
     )
-    (attempt_dir / "logs" / "timeline.html").write_text(timeline_two_steps)
+    (capsule_dir / "logs" / "timeline.html").write_text(timeline_two_steps)
 
     with mock.patch("dandi_compute_code.queue._queue_state.write_dandiset_file") as mock_write_file:
         stats = example_queue_state.aggregate_statistics(dandiset_directory=dandiset_dir)
@@ -61,10 +61,10 @@ def test_aggregate_queue_statistics_skips_invalid_timeline_html(
     """aggregate_statistics ignores timeline files with malformed embedded JSON."""
     dandiset_dir = tmp_path / "dandiset"
 
-    attempt_dir = create_attempt_directory(
+    capsule_dir = create_job_capsule_directory(
         base_dir=dandiset_dir, entry=example_queue_state.entry_for(dandi_path="sub-successful"), with_logs=True
     )
-    (attempt_dir / "logs" / "timeline.html").write_text("<script>window.data = {invalid json};</script>")
+    (capsule_dir / "logs" / "timeline.html").write_text("<script>window.data = {invalid json};</script>")
 
     with mock.patch("dandi_compute_code.queue._queue_state.write_dandiset_file"):
         stats = example_queue_state.aggregate_statistics(dandiset_directory=dandiset_dir)
@@ -74,24 +74,24 @@ def test_aggregate_queue_statistics_skips_invalid_timeline_html(
 
 
 @pytest.mark.ai_generated
-def test_aggregate_queue_statistics_found_timeline_via_fallback_attempt_resolution(
+def test_aggregate_queue_statistics_found_timeline_via_fallback_capsule_resolution(
     example_queue_state: QueueState, tmp_path: pathlib.Path, timeline_one_step: str
 ) -> None:
-    """aggregate_statistics finds timeline files when state dandi_path differs from on-disk attempt path."""
+    """aggregate_statistics finds timeline files when state dandi_path differs from the on-disk path."""
     dandiset_dir = tmp_path / "dandiset"
 
-    # The "sourcedata" entry's on-disk attempt lives under sub-mouse01, so its timeline
+    # The "sourcedata" entry's on-disk capsule lives under sub-mouse01, so its timeline
     # must be located via fallback resolution rather than the recorded dandi_path.
-    attempt_dir = (
+    capsule_dir = (
         dandiset_dir
         / "derivatives"
         / "dandisets-001"
         / "dandiset-001849"
         / "sub-mouse01"
         / "pipeline-aind+ephys"
-        / "version-v1.1.1+b268fd2+a66c8df_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
+        / "version-v1.1.1+b268fd2+a66c8df_codebase-v0.3.0_params-4af6a25_config-0d4bf36"
     )
-    logs_dir = attempt_dir / "logs"
+    logs_dir = capsule_dir / "logs"
     logs_dir.mkdir(parents=True)
     (logs_dir / "timeline.html").write_text(timeline_one_step)
 

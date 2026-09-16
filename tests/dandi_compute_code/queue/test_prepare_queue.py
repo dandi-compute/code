@@ -17,9 +17,19 @@ _TEST_QUEUE_CONFIG = {
         "test": {
             "version_priority": ["v1.0"],
             "params_priority": ["default"],
-            "max_attempts_per_asset": 2,
             "asset_overrides": {"asset-aaa": 1},
             "max_fail_per_dandiset": 2,
+        }
+    }
+}
+
+#: Same pipeline/version as the example queue, but different params, so no example entry
+#: counts as an already-formed job capsule.
+_TEST_QUEUE_CONFIG_ALTERNATE_PARAMS = {
+    "pipelines": {
+        "test": {
+            **_TEST_QUEUE_CONFIG["pipelines"]["test"],
+            "params_priority": ["alternate"],
         }
     }
 }
@@ -65,6 +75,35 @@ def test_prepare_queue_skips_when_failures_reach_max(example_queue_state: QueueS
     qualifying_ids = ["asset-aaa", "asset-bbb"]
 
     with (
+        mock.patch(
+            "dandi_compute_code.queue._queue_state._load_queue_config",
+            return_value=_TEST_QUEUE_CONFIG_ALTERNATE_PARAMS,
+        ),
+        mock.patch("dandi_compute_code.queue._queue_state.QueueState.from_dandi", return_value=example_queue_state),
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch(
+            "dandi_compute_code.queue._queue_utils._load_content_id_to_usage_dandiset_path",
+            return_value={},
+        ),
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_aind_ephys_job") as mock_prepare,
+    ):
+        mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
+        prepared_count = QueueState.prepare()
+
+    assert prepared_count == 1
+    prepared_ids = [call.kwargs["content_id"] for call in mock_prepare.call_args_list]
+    assert prepared_ids == ["asset-bbb"]
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_skips_content_ids_that_already_have_a_job_capsule(
+    example_queue_state: QueueState,
+) -> None:
+    """prepare_queue never forms a second job capsule for a pipeline/version/params/content ID."""
+    # asset-bbb already has a capsule in the example queue for test/v1.0/default; asset-zzz does not.
+    qualifying_ids = ["asset-bbb", "asset-zzz"]
+
+    with (
         mock.patch("dandi_compute_code.queue._queue_state._load_queue_config", return_value=_TEST_QUEUE_CONFIG),
         mock.patch("dandi_compute_code.queue._queue_state.QueueState.from_dandi", return_value=example_queue_state),
         mock.patch("urllib.request.urlopen") as mock_urlopen,
@@ -75,11 +114,33 @@ def test_prepare_queue_skips_when_failures_reach_max(example_queue_state: QueueS
         mock.patch("dandi_compute_code.queue._queue_state.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        QueueState.prepare()
+        prepared_count = QueueState.prepare()
 
-    assert mock_prepare.call_count == 1
+    assert prepared_count == 1
     prepared_ids = [call.kwargs["content_id"] for call in mock_prepare.call_args_list]
-    assert prepared_ids == ["asset-bbb"]
+    assert prepared_ids == ["asset-zzz"]
+
+
+@pytest.mark.ai_generated
+def test_prepare_queue_does_not_count_capsules_that_already_existed() -> None:
+    """A None from prepare_aind_ephys_job (capsule already on the archive) is not counted or limited."""
+    qualifying_ids = ["asset-bbb", "asset-ccc", "asset-ddd"]
+
+    with (
+        mock.patch("dandi_compute_code.queue._queue_state._load_queue_config", return_value=_TEST_QUEUE_CONFIG),
+        mock.patch("urllib.request.urlopen") as mock_urlopen,
+        mock.patch(
+            "dandi_compute_code.queue._queue_utils._load_content_id_to_usage_dandiset_path",
+            return_value={},
+        ),
+        mock.patch("dandi_compute_code.queue._queue_state.prepare_aind_ephys_job") as mock_prepare,
+    ):
+        mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
+        mock_prepare.side_effect = [None, pathlib.Path("submit.sh"), None]
+        prepared_count = QueueState.prepare(limit=1)
+
+    assert mock_prepare.call_count == 2
+    assert prepared_count == 1
 
 
 @pytest.mark.ai_generated
@@ -125,9 +186,10 @@ def test_prepare_queue_limit_stops_after_n_assets() -> None:
         mock.patch("dandi_compute_code.queue._queue_state.prepare_aind_ephys_job") as mock_prepare,
     ):
         mock_urlopen.return_value = _mock_urlopen_response(qualifying_ids)
-        QueueState.prepare(limit=2)
+        prepared_count = QueueState.prepare(limit=2)
 
     assert mock_prepare.call_count == 2
+    assert prepared_count == 2
 
 
 @pytest.mark.ai_generated

@@ -29,34 +29,34 @@ def _build_metadata(paths: list[str]) -> AssetsJsonldMetadata:
     [
         pytest.param([], False, id="empty-metadata"),
         pytest.param(
-            ["sub-1/attempt-1/code/submit.sh"],
+            ["sub-1/capsule-a/code/submit.sh"],
             True,
             id="single-unsubmitted",
         ),
         pytest.param(
-            ["sub-1/attempt-1/code/submit.sh", "sub-1/attempt-1/code/submitted"],
+            ["sub-1/capsule-a/code/submit.sh", "sub-1/capsule-a/code/submitted"],
             False,
             id="submitted-plain-marker",
         ),
         pytest.param(
             [
-                "sub-1/attempt-1/code/submit.sh",
-                "sub-1/attempt-1/code/submitted_date-2026+01+01_time-00+00+00",
+                "sub-1/capsule-a/code/submit.sh",
+                "sub-1/capsule-a/code/submitted_date-2026+01+01_time-00+00+00",
             ],
             False,
             id="submitted-dated-marker",
         ),
         pytest.param(
             [
-                "sub-1/attempt-1/code/submit.sh",
-                "sub-1/attempt-1/code/submitted",
-                "sub-2/attempt-1/code/submit.sh",
+                "sub-1/capsule-a/code/submit.sh",
+                "sub-1/capsule-a/code/submitted",
+                "sub-2/capsule-a/code/submit.sh",
             ],
             True,
             id="mixed-one-pending",
         ),
         pytest.param(
-            ["sub-1/attempt-1/code/some_other_file.txt"],
+            ["sub-1/capsule-a/code/some_other_file.txt"],
             False,
             id="no-submit-script",
         ),

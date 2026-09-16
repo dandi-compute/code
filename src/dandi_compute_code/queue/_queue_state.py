@@ -1,7 +1,7 @@
 """
 QueueState — typed container for ``state.tsv``.
 
-``state.tsv`` is a tab-separated table where each row is one attempt
+``state.tsv`` is a tab-separated table where each row is one job
 capsule. This module provides the typed model over it:
 
 - :class:`JobEntry` wraps an existing :class:`JobInfo` with the status fields
@@ -33,11 +33,11 @@ from ._fetch_qualifying_aind_content_ids import _fetch_qualifying_aind_content_i
 from ._globals import _AIND_EPHYS_PARAMS_REGISTRY
 from ._job_info import JobInfo
 from ._queue_utils import (
-    _collect_attempts,
+    _collect_job_capsules,
     _duration_string_to_seconds,
     _extract_error_lines,
     _extract_nextflow_timeline_data,
-    _finalize_attempt_records,
+    _finalize_job_capsule_records,
     _list_capsule_log_directories,
     _load_queue_config,
     _order_content_ids_for_uniform_dandiset_sampling,
@@ -72,7 +72,6 @@ _STATE_TSV_FIELD_NAMES = [
     "version",
     "params",
     "config",
-    "attempt",
     "codebase",
     "content_id",
     "asset_size_bytes",
@@ -141,7 +140,7 @@ class JobEntry:
         """
         Stable key for matching queue/state/last-submitted entries.
 
-        Excludes ``codebase`` deliberately: an attempt is the same logical job
+        Excludes ``codebase`` deliberately: a capsule is the same logical job
         regardless of which codebase version produced it.
         """
         return (
@@ -151,12 +150,22 @@ class JobEntry:
             self.job.version,
             self.job.params,
             self.job.config,
-            self.job.attempt,
         )
 
-    def attempt_dir_candidates(self, base_dir: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path]:
+    @property
+    def _flat_capsule_dir_name(self) -> str:
+        return (
+            f"version-{self.job.version}_codebase-{self.job.codebase}"
+            f"_params-{self.job.params}_config-{self.job.config}"
+        )
+
+    @property
+    def _nested_capsule_dir_name(self) -> str:
+        return f"params-{self.job.params}_config-{self.job.config}"
+
+    def capsule_dir_candidates(self, base_dir: pathlib.Path, /) -> tuple[pathlib.Path, pathlib.Path]:
         """
-        Return ``(flat_layout_path, legacy_nested_layout_path)`` for this attempt.
+        Return ``(flat_layout_path, legacy_nested_layout_path)`` for this job capsule.
 
         :param base_dir: Root of the local Dandiset tree to resolve paths under.
         :type base_dir: pathlib.Path
@@ -174,55 +183,42 @@ class JobEntry:
             / pathlib.PurePosixPath(normalized_dandi_path)
             / f"pipeline-{self.job.pipeline}"
         )
-        flat_attempt_dir = pipeline_dir / (
-            f"version-{self.job.version}_codebase-{self.job.codebase}"
-            f"_params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
-        )
-        nested_attempt_dir = (
-            pipeline_dir
-            / f"version-{self.job.version}"
-            / f"params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
-        )
-        return flat_attempt_dir, nested_attempt_dir
+        flat_capsule_dir = pipeline_dir / self._flat_capsule_dir_name
+        nested_capsule_dir = pipeline_dir / f"version-{self.job.version}" / self._nested_capsule_dir_name
+        return flat_capsule_dir, nested_capsule_dir
 
-    def resolve_attempt_dir(self, base_dir: pathlib.Path) -> pathlib.Path:
-        """Resolve the best on-disk attempt-directory path for this entry."""
-        flat_attempt_dir, nested_attempt_dir = self.attempt_dir_candidates(base_dir)
-        if flat_attempt_dir.is_dir():
-            return flat_attempt_dir
-        if nested_attempt_dir.is_dir():
-            return nested_attempt_dir
+    def resolve_capsule_dir(self, base_dir: pathlib.Path, /) -> pathlib.Path:
+        """Resolve the best on-disk job capsule directory path for this entry."""
+        flat_capsule_dir, nested_capsule_dir = self.capsule_dir_candidates(base_dir)
+        if flat_capsule_dir.is_dir():
+            return flat_capsule_dir
+        if nested_capsule_dir.is_dir():
+            return nested_capsule_dir
 
         dandiset_root = (
             base_dir / "derivatives" / pathlib.PurePosixPath(_dandiset_derivatives_relative_dir(self.job.dandiset_id))
         )
         if not dandiset_root.is_dir():
-            return nested_attempt_dir
+            return nested_capsule_dir
 
-        pipeline_dir_name = f"pipeline-{self.job.pipeline}"
-        flat_attempt_dir_name = (
-            f"version-{self.job.version}_codebase-{self.job.codebase}"
-            f"_params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
-        )
-        nested_attempt_dir_name = f"params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
-        for pipeline_dir in sorted(dandiset_root.rglob(pipeline_dir_name)):
+        for pipeline_dir in sorted(dandiset_root.rglob(f"pipeline-{self.job.pipeline}")):
             if not pipeline_dir.is_dir():
                 continue
-            fallback_flat_attempt_dir = pipeline_dir / flat_attempt_dir_name
-            if fallback_flat_attempt_dir.is_dir():
-                return fallback_flat_attempt_dir
-            fallback_nested_attempt_dir = pipeline_dir / f"version-{self.job.version}" / nested_attempt_dir_name
-            if fallback_nested_attempt_dir.is_dir():
-                return fallback_nested_attempt_dir
+            fallback_flat_capsule_dir = pipeline_dir / self._flat_capsule_dir_name
+            if fallback_flat_capsule_dir.is_dir():
+                return fallback_flat_capsule_dir
+            fallback_nested_capsule_dir = pipeline_dir / f"version-{self.job.version}" / self._nested_capsule_dir_name
+            if fallback_nested_capsule_dir.is_dir():
+                return fallback_nested_capsule_dir
 
-        return nested_attempt_dir
+        return nested_capsule_dir
 
     def capsule_path_candidates(self) -> tuple[str, str]:
         """
-        Return ``(flat_layout_path, legacy_nested_layout_path)`` for this attempt as
+        Return ``(flat_layout_path, legacy_nested_layout_path)`` for this job capsule as
         paths relative to the Dandiset root (POSIX strings).
 
-        The remote-metadata counterpart of :meth:`attempt_dir_candidates`, used when
+        The remote-metadata counterpart of :meth:`capsule_dir_candidates`, used when
         resolving a capsule's path against DANDI assets metadata rather than a local
         Dandiset clone.
 
@@ -237,23 +233,17 @@ class JobEntry:
             f"derivatives/{_dandiset_derivatives_relative_dir(self.job.dandiset_id)}"
             f"/{normalized_dandi_path}/pipeline-{self.job.pipeline}"
         )
-        flat_capsule_path = (
-            f"{pipeline_dir}/version-{self.job.version}_codebase-{self.job.codebase}"
-            f"_params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
-        )
-        nested_capsule_path = (
-            f"{pipeline_dir}/version-{self.job.version}"
-            f"/params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
-        )
+        flat_capsule_path = f"{pipeline_dir}/{self._flat_capsule_dir_name}"
+        nested_capsule_path = f"{pipeline_dir}/version-{self.job.version}/{self._nested_capsule_dir_name}"
         return flat_capsule_path, nested_capsule_path
 
-    def resolve_capsule_path(self, asset_paths: Collection[str]) -> str:
+    def resolve_capsule_path(self, asset_paths: Collection[str], /) -> str:
         """
         Resolve the best capsule path (relative to the Dandiset root) for this entry
         against a known set of remote asset paths, e.g. the keys of
         :attr:`~dandi_compute_code.dandiset.AssetsJsonldMetadata.path_to_asset_metadata`.
 
-        The remote-metadata counterpart of :meth:`resolve_attempt_dir`: the same
+        The remote-metadata counterpart of :meth:`resolve_capsule_dir`: the same
         flat/nested/fallback resolution order, but checked against *asset_paths*
         membership instead of the local filesystem -- so this works purely from
         DANDI metadata, without a local Dandiset clone.
@@ -276,14 +266,7 @@ class JobEntry:
         if not any(path.startswith(dandiset_prefix) for path in asset_paths):
             return nested_capsule_path
 
-        pipeline_dir_name = f"pipeline-{self.job.pipeline}"
-        flat_attempt_dir_name = (
-            f"version-{self.job.version}_codebase-{self.job.codebase}"
-            f"_params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
-        )
-        nested_attempt_dir_name = f"params-{self.job.params}_config-{self.job.config}_attempt-{self.job.attempt}"
-
-        pipeline_dir_marker = f"/{pipeline_dir_name}/"
+        pipeline_dir_marker = f"/pipeline-{self.job.pipeline}/"
         pipeline_dirs = sorted(
             {
                 path[: path.index(pipeline_dir_marker) + len(pipeline_dir_marker) - 1]
@@ -292,18 +275,18 @@ class JobEntry:
             }
         )
         for pipeline_dir in pipeline_dirs:
-            fallback_flat_capsule_path = f"{pipeline_dir}/{flat_attempt_dir_name}"
+            fallback_flat_capsule_path = f"{pipeline_dir}/{self._flat_capsule_dir_name}"
             if _has_assets_under(fallback_flat_capsule_path):
                 return fallback_flat_capsule_path
-            fallback_nested_capsule_path = f"{pipeline_dir}/version-{self.job.version}/{nested_attempt_dir_name}"
+            fallback_nested_capsule_path = f"{pipeline_dir}/version-{self.job.version}/{self._nested_capsule_dir_name}"
             if _has_assets_under(fallback_nested_capsule_path):
                 return fallback_nested_capsule_path
 
         return nested_capsule_path
 
-    def resolve_unsubmitted_attempt_dir(self, base_dir: pathlib.Path) -> pathlib.Path | None:
+    def resolve_unsubmitted_capsule_dir(self, base_dir: pathlib.Path, /) -> pathlib.Path | None:
         """
-        Resolve the attempt directory only if this entry is queued but unsubmitted.
+        Resolve the job capsule directory only if this entry is queued but unsubmitted.
 
         Returns ``None`` when the entry is not pending (see :attr:`is_pending`) or
         when a submitted marker (``code/submitted`` or ``code/submitted_date-*``)
@@ -312,11 +295,11 @@ class JobEntry:
         if not self.is_pending:
             return None
 
-        attempt_dir = self.resolve_attempt_dir(base_dir)
-        code_dir = attempt_dir / "code"
+        capsule_dir = self.resolve_capsule_dir(base_dir)
+        code_dir = capsule_dir / "code"
         if (code_dir / "submitted").exists() or any(code_dir.glob("submitted_date-*")):
             return None
-        return attempt_dir
+        return capsule_dir
 
     @classmethod
     def from_dict(cls, data: dict, /) -> JobEntry:
@@ -328,7 +311,6 @@ class JobEntry:
             version=data["version"],
             params=data["params"],
             config=data["config"],
-            attempt=int(data["attempt"]),
             codebase=data["codebase"],
         )
         return cls(
@@ -370,7 +352,7 @@ class JobEntry:
         Every value from :meth:`to_dict` is coerced to a plain string: ``None`` becomes an
         empty cell, and the nested path/content-id mappings (``dataset_description_path``,
         ``output_paths``, ``log_paths``) are serialised as compact JSON so the table stays
-        strictly tabular (one row per attempt capsule).
+        strictly tabular (one row per job capsule).
         """
         raw = self.to_dict()
         row: dict[str, str] = {}
@@ -391,8 +373,8 @@ class JobEntry:
 
         Reverses the coercions applied by :meth:`to_tsv_row`: empty cells become
         ``None`` (or ``{}`` for the JSON-encoded mapping fields), ``asset_size_bytes``
-        and ``attempt`` are parsed back to ``int``, and the boolean fields (stored as
-        the literal strings ``"True"``/``"False"``) are parsed back to ``bool``.
+        is parsed back to ``int``, and the boolean fields (stored as the literal
+        strings ``"True"``/``"False"``) are parsed back to ``bool``.
         """
         job = JobInfo(
             dandiset_id=row["dandiset_id"],
@@ -401,7 +383,6 @@ class JobEntry:
             version=row["version"],
             params=row["params"],
             config=row["config"],
-            attempt=int(row["attempt"]),
             codebase=row["codebase"],
         )
 
@@ -500,27 +481,27 @@ class QueueState:
         """Failed entries matching a given pipeline and version."""
         return [e for e in self.failed if e.job.pipeline == pipeline and e.job.version == version]
 
-    def entry_for(self, *, dandi_path: str, attempt: int = 1) -> JobEntry:
+    def entry_for(self, *, dandi_path: str, config: str | None = None) -> JobEntry:
         """
-        Return the entry with the given ``dandi_path`` (and ``attempt``).
+        Return the entry with the given ``dandi_path`` (and ``config``).
 
         :param dandi_path: The ``dandi_path`` recorded on the target entry.
-        :param attempt: Disambiguates scenarios that use more than one attempt of
-            the same asset.
-        :raises KeyError: If no entry matches *dandi_path* and *attempt*.
+        :param config: Disambiguates scenarios that hold more than one job capsule for
+            the same asset. Any config matches when omitted.
+        :raises KeyError: If no entry matches *dandi_path* and *config*.
         """
         for entry in self.entries:
-            if entry.job.dandi_path == dandi_path and entry.job.attempt == attempt:
+            if entry.job.dandi_path == dandi_path and config in (None, entry.job.config):
                 return entry
-        message = f"No entry with dandi_path={dandi_path!r} and attempt={attempt}"
+        message = f"No entry with dandi_path={dandi_path!r} and config={config!r}"
         raise KeyError(message)
 
     @staticmethod
     def pending_code_dirs() -> list[str]:
         """
-        Identify attempt ``code`` directories awaiting submission from DANDI assets metadata.
+        Identify job capsule ``code`` directories awaiting submission from DANDI assets metadata.
 
-        Loads the DANDI ``assets.jsonld`` metadata and collects every attempt
+        Loads the DANDI ``assets.jsonld`` metadata and collects every job capsule
         directory that contains a ``code/submit.sh`` asset but no adjacent
         submitted-marker asset. An entry is considered submitted when a sibling
         ``submitted`` asset exists, or when a sibling asset whose name starts with
@@ -552,7 +533,7 @@ class QueueState:
         Report whether any queued jobs are awaiting submission.
 
         Lightweight check intended to gate queue dispatch: it inspects the DANDI
-        assets metadata for attempt directories that contain a ``code/submit.sh``
+        assets metadata for job capsule directories that contain a ``code/submit.sh``
         asset without an adjacent submitted marker. It does not submit anything
         and does not require SLURM access.
         """
@@ -571,7 +552,7 @@ class QueueState:
         """
         Submit the next eligible pending entries from the DANDI assets metadata.
 
-        Identifies all attempt directories that contain a ``code/submit.sh`` asset
+        Identifies all job capsule directories that contain a ``code/submit.sh`` asset
         but no adjacent submitted-marker asset (see :meth:`pending_code_dirs`). For
         each candidate (up to *max_submissions*), a temporary working directory is
         created inside *processing_directory*, the ``code/`` tree is downloaded via
@@ -718,8 +699,8 @@ class QueueState:
         """
         Build a queue state from indexed DANDI assets metadata.
 
-        Each entry represents one attempt capsule inferred from the
-        ``derivatives/dandiset-*/.../pipeline-*/..._attempt-*`` path structure, with
+        Each entry represents one job capsule inferred from the
+        ``derivatives/dandiset-*/.../pipeline-*/version-*_params-*_config-*`` path structure, with
         ``content_id`` / ``asset_size_bytes`` resolved from the upstream source
         Dandiset's ``assets.jsonld``.
 
@@ -727,9 +708,9 @@ class QueueState:
             :meth:`from_jsonld` or :meth:`from_dandi`.
         :type metadata: AssetsJsonldMetadata
         """
-        collection = _collect_attempts(metadata)
+        collection = _collect_job_capsules(metadata)
         upstream_cache = _UpstreamMetadataCache()
-        records = _finalize_attempt_records(collection=collection, upstream_cache=upstream_cache)
+        records = _finalize_job_capsule_records(collection=collection, upstream_cache=upstream_cache)
         records.sort(key=_sort_key)
         return cls(entries=[JobEntry.from_dict(record) for record in records])
 
@@ -884,8 +865,8 @@ class QueueState:
         job_step_wall_time_seconds: collections.defaultdict[str, float] = collections.defaultdict(float)
         timeline_files_processed = 0
         for entry in self.entries:
-            attempt_dir = entry.resolve_attempt_dir(dandiset_directory)
-            timeline_file = attempt_dir / "logs" / "timeline.html"
+            capsule_dir = entry.resolve_capsule_dir(dandiset_directory)
+            timeline_file = capsule_dir / "logs" / "timeline.html"
             if not timeline_file.is_file():
                 continue
 
@@ -942,15 +923,15 @@ class QueueState:
         """
         Remove all queued (unsubmitted) capsule directories from the dandiset tree.
 
-        A capsule is *queued* when its attempt directory has a ``code/`` subdirectory
-        but no ``logs/`` or ``derivatives/`` content and no submitted marker. Each
-        matching attempt directory is deleted from the DANDI archive (via ``dandi
-        delete``) and the local filesystem.
+        A capsule is *queued* when its directory has a ``code/`` subdirectory but no
+        ``logs/`` or ``derivatives/`` content and no submitted marker. Each matching
+        job capsule directory is deleted from the DANDI archive (via ``dandi delete``)
+        and the local filesystem.
 
         :param dandiset_directory: Local clone of the dandiset used to resolve and
-            delete matching attempt directories.
+            delete matching job capsule directories.
         :type dandiset_directory: pathlib.Path
-        :returns: Attempt directory paths that were deleted.
+        :returns: Job capsule directory paths that were deleted.
         :rtype: list[pathlib.Path]
         :raises RuntimeError: If ``DANDI_API_KEY`` is not set or is blank.
         """
@@ -958,24 +939,24 @@ class QueueState:
             message = "`DANDI_API_KEY` environment variable is not set or is blank."
             raise RuntimeError(message)
 
-        cleanable_attempt_dirs = [
-            attempt_dir
+        cleanable_capsule_dirs = [
+            capsule_dir
             for entry in self.entries
-            if (attempt_dir := entry.resolve_unsubmitted_attempt_dir(dandiset_directory)) is not None
+            if (capsule_dir := entry.resolve_unsubmitted_capsule_dir(dandiset_directory)) is not None
         ]
 
         removed: list[pathlib.Path] = []
-        for attempt_dir in cleanable_attempt_dirs:
-            if attempt_dir.is_dir():
-                parent_dir = attempt_dir.parent
+        for capsule_dir in cleanable_capsule_dirs:
+            if capsule_dir.is_dir():
+                parent_dir = capsule_dir.parent
                 subprocess.run(
-                    ["dandi", "delete", str(attempt_dir)],
+                    ["dandi", "delete", str(capsule_dir)],
                     input=b"y\n",
                     check=True,
                 )
-                shutil.rmtree(attempt_dir)
+                shutil.rmtree(capsule_dir)
                 _remove_empty_parents(start=parent_dir, stop=dandiset_directory / "derivatives")
-                removed.append(attempt_dir)
+                removed.append(capsule_dir)
 
         return removed
 
@@ -998,7 +979,7 @@ class QueueState:
         output ever appeared). For each matching entry, resolves its capsule path
         against *dandiset_id*'s remote ``assets.jsonld`` (see
         :meth:`JobEntry.resolve_capsule_path`, which accounts for both the current
-        flat attempt-directory layout and the legacy nested layout) and moves the
+        flat job capsule directory layout and the legacy nested layout) and moves the
         corresponding capsule from *dandiset_id* to *archive_dandiset_id* via
         :func:`~dandi_compute_code.dandiset.move_job_capsule`. Both Dandisets are
         addressed purely by ID -- everything is resolved and moved ephemerally over
@@ -1103,6 +1084,31 @@ class QueueState:
         )
         return "submitted" if submitted_any else "no-pending"
 
+    def _existing_capsule_keys(self) -> set[tuple[str, str, str, str]]:
+        """
+        Keys of the job capsules that already exist, as
+        ``(pipeline, version, params, content_id)`` tuples.
+
+        Used to skip re-forming a capsule that is already on the archive, whatever point of
+        the lifecycle it has reached.
+        """
+        return {
+            (entry.job.pipeline, entry.job.version, entry.job.params, entry.content_id)
+            for entry in self.entries
+            if entry.content_id
+        }
+
+    def _capped_dandiset_ids(self, *, pipeline: str, version: str, max_fail: int) -> set[str]:
+        """Dandiset IDs whose failure count for *pipeline*/*version* has reached *max_fail*."""
+        failure_count_by_dandiset: collections.Counter[str] = collections.Counter(
+            entry.job.dandiset_id for entry in self.failures_for(pipeline=pipeline, version=version)
+        )
+        return {
+            dandiset_id
+            for dandiset_id, failure_count in failure_count_by_dandiset.items()
+            if dandiset_id and failure_count >= max_fail
+        }
+
     @classmethod
     def prepare(
         cls,
@@ -1111,22 +1117,27 @@ class QueueState:
         config_key: str = "default",
         content_ids: list[str] | None = None,
         limit: int | None = None,
-    ) -> None:
+    ) -> int:
         """
         En-masse preparation of qualifying assets based on the packaged pipeline config.
 
-        For every pipeline/version/params combination declared in the packaged pipeline
-        configuration (see :func:`_load_queue_config`) this determines which content IDs to
-        prepare and calls :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job`
-        for each asset. The per-pipeline failure cap (``max_fail_per_dandiset``) is enforced
-        against the live queue state (see :meth:`from_dandi`) -- there is no local queue
-        directory.
+        Every pipeline/version/params combination declared in the packaged pipeline
+        configuration (see :func:`_load_queue_config`) is crossed with the qualifying content
+        IDs to give one flat list of job capsules to form, and the whole list is formed in a
+        single pass by :func:`~dandi_compute_code.aind_ephys_pipeline.prepare_aind_ephys_job`.
+
+        Anything already accounted for in the live queue state (see :meth:`from_dandi`) is
+        left out of that list. A capsule that already exists is never formed a second time,
+        so only the cases that never reached a successful run are prepared. The per-pipeline
+        failure cap (``max_fail_per_dandiset``) is enforced against the same live state.
 
         :param pipeline_directory: Local path to the AIND pipeline repository.
         :param config_key: Key for a registered job configuration.
         :param content_ids: Explicit content IDs to prepare; when provided, the
             qualifying list is not fetched from the network.
-        :param limit: If provided, stop after preparing *limit* assets in total.
+        :param limit: If provided, form at most *limit* job capsules in total.
+        :returns: The number of job capsules that were formed.
+        :rtype: int
         """
         queue_config = _load_queue_config()
 
@@ -1135,55 +1146,43 @@ class QueueState:
             content_ids = _order_content_ids_for_uniform_dandiset_sampling(content_ids=fetched_content_ids)
 
         state = cls.from_dandi()
+        existing_capsule_keys = state._existing_capsule_keys()
         content_id_to_dandiset_ids = state.content_id_to_dandiset_ids()
 
         prepared_count = 0
         for pipeline_name, pipeline_data in queue_config.get("pipelines", {}).items():
-            if limit is not None and prepared_count >= limit:
-                break
             for version in pipeline_data.get("version_priority", []):
-                if limit is not None and prepared_count >= limit:
-                    break
-                for params in pipeline_data.get("params_priority", []):
-                    if limit is not None and prepared_count >= limit:
-                        break
-                    pipeline_cfg = queue_config["pipelines"][pipeline_name]
+                max_fail = pipeline_data.get("max_fail_per_dandiset")
+                capped_dandiset_ids = (
+                    state._capped_dandiset_ids(pipeline=pipeline_name, version=version, max_fail=max_fail)
+                    if max_fail is not None
+                    else set()
+                )
 
-                    max_fail = pipeline_cfg.get("max_fail_per_dandiset")
-                    failure_count_by_dandiset: collections.defaultdict[str, int] = collections.defaultdict(int)
-                    if max_fail is not None:
-                        for entry in state.failures_for(pipeline=pipeline_name, version=version):
-                            dandiset_id = entry.job.dandiset_id
-                            if not dandiset_id:
-                                continue
-                            failure_count_by_dandiset[dandiset_id] += 1
+                for params in pipeline_data.get("params_priority", []):
+                    params_id = cls.resolve_params_key_to_id(pipeline_name, params)
 
                     for content_id in content_ids:
                         if limit is not None and prepared_count >= limit:
-                            break
-                        if max_fail is not None:
-                            dandiset_ids = content_id_to_dandiset_ids.get(content_id, set())
-                            if len(dandiset_ids) == 1:
-                                dandiset_id = next(iter(dandiset_ids))
-                                failure_count = failure_count_by_dandiset.get(dandiset_id, 0)
-                                if failure_count >= max_fail:
-                                    _log.info(
-                                        f"Skipping preparation for {pipeline_name}/{version}/{params}/{content_id}: "
-                                        f"failure count ({failure_count}) for dandiset-{dandiset_id} has reached "
-                                        f"max_fail_per_dandiset ({max_fail})."
-                                    )
-                                    continue
-                            else:
-                                mapped_dandisets = ", ".join(sorted(dandiset_ids)) if dandiset_ids else "<none>"
-                                _log.info(
-                                    f"Preparing {content_id} without max_fail_per_dandiset enforcement for "
-                                    f"{pipeline_name}/{version}/{params}: expected exactly 1 mapped dandiset but "
-                                    f"found {len(dandiset_ids)} ({mapped_dandisets})."
-                                )
+                            _log.info(f"Reached the preparation limit of {limit} job capsules.")
+                            return prepared_count
+
+                        label = f"{pipeline_name}/{version}/{params}/{content_id}"
+                        if (pipeline_name, version, params_id, content_id) in existing_capsule_keys:
+                            _log.info(f"Skipping preparation for {label}: a job capsule already exists.")
+                            continue
+
+                        dandiset_ids = content_id_to_dandiset_ids.get(content_id, set())
+                        if len(dandiset_ids) == 1 and next(iter(dandiset_ids)) in capped_dandiset_ids:
+                            _log.info(
+                                f"Skipping preparation for {label}: dandiset-{next(iter(dandiset_ids))} has reached "
+                                f"max_fail_per_dandiset ({max_fail})."
+                            )
+                            continue
 
                         _log.info(f"Preparing content ID: {content_id}")
                         try:
-                            prepare_aind_ephys_job(
+                            script_file_path = prepare_aind_ephys_job(
                                 content_id=content_id,
                                 parameters_key=params,
                                 pipeline_version=version,
@@ -1192,11 +1191,14 @@ class QueueState:
                                 silent=True,
                             )
                         except UnmappedContentIDError as error:
-                            _log.warning(
-                                f"Skipping preparation for {pipeline_name}/{version}/{params}/{content_id}: {error}"
-                            )
+                            _log.warning(f"Skipping preparation for {label}: {error}")
+                            continue
+                        if script_file_path is None:
+                            _log.info(f"Skipped preparation for {label}: a job capsule already exists.")
                             continue
                         prepared_count += 1
+
+        return prepared_count
 
     @staticmethod
     def dump_issues(

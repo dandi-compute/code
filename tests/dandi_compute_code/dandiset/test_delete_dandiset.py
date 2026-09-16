@@ -39,7 +39,7 @@ def _make_version_dir(
     version_dir = pathlib.Path(*parts)
     version_dir.mkdir(parents=True)
     # Add a file inside so rmtree has something to remove
-    (version_dir / "params-abc_config-def_attempt-1").mkdir()
+    (version_dir / "params-abc_config-def").mkdir()
     return version_dir
 
 

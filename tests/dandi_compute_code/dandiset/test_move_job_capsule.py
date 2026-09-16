@@ -16,7 +16,7 @@ _SOURCE_DANDISET_ID = "001697"
 _TARGET_DANDISET_ID = "001873"
 _EXAMPLE_CAPSULE_PATH = (
     "derivatives/dandisets-000/dandiset-000409/sub-mouse01/pipeline-aind+ephys/"
-    "version-v1.0_params-default_config-abc123_attempt-1"
+    "version-v1.0_codebase-v0.3.0_params-default_config-abc123"
 )
 
 

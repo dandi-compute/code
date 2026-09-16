@@ -224,6 +224,11 @@ def _prepare_aind_command(
         silent=silent,
     )
 
+    if script_file_path is None:
+        if not silent:
+            _styled_echo(text="\nA job capsule already exists for this asset; nothing was prepared.", color="yellow")
+        return
+
     if submit:
         submit_job(script_file_path=script_file_path)
 
@@ -531,7 +536,7 @@ def _queue_process_command(
 @click.option(
     "--limit",
     "limit",
-    help="Stop after preparing N assets in total. Useful for testing.",
+    help="Form at most N job capsules in total. Useful for testing.",
     required=False,
     type=click.IntRange(min=1),
     default=None,
@@ -554,11 +559,14 @@ def _queue_prepare_command(
     if "DANDI_API_KEY" not in os.environ:
         raise click.ClickException("`DANDI_API_KEY` environment variable is not set.")
 
-    QueueState.prepare(
+    prepared_count = QueueState.prepare(
         pipeline_directory=pipeline_directory,
         config_key=config_key,
         limit=limit,
     )
+    if not silent:
+        noun = "job capsule" if prepared_count == 1 else "job capsules"
+        _styled_echo(text=f"\nFormed {prepared_count} {noun}.", color="green" if prepared_count else "yellow")
 
 
 # dandicompute issues

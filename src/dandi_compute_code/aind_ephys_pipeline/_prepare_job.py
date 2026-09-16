@@ -18,7 +18,11 @@ import dandi.upload
 import pydantic
 
 from ._handle_template import generate_aind_ephys_submission_script
-from ..dandiset._globals import _SANDBOX_DANDISET_ID, _dandiset_derivatives_relative_dir
+from ..dandiset._globals import (
+    _JOB_CAPSULES_DANDISET_ID,
+    _SANDBOX_DANDISET_ID,
+    _dandiset_derivatives_relative_dir,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -45,9 +49,13 @@ def prepare_aind_ephys_job(
     parameters_key: str = "default",
     pipeline_directory: pathlib.Path | None = None,
     silent: bool = False,
-) -> pathlib.Path:
+) -> pathlib.Path | None:
     """
     Prepares an AIND ephys job by generating a submission script and returning the script file path.
+
+    A job capsule is never formed twice. When one already exists on the archive for the
+    requested pipeline version, parameters and config, nothing is prepared and ``None`` is
+    returned.
 
     Parameters
     ----------
@@ -75,8 +83,9 @@ def prepare_aind_ephys_job(
 
     Returns
     -------
-    script_file_path : pathlib.Path
-        The path to the generated submission script.
+    script_file_path : pathlib.Path or None
+        The path to the generated submission script, or ``None`` when a job capsule
+        already exists for this combination.
 
     Raises
     ------
@@ -276,27 +285,18 @@ def prepare_aind_ephys_job(
 
     codebase_version = importlib.metadata.version("dandi-compute-code")
     bidsy_pipeline_version = pipeline_version.replace("-", "+")
-    output_dandiset_path_base = f"derivatives/{_dandiset_derivatives_relative_dir(dandiset_id)}/{output_dandi_path}/"
-    output_dandiset_path_base += (
+    output_dandiset_path = f"derivatives/{_dandiset_derivatives_relative_dir(dandiset_id)}/{output_dandi_path}/"
+    output_dandiset_path += (
         f"pipeline-aind+ephys/"
         f"version-{bidsy_pipeline_version}_codebase-v{codebase_version}"
         f"_params-{params_id}_config-{config_id}"
     )
 
-    # Assign the lowest integer run ID that has not been used yet, up to a maximum limit
     client = dandi.dandiapi.DandiAPIClient(token=os.environ["DANDI_API_KEY"])
-    dandiset = client.get_dandiset(dandiset_id="001697")
-
-    maximum_run_id = 99
-    run_id = 1
-    output_dandiset_path = f"{output_dandiset_path_base}_attempt-{run_id}"
-    for _ in range(maximum_run_id + 1):
-        assets_checker = dandiset.get_assets_with_path_prefix(path=output_dandiset_path)
-        if next(assets_checker, None) is None:
-            continue
-
-        run_id += 1
-        output_dandiset_path = f"{output_dandiset_path_base}_attempt-{run_id}"
+    dandiset = client.get_dandiset(dandiset_id=_JOB_CAPSULES_DANDISET_ID)
+    if next(dandiset.get_assets_with_path_prefix(path=output_dandiset_path), None) is not None:
+        _log.info(f"A job capsule already exists at {output_dandiset_path}; skipping preparation.")
+        return None
 
     blob_head = content_id[0]
     partition = "001" if ord(blob_head) - ord("0") <= 8 else "002"  # TODO: pull from source to keep up to date
