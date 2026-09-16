@@ -16,7 +16,7 @@ def test_from_dandi_reads_from_archive_dandiset_when_requested() -> None:
     """from_dandi(dandiset_id=archive) reads from the failed runs archive Dandiset metadata."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     capsule_path = (
-        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/" "job-240101def567/code/submit.sh"
+        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/job-240101def567/code/submit.sh"
     )
     load_metadata = mock.Mock(
         return_value=AssetsJsonldMetadata(

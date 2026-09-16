@@ -77,7 +77,7 @@ def test_from_dandi_includes_entries_with_submitted_markers() -> None:
     """from_dandi does not depend on local submitted marker files."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     capsule_path = (
-        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/" "job-240101def567/code/submit.sh"
+        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/job-240101def567/code/submit.sh"
     )
     with (
         mock.patch(
@@ -118,7 +118,7 @@ def test_from_dandi_includes_entries_with_submitted_markers() -> None:
 def test_from_dandi_submitted_marker_sets_has_been_submitted() -> None:
     """from_dandi sets has_been_submitted when code/submitted_date-* exists."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/" "job-240101def567"
+    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/job-240101def567"
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={},
         path_to_asset_metadata={
@@ -168,7 +168,7 @@ def test_from_dandi_parses_capsule_location_and_presence_flags_from_assets_paths
     """from_dandi parses a capsule's location and lifecycle flags from derivatives asset paths."""
     source_path = "sub-mouse01/sourcedata/aind-sample.nwb"
     capsule_prefix = (
-        "derivatives/dandiset-001849/sub-mouse01/sourcedata/aind-sample/pipeline-aind+ephys/" "job-2401010d4bf3"
+        "derivatives/dandiset-001849/sub-mouse01/sourcedata/aind-sample/pipeline-aind+ephys/job-2401010d4bf3"
     )
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={
@@ -478,7 +478,7 @@ def test_from_dandi_is_independent_of_local_submitted_marker_files() -> None:
 def test_from_dandi_output_paths_empty_when_no_output() -> None:
     """from_dandi returns output_paths as an empty dict when has_output is False."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/" "job-240101def567"
+    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/job-240101def567"
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={},
         path_to_asset_metadata={
@@ -521,7 +521,7 @@ def test_from_dandi_output_paths_empty_when_no_output() -> None:
 def test_from_dandi_log_paths_empty_when_no_logs() -> None:
     """from_dandi returns log_paths as an empty dict when has_logs is False."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/" "job-240101def567"
+    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/job-240101def567"
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={},
         path_to_asset_metadata={
@@ -563,7 +563,7 @@ def test_from_dandi_log_paths_empty_when_no_logs() -> None:
 def test_from_dandi_output_paths_maps_asset_paths_to_blob_ids() -> None:
     """from_dandi populates output_paths with all derivatives asset paths mapped to their blob IDs."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/" "job-240101def567"
+    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/job-240101def567"
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={},
         path_to_asset_metadata={
@@ -620,7 +620,7 @@ def test_from_dandi_output_paths_maps_asset_paths_to_blob_ids() -> None:
 def test_from_dandi_log_paths_map_asset_paths_to_blob_ids() -> None:
     """from_dandi populates log_paths with log asset paths mapped to their blob IDs."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/" "job-240101def567"
+    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/job-240101def567"
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={},
         path_to_asset_metadata={
