@@ -16,9 +16,7 @@ from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.queue import JobEntry, QueueState
 
 _JOB_ID = "job-240101+a1b2c3"
-_CAPSULE_PATH = (
-    f"derivatives/dandisets-001/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/{_JOB_ID}"
-)
+_CAPSULE_PATH = f"derivatives/dandisets-001/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/{_JOB_ID}"
 _SOURCE_PATH = "sub-mouse01/sub-mouse01_ecephys.nwb"
 
 _PROVENANCE = {
