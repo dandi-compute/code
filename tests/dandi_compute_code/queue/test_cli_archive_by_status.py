@@ -62,12 +62,12 @@ def test_cli_archive_by_status_invokes_archive_by_status_with_defaults(status: s
         mock.patch(f"{_GROUP}.QueueState.from_dandi") as mock_from_dandi,
     ):
         mock_archive = mock_from_dandi.return_value.archive_by_status
-        mock_archive.return_value = ["derivatives/example-attempt"]
+        mock_archive.return_value = ["derivatives/example-capsule"]
         result = runner.invoke(_dandicompute_group, ["archive", "--status", status])
 
     assert result.exit_code == 0, result.output
     assert f"Archived 1 {status} job capsule(s)" in result.output
-    assert "derivatives/example-attempt" in result.output
+    assert "derivatives/example-capsule" in result.output
     mock_from_dandi.assert_called_once_with(dandiset_id=_JOB_CAPSULES_DANDISET_ID)
     mock_archive.assert_called_once_with(
         status=status,
@@ -90,7 +90,7 @@ def test_cli_archive_by_status_forwards_custom_dandiset_ids(tmp_path: pathlib.Pa
         mock.patch(f"{_GROUP}.QueueState.from_dandi") as mock_from_dandi,
     ):
         mock_archive = mock_from_dandi.return_value.archive_by_status
-        mock_archive.return_value = ["derivatives/example-attempt"]
+        mock_archive.return_value = ["derivatives/example-capsule"]
         result = runner.invoke(
             _dandicompute_group,
             [

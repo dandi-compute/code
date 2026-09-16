@@ -104,38 +104,3 @@ def test_capsule_dir_candidates_includes_codebase_in_flat_path(tmp_path: pathlib
     expected_prefix = tmp_path / "derivatives" / "dandisets-000" / "dandiset-000001" / "sub-mouse01" / "pipeline-test"
     assert flat_path == expected_prefix / "version-v1.1.1_codebase-v0.3.17_params-4af6a25_config-0d4bf36"
     assert legacy_path == expected_prefix / "version-v1.1.1" / "params-4af6a25_config-0d4bf36"
-
-
-def _example_entry() -> JobEntry:
-    return JobEntry.from_dict(
-        {
-            "dandiset_id": "000001",
-            "dandi_path": "sub-mouse01",
-            "pipeline": "test",
-            "version": "v1.0",
-            "params": "abc1234",
-            "config": "def5678",
-            "codebase": "v0.3.0",
-        }
-    )
-
-
-@pytest.mark.ai_generated
-def test_resolve_capsule_dir_accepts_legacy_attempt_suffix(tmp_path: pathlib.Path) -> None:
-    """resolve_capsule_dir finds a capsule directory written before attempts were retired."""
-    entry = _example_entry()
-    flat_path, _ = entry.capsule_dir_candidates(tmp_path)
-    legacy_path = flat_path.parent / f"{flat_path.name}_attempt-1"
-    legacy_path.mkdir(parents=True)
-
-    assert entry.resolve_capsule_dir(tmp_path) == legacy_path
-
-
-@pytest.mark.ai_generated
-def test_resolve_capsule_path_accepts_legacy_attempt_suffix() -> None:
-    """resolve_capsule_path finds a capsule path written before attempts were retired."""
-    entry = _example_entry()
-    flat_path, _ = entry.capsule_path_candidates()
-    legacy_path = f"{flat_path}_attempt-2"
-
-    assert entry.resolve_capsule_path([f"{legacy_path}/code/submit.sh"]) == legacy_path

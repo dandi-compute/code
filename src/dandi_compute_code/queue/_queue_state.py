@@ -90,45 +90,6 @@ _STATE_TSV_FIELD_NAMES = [
 _STATE_TSV_RELATIVE_PATH = "derivatives/state.tsv"
 
 
-def _resolve_capsule_dir_within(parent_dir: pathlib.Path, capsule_dir_name: str) -> pathlib.Path | None:
-    """
-    Return the job capsule directory named *capsule_dir_name* inside *parent_dir*.
-
-    Capsules written before attempts were retired carry a trailing ``_attempt-N``, so the
-    lowest-numbered such sibling is accepted when the plain name is absent.
-    """
-    capsule_dir = parent_dir / capsule_dir_name
-    if capsule_dir.is_dir():
-        return capsule_dir
-    legacy_capsule_dirs = sorted(path for path in parent_dir.glob(f"{capsule_dir_name}_attempt-*") if path.is_dir())
-    return legacy_capsule_dirs[0] if legacy_capsule_dirs else None
-
-
-def _resolve_capsule_path_within(asset_paths: Collection[str], capsule_path: str) -> str | None:
-    """
-    Return the capsule path matching *capsule_path* that holds at least one of *asset_paths*.
-
-    The remote-metadata counterpart of :func:`_resolve_capsule_dir_within`, including its
-    tolerance of the legacy ``_attempt-N`` suffix.
-    """
-
-    def _has_assets_under(prefix: str) -> bool:
-        return any(path == prefix or path.startswith(f"{prefix}/") for path in asset_paths)
-
-    if _has_assets_under(capsule_path):
-        return capsule_path
-
-    legacy_prefix = f"{capsule_path}_attempt-"
-    legacy_capsule_paths = sorted(
-        {
-            path[: path.index("/", len(legacy_prefix))] if "/" in path[len(legacy_prefix) :] else path
-            for path in asset_paths
-            if path.startswith(legacy_prefix)
-        }
-    )
-    return legacy_capsule_paths[0] if legacy_capsule_paths else None
-
-
 @dataclass
 class JobEntry:
     """
@@ -229,10 +190,10 @@ class JobEntry:
     def resolve_capsule_dir(self, base_dir: pathlib.Path, /) -> pathlib.Path:
         """Resolve the best on-disk job capsule directory path for this entry."""
         flat_capsule_dir, nested_capsule_dir = self.capsule_dir_candidates(base_dir)
-        for candidate in (flat_capsule_dir, nested_capsule_dir):
-            resolved = _resolve_capsule_dir_within(candidate.parent, candidate.name)
-            if resolved is not None:
-                return resolved
+        if flat_capsule_dir.is_dir():
+            return flat_capsule_dir
+        if nested_capsule_dir.is_dir():
+            return nested_capsule_dir
 
         dandiset_root = (
             base_dir / "derivatives" / pathlib.PurePosixPath(_dandiset_derivatives_relative_dir(self.job.dandiset_id))
@@ -243,14 +204,12 @@ class JobEntry:
         for pipeline_dir in sorted(dandiset_root.rglob(f"pipeline-{self.job.pipeline}")):
             if not pipeline_dir.is_dir():
                 continue
-            fallback_parents_and_names = (
-                (pipeline_dir, self._flat_capsule_dir_name),
-                (pipeline_dir / f"version-{self.job.version}", self._nested_capsule_dir_name),
-            )
-            for parent, name in fallback_parents_and_names:
-                resolved = _resolve_capsule_dir_within(parent, name)
-                if resolved is not None:
-                    return resolved
+            fallback_flat_capsule_dir = pipeline_dir / self._flat_capsule_dir_name
+            if fallback_flat_capsule_dir.is_dir():
+                return fallback_flat_capsule_dir
+            fallback_nested_capsule_dir = pipeline_dir / f"version-{self.job.version}" / self._nested_capsule_dir_name
+            if fallback_nested_capsule_dir.is_dir():
+                return fallback_nested_capsule_dir
 
         return nested_capsule_dir
 
@@ -293,11 +252,15 @@ class JobEntry:
             entry's capsule lives in.
         :type asset_paths: collections.abc.Collection[str]
         """
+
+        def _has_assets_under(prefix: str) -> bool:
+            return any(path == prefix or path.startswith(f"{prefix}/") for path in asset_paths)
+
         flat_capsule_path, nested_capsule_path = self.capsule_path_candidates()
-        for candidate in (flat_capsule_path, nested_capsule_path):
-            resolved = _resolve_capsule_path_within(asset_paths, candidate)
-            if resolved is not None:
-                return resolved
+        if _has_assets_under(flat_capsule_path):
+            return flat_capsule_path
+        if _has_assets_under(nested_capsule_path):
+            return nested_capsule_path
 
         dandiset_prefix = f"derivatives/{_dandiset_derivatives_relative_dir(self.job.dandiset_id)}/"
         if not any(path.startswith(dandiset_prefix) for path in asset_paths):
@@ -312,14 +275,12 @@ class JobEntry:
             }
         )
         for pipeline_dir in pipeline_dirs:
-            fallback_candidates = (
-                f"{pipeline_dir}/{self._flat_capsule_dir_name}",
-                f"{pipeline_dir}/version-{self.job.version}/{self._nested_capsule_dir_name}",
-            )
-            for candidate in fallback_candidates:
-                resolved = _resolve_capsule_path_within(asset_paths, candidate)
-                if resolved is not None:
-                    return resolved
+            fallback_flat_capsule_path = f"{pipeline_dir}/{self._flat_capsule_dir_name}"
+            if _has_assets_under(fallback_flat_capsule_path):
+                return fallback_flat_capsule_path
+            fallback_nested_capsule_path = f"{pipeline_dir}/version-{self.job.version}/{self._nested_capsule_dir_name}"
+            if _has_assets_under(fallback_nested_capsule_path):
+                return fallback_nested_capsule_path
 
         return nested_capsule_path
 

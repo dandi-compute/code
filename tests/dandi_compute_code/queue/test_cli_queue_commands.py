@@ -89,7 +89,7 @@ def test_cli_queue_clean_calls_helper(tmp_path: pathlib.Path) -> None:
     dandiset_dir = tmp_path / "dandiset"
     dandiset_dir.mkdir()
 
-    fake_removed = [dandiset_dir / "derivatives" / "dandiset-000001" / "sub-mouse01" / "attempt-1"]
+    fake_removed = [dandiset_dir / "derivatives" / "dandiset-000001" / "sub-mouse01" / "capsule-a"]
     mock_state = mock.Mock()
     mock_state.clean_unsubmitted_capsules.return_value = fake_removed
     runner = CliRunner()

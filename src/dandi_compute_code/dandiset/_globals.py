@@ -1,9 +1,8 @@
 import re
 
-# The trailing ``_attempt-N`` group matches capsules written before attempts were retired.
 _JOB_CAPSULE_DIR_RE = re.compile(
     r"(?:version-(?P<version_in_name>.+?)_codebase-(?P<codebase>[^_]+)_)?"
-    r"params-(?P<params>[^_]+)_config-(?P<config>[^_]+)(?:_attempt-\d+)?"
+    r"params-(?P<params>[^_]+)_config-(?P<config>[^_]+)"
 )
 _SANDBOX_DANDISET_ID = "214527"
 _JOB_CAPSULES_DANDISET_ID = "001697"

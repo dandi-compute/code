@@ -36,15 +36,13 @@ _log = logging.getLogger(__name__)
 
 _UPSTREAM_JSONLD_URL_TEMPLATE = "https://dandiarchive.s3.amazonaws.com/dandisets/{dandiset_id}/draft/assets.jsonld"
 
-# The trailing ``_attempt-N`` group matches capsules written before attempts were retired.
 _FLAT_CAPSULE_RE = re.compile(
     r"^version-(?P<version>.+?)"
     r"_codebase-(?P<codebase>[^_]+)"
     r"_params-(?P<params>[^_]+)"
-    r"_config-(?P<config>[^_]+)"
-    r"(?:_attempt-\d+)?$"
+    r"_config-(?P<config>[^_]+)$"
 )
-_NESTED_CAPSULE_RE = re.compile(r"^params-(?P<params>[^_]+)_config-(?P<config>[^_]+)(?:_attempt-\d+)?$")
+_NESTED_CAPSULE_RE = re.compile(r"^params-(?P<params>[^_]+)_config-(?P<config>[^_]+)$")
 
 
 def _find_segment_index(parts: tuple[str, ...], prefix: str, start: int = 0) -> int | None:

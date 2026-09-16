@@ -80,9 +80,8 @@ def test_aggregate_queue_statistics_found_timeline_via_fallback_capsule_resoluti
     """aggregate_statistics finds timeline files when state dandi_path differs from the on-disk path."""
     dandiset_dir = tmp_path / "dandiset"
 
-    # The "sourcedata" entry's on-disk capsule lives under sub-mouse01 and still carries the
-    # legacy attempt suffix, so its timeline must be located via fallback resolution rather
-    # than the recorded dandi_path.
+    # The "sourcedata" entry's on-disk capsule lives under sub-mouse01, so its timeline
+    # must be located via fallback resolution rather than the recorded dandi_path.
     capsule_dir = (
         dandiset_dir
         / "derivatives"
@@ -90,7 +89,7 @@ def test_aggregate_queue_statistics_found_timeline_via_fallback_capsule_resoluti
         / "dandiset-001849"
         / "sub-mouse01"
         / "pipeline-aind+ephys"
-        / "version-v1.1.1+b268fd2+a66c8df_codebase-v0.3.0_params-4af6a25_config-0d4bf36_attempt-1"
+        / "version-v1.1.1+b268fd2+a66c8df_codebase-v0.3.0_params-4af6a25_config-0d4bf36"
     )
     logs_dir = capsule_dir / "logs"
     logs_dir.mkdir(parents=True)

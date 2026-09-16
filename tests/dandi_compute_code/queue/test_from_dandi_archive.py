@@ -15,10 +15,9 @@ from dandi_compute_code.queue import QueueState
 def test_from_dandi_reads_from_archive_dandiset_when_requested() -> None:
     """from_dandi(dandiset_id=archive) reads from the failed runs archive Dandiset metadata."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    # Still carries the legacy attempt suffix, which the archive is full of.
     capsule_path = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
-        "version-v1.0_codebase-v0.3.0_params-default_config-def5678_attempt-1/code/submit.sh"
+        "version-v1.0_codebase-v0.3.0_params-default_config-def5678/code/submit.sh"
     )
     load_metadata = mock.Mock(
         return_value=AssetsJsonldMetadata(

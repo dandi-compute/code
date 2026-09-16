@@ -20,9 +20,6 @@ def _parse_job_capsule_dir(capsule_dir: pathlib.Path, /) -> dict | None:
         <dandi-path>/pipeline-{pipeline}/version-{version}/
             params-{params}_config-{config}/
 
-    Both layouts also accept a trailing ``_attempt-{n}``, which capsules written before
-    attempts were retired still carry.
-
     :param capsule_dir: The job capsule directory (name must match ``params-*_config-*``).
     :type capsule_dir: pathlib.Path
     :returns: A flat dict with all entities and state flags, or ``None`` if the path
