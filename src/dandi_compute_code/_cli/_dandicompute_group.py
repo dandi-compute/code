@@ -8,11 +8,7 @@ from ._clean_work_directory import clean_work_directory
 from ._styled_echo import _styled_echo
 from .._configure_logging import _configure_logging
 from ..aind_ephys_pipeline import prepare_aind_ephys_job, submit_job
-from ..dandiset import (
-    delete_dandiset_version,
-    move_job_capsule,
-    scan_version_directories,
-)
+from ..dandiset import move_job_capsule
 from ..dandiset._globals import _FAILED_RUNS_ARCHIVE_DANDISET_ID, _JOB_CAPSULES_DANDISET_ID
 from ..queue import TEST_QUEUE_CONTENT_ID, QueueState
 
@@ -698,67 +694,6 @@ def _issues_summarize_command(
     )
     if not silent:
         _styled_echo(text=f"\nWrote derivatives/issues_summary.json to Dandiset {dandiset_id}.", color="green")
-
-
-# dandicompute delete
-@_dandicompute_group.group(name="delete")
-def _delete_group() -> None:
-    """Delete remote and local derivatives for specific version patterns."""
-    pass
-
-
-# dandicompute delete version [OPTIONS]
-@_delete_group.command(name="version")
-@click.option(
-    "--directory",
-    "dandiset_directory",
-    help="Path to a local clone of the dandiset repository.",
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=pathlib.Path),
-)
-@click.option(
-    "--version",
-    "version",
-    help=(
-        "The base version string to delete (e.g., 'v1.0.0'). "
-        "Matches the exact directory 'version-v1.0.0' as well as any hash-suffixed variants "
-        "such as 'v1.0.0+fixes+20abeb6' or 'v1.1.2+abcd123+def4567'."
-    ),
-    required=True,
-    type=str,
-)
-@click.option(
-    "--silent",
-    help="Suppress informational log output.",
-    required=False,
-    is_flag=True,
-    default=False,
-)
-def _delete_version_command(dandiset_directory: pathlib.Path, version: str, silent: bool = False) -> None:
-    """Delete version-matching derivatives from the archive and local filesystem."""
-    _configure_logging(silent=silent)
-    if not os.environ.get("DANDI_API_KEY", "").strip():
-        raise click.ClickException("`DANDI_API_KEY` environment variable is not set or is blank.")
-    version_dirs = scan_version_directories(dandiset_directory=dandiset_directory, version=version)
-    if not version_dirs:
-        if not silent:
-            _styled_echo(text=f"\nNo 'version-{version}' directories found.", color="yellow")
-        return
-
-    count = len(version_dirs)
-    noun = "directory" if count == 1 else "directories"
-    examples = version_dirs[:3]
-    example_lines = "\n".join(f"  {p}" for p in examples)
-    suffix = f"\n  ... and {count - 3} more" if count > 3 else ""
-    click.confirm(
-        f"This will permanently delete {count} 'version-{version}' {noun} "
-        f"from the DANDI archive and the local filesystem under '{dandiset_directory}'.\n"
-        f"Directories to be deleted:\n{example_lines}{suffix}\n\nContinue?",
-        abort=True,
-    )
-    deleted = delete_dandiset_version(dandiset_directory=dandiset_directory, version=version)
-    if not silent:
-        _styled_echo(text=f"\nDeleted {len(deleted)} version {noun}.", color="green")
 
 
 # dandicompute archive [OPTIONS]

@@ -22,7 +22,6 @@ from dandi_compute_code._cli import _dandicompute_group
         (["issues", "--help"], "Scan logs and write per-capsule and aggregate issue reports."),
         (["issues", "dump", "--help"], "Scan nextflow and slurm logs and write per-capsule issue records."),
         (["issues", "summarize", "--help"], "Summarize discovered issue lines by descending occurrence count."),
-        (["delete", "--help"], "Delete remote and local derivatives for specific version patterns."),
         (
             ["archive", "--help"],
             "Archive one job capsule (--job) or every capsule with a --status.",
