@@ -21,7 +21,22 @@ Everything the name used to spell out is recorded in two places instead:
 - the `DandiCompute` provenance block in the capsule's `dataset_description.json`
 - the `derivatives/state.tsv` summary table, which reads that provenance back
 
-Capsules prepared before the job ID existed still carry their old `version-..._codebase-..._params-..._config-...` names. Those are read from the name directly and remain fully supported.
+Capsules prepared before the job ID existed still carry their old `version-..._codebase-..._params-..._config-...` names, with or without a trailing `_attempt-N`. Those are read from the name directly and remain fully supported.
+
+### Migrating legacy capsules
+
+`scripts/migrate_job_capsule_names.py` renames every legacy capsule in `001697` and `001873` to its job ID and writes the `DandiCompute` provenance block into each one. The `YYMMDD` of a migrated capsule comes from the modification date of its `code/submit.sh`, so it keeps the date it was originally prepared, and its hash matches what preparation would compute today, so a migrated job is never formed a second time.
+
+It is a dry run by default, printing every planned rename and changing nothing:
+
+```bash
+python scripts/migrate_job_capsule_names.py
+python scripts/migrate_job_capsule_names.py --apply
+```
+
+Each capsule is uploaded to its new path before the old path is deleted, so a failed upload never destroys the original. Run `dandicompute queue refresh` afterwards to rebuild the state tables.
+
+Two legacy capsules that describe the same logical job and differ only in codebase version map to the same job ID, since the hash ignores the codebase version. Migrating both would merge them into one directory, so they are reported and skipped. Archive or delete all but one, then re-run.
 
 
 ## Manual dispatch commands on MIT Engaging

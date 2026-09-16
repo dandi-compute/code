@@ -39,13 +39,17 @@ _log = logging.getLogger(__name__)
 
 _UPSTREAM_JSONLD_URL_TEMPLATE = "https://dandiarchive.s3.amazonaws.com/dandisets/{dandiset_id}/draft/assets.jsonld"
 
+# Capsules formed before the attempt notion was retired carry a trailing attempt number.
+# It no longer identifies anything, but it must still be tolerated so those capsules stay visible.
+# The config segment is absent on pipelines that have no config, such as ``lfp``.
 _FLAT_CAPSULE_RE = re.compile(
     r"^version-(?P<version>.+?)"
     r"_codebase-(?P<codebase>[^_]+)"
     r"_params-(?P<params>[^_]+)"
-    r"_config-(?P<config>[^_]+)$"
+    r"(?:_config-(?P<config>[^_]+))?"
+    r"(?:_attempt-\d+)?$"
 )
-_NESTED_CAPSULE_RE = re.compile(r"^params-(?P<params>[^_]+)_config-(?P<config>[^_]+)$")
+_NESTED_CAPSULE_RE = re.compile(r"^params-(?P<params>[^_]+)(?:_config-(?P<config>[^_]+))?(?:_attempt-\d+)?$")
 
 
 def _find_segment_index(parts: tuple[str, ...], prefix: str, start: int = 0) -> int | None:

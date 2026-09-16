@@ -9,6 +9,7 @@ import pathlib
 import re
 import subprocess
 import tempfile
+import typing
 import urllib.request
 
 import dandi
@@ -20,6 +21,7 @@ from ._globals import _JOB_CAPSULES_DANDISET_ID, _LFP_CONTAINER_IMAGE_TEMPLATE, 
 from ._handle_template import generate_lfp_submission_script
 from ..aind_ephys_pipeline import UnmappedContentIDError
 from ..dandiset._globals import _SANDBOX_DANDISET_ID
+from ..dandiset._job_id import _PROVENANCE_KEY, _compute_job_hash, _format_job_id, _parse_job_hash
 
 _log = logging.getLogger(__name__)
 
@@ -29,27 +31,64 @@ _CONTENT_ID_TO_USAGE_DANDISET_PATH_URL = (
 )
 
 
-def build_lfp_output_path_base(
-    *,
-    dandiset_id: str,
-    output_dandi_path: str,
-    bidsy_version: str,
-    codebase_version: str,
-    params_id: str,
-) -> str:
+def build_lfp_pipeline_path(*, dandiset_id: str, output_dandi_path: str) -> str:
     """
-    Build the LFP capsule output path prefix.
+    Build the path of the LFP pipeline directory that holds an asset's job capsules.
 
-    Unlike the AIND pipeline there is no ``_config`` segment and, deliberately,
-    no ``_attempt-N`` suffix. Exactly one capsule is ever prepared per asset for
-    a given version and parameters.
-
-    :return: The output path prefix under the job capsules Dandiset.
+    :return: The pipeline directory path under the job capsules Dandiset.
     :rtype: str
     """
-    output_path_base = f"derivatives/dandiset-{dandiset_id}/{output_dandi_path}/"
-    output_path_base += f"pipeline-lfp/version-{bidsy_version}_codebase-v{codebase_version}_params-{params_id}"
-    return output_path_base
+    pipeline_path = f"derivatives/dandiset-{dandiset_id}/{output_dandi_path}/pipeline-lfp"
+    return pipeline_path
+
+
+def build_lfp_job_id(
+    *,
+    dandiset_id: str,
+    dandi_path: str,
+    bidsy_version: str,
+    params_id: str,
+    content_id: str,
+) -> str:
+    """
+    Build the ``job-{YYMMDD}+{hash}`` directory name for one LFP job capsule.
+
+    The LFP pipeline has no config, so an empty config takes part in the hash. The codebase
+    version is left out for the same reason it is on the AIND side: a job is the same logical
+    job whichever release of this package formed it.
+
+    :return: The job ID naming the capsule directory.
+    :rtype: str
+    """
+    job_hash = _compute_job_hash(
+        dandiset_id=dandiset_id,
+        dandi_path=dandi_path,
+        pipeline="lfp",
+        version=bidsy_version,
+        params=params_id,
+        config="",
+        content_id=content_id,
+    )
+    job_id = _format_job_id(job_hash=job_hash)
+    return job_id
+
+
+def find_existing_lfp_capsule_path(*, asset_paths: typing.Iterable[str], pipeline_path: str, job_id: str) -> str | None:
+    """
+    Find an already formed LFP capsule for this job among *asset_paths*, if there is one.
+
+    Matching is on the job hash alone, so a capsule prepared on an earlier date is still
+    recognised.
+
+    :return: The capsule path, or ``None`` when no capsule exists for this job yet.
+    :rtype: str or None
+    """
+    job_hash = _parse_job_hash(job_id)
+    for asset_path in asset_paths:
+        capsule_name = asset_path.removeprefix(f"{pipeline_path}/").split("/")[0]
+        if job_hash is not None and _parse_job_hash(capsule_name) == job_hash:
+            return f"{pipeline_path}/{capsule_name}"
+    return None
 
 
 def _resolve_parameters_file(parameters_key: str, /) -> tuple[pathlib.Path, str]:
@@ -161,19 +200,25 @@ def prepare_lfp_job(
 
     codebase_version = importlib.metadata.version("dandi-compute-code")
     bidsy_pipeline_version = pipeline_version.replace("-", "+")
-    output_dandiset_path_base = build_lfp_output_path_base(
+    pipeline_dandiset_path = build_lfp_pipeline_path(dandiset_id=dandiset_id, output_dandi_path=output_dandi_path)
+    job_id = build_lfp_job_id(
         dandiset_id=dandiset_id,
-        output_dandi_path=output_dandi_path,
+        dandi_path=dandiset_path,
         bidsy_version=bidsy_pipeline_version,
-        codebase_version=codebase_version,
         params_id=params_id,
+        content_id=content_id,
     )
+    output_dandiset_path_base = f"{pipeline_dandiset_path}/{job_id}"
 
     client = dandi.dandiapi.DandiAPIClient(token=os.environ["DANDI_API_KEY"])
     dandiset = client.get_dandiset(dandiset_id=_JOB_CAPSULES_DANDISET_ID)
-    existing_assets = dandiset.get_assets_with_path_prefix(path=output_dandiset_path_base)
-    if next(existing_assets, None) is not None:
-        _log.info(f"LFP capsule already exists for content ID {content_id}; skipping preparation.")
+    existing_capsule_path = find_existing_lfp_capsule_path(
+        asset_paths=(asset.path for asset in dandiset.get_assets_with_path_prefix(path=f"{pipeline_dandiset_path}/")),
+        pipeline_path=pipeline_dandiset_path,
+        job_id=job_id,
+    )
+    if existing_capsule_path is not None:
+        _log.info(f"LFP capsule already exists at {existing_capsule_path}; skipping preparation.")
         return None
 
     blob_head = content_id[0]
@@ -225,6 +270,20 @@ def prepare_lfp_job(
             },
         ],
         "SourceDatasets": [{"URL": f"https://dandiarchive.org/dandiset/{dandiset_id}/"}],
+        # Everything the capsule directory name used to spell out. This block is what the
+        # queue state table reads back to describe the job.
+        _PROVENANCE_KEY: {
+            "job_id": job_id,
+            "dandiset_id": dandiset_id,
+            "dandi_path": dandiset_path,
+            "content_id": content_id,
+            "pipeline": "lfp",
+            "version": bidsy_pipeline_version,
+            "codebase": f"v{codebase_version}",
+            "params": params_id,
+            "config": "",
+            "params_key": parameters_key,
+        },
     }
 
     _log.info(f"Writing LFP job files to {dandiset_output_dir.absolute()}")

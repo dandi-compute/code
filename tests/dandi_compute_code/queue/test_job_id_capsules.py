@@ -127,6 +127,54 @@ def test_from_dandi_keeps_capsule_without_provenance(dataset_description: dict) 
 
 
 @pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    ("capsule_name", "expected_codebase"),
+    [
+        pytest.param("version-v1.1.0_codebase-v0.4.0_params-abc1234_config-def5678", "v0.4.0", id="flat"),
+        pytest.param(
+            "version-v1.1.0_codebase-v0.4.0_params-abc1234_config-def5678_attempt-2", "v0.4.0", id="flat_attempt"
+        ),
+        pytest.param("version-v1.1.0/params-abc1234_config-def5678", "", id="nested"),
+        pytest.param("version-v1.1.0/params-abc1234_config-def5678_attempt-3", "", id="nested_attempt"),
+    ],
+)
+def test_from_dandi_reads_identity_from_legacy_capsule_names(capsule_name: str, expected_codebase: str) -> None:
+    """Legacy capsule names are read straight from the name, trailing attempt number included."""
+    capsule_path = (
+        f"derivatives/dandisets-001/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/{capsule_name}"
+    )
+    submit_path = f"{capsule_path}/code/submit.sh"
+    metadata = AssetsJsonldMetadata(
+        content_id_to_asset={},
+        path_to_asset_metadata={
+            submit_path: AssetMetadata(
+                path=submit_path,
+                date_modified="2024-01-01T00:00:00+00:00",
+                content_size=1,
+                content_id="content-legacy",
+            )
+        },
+    )
+
+    with (
+        mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
+        mock.patch(
+            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
+            return_value=_source_metadata(),
+        ),
+    ):
+        state = QueueState.from_dandi()
+
+    assert len(state) == 1
+    entry = state.entries[0]
+    assert entry.job.job_id == ""
+    assert entry.job.version == "v1.1.0"
+    assert entry.job.params == "abc1234"
+    assert entry.job.config == "def5678"
+    assert entry.job.codebase == expected_codebase
+
+
+@pytest.mark.ai_generated
 def test_capsule_dir_candidates_prefers_the_job_id_directory(tmp_path: pathlib.Path) -> None:
     """The job-ID directory comes first, with the two legacy layouts kept as fallbacks."""
     entry = JobEntry.from_dict(

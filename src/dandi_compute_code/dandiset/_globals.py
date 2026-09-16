@@ -6,7 +6,10 @@ from ._job_id import _JOB_ID_RE
 #: that still carry them.
 _LEGACY_JOB_CAPSULE_DIR_RE = re.compile(
     r"(?:version-(?P<version_in_name>.+?)_codebase-(?P<codebase>[^_]+)_)?"
-    r"params-(?P<params>[^_]+)_config-(?P<config>[^_]+)"
+    # The config segment is absent on pipelines that have no config, such as ``lfp``.
+    r"params-(?P<params>[^_]+)(?:_config-(?P<config>[^_]+))?"
+    # Capsules formed before the attempt notion was retired carry a trailing attempt number.
+    r"(?:_attempt-(?P<attempt>\d+))?"
 )
 
 #: Any job capsule directory name, current (``job-{YYMMDD}+{hash}``) or legacy.
