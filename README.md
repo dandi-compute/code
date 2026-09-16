@@ -25,7 +25,7 @@ Capsules prepared before the job ID existed still carry their old `version-..._c
 
 ### Migrating legacy capsules
 
-`scripts/migrate_job_capsule_names.py` renames every legacy capsule in `001697` and `001873` to its job ID and writes the `DandiCompute` provenance block into each one. The `YYMMDD` of a migrated capsule comes from the modification date of its `code/submit.sh`, so it keeps the date it was originally prepared, and its hash matches what preparation would compute today, so a migrated job is never formed a second time.
+`scripts/migrate_job_capsule_names.py` renames every legacy capsule in `001697` and `001873` to its job ID and writes the `DandiCompute` provenance block into each one. It is a standalone script that imports nothing from this package, so it can be copied anywhere and run against whatever version of `dandi-compute-code` is installed, or none at all. It needs only the standard library, plus the `dandi` command line client on PATH when applying. The `YYMMDD` of a migrated capsule comes from the modification date of its `code/submit.sh`, so it keeps the date it was originally prepared, and its hash matches what preparation would compute today, so a migrated job is never formed a second time.
 
 It is a dry run by default, printing every planned rename and changing nothing:
 

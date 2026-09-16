@@ -3,8 +3,12 @@ Tests for the one-off legacy job capsule migration script.
 
 Only the planning side is exercised. The parts that talk to the archive (``dandi download``,
 ``dandi upload``, ``dandi delete``) are deliberately left alone.
+
+The script is standalone by design, so it is loaded by path rather than imported as a module
+of the package, and its single network entry point (``fetch_assets``) is replaced wholesale.
 """
 
+import ast
 import datetime
 import importlib.util
 import pathlib
@@ -13,14 +17,18 @@ from unittest import mock
 
 import pytest
 
-from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
 from dandi_compute_code.dandiset._job_id import _compute_job_hash
 
 _SCRIPT_PATH = pathlib.Path(__file__).parent.parent.parent / "scripts" / "migrate_job_capsule_names.py"
 
+_SUBMIT_DATE = "2025-06-07T08:00:00+00:00"
+_SOURCE_PATH = "sub-01/sub-01_ecephys.nwb"
+_SOURCE_CONTENT_ID = "content-xyz"
+_AIND_PIPELINE_PATH = "derivatives/dandisets-000/dandiset-000409/sub-01/sub-01_ecephys/pipeline-aind+ephys"
+
 
 def _load_script():
-    """Import the migration script by path, since ``scripts/`` is not an installed package."""
+    """Load the standalone script by path, since ``scripts/`` is not an installed package."""
     spec = importlib.util.spec_from_file_location("migrate_job_capsule_names", _SCRIPT_PATH)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -28,50 +36,61 @@ def _load_script():
     return module
 
 
-_SUBMIT_DATE = "2025-06-07T08:00:00+00:00"
-_SOURCE_PATH = "sub-01/sub-01_ecephys.nwb"
-_AIND_PIPELINE_PATH = "derivatives/dandisets-000/dandiset-000409/sub-01/sub-01_ecephys/pipeline-aind+ephys"
-
-
-def _metadata_for(capsule_names: list[str], *, pipeline_path: str) -> AssetsJsonldMetadata:
-    path_to_asset_metadata = {}
+def _capsule_assets(capsule_names: list[str], *, pipeline_path: str) -> list[dict]:
+    """Build raw ``assets.jsonld`` entries for each capsule's code and dataset description."""
+    assets = []
     for capsule_name in capsule_names:
         for subpath in ("code/submit.sh", "dataset_description.json"):
-            asset_path = f"{pipeline_path}/{capsule_name}/{subpath}"
-            path_to_asset_metadata[asset_path] = AssetMetadata(
-                path=asset_path,
-                date_modified=_SUBMIT_DATE,
-                content_size=1,
-                content_id=f"capsule-{len(path_to_asset_metadata)}",
+            assets.append(
+                {
+                    "path": f"{pipeline_path}/{capsule_name}/{subpath}",
+                    "dateModified": _SUBMIT_DATE,
+                    "contentSize": 1,
+                    "contentUrl": [f"https://example.org/blobs/capsule-{len(assets)}"],
+                }
             )
-    return AssetsJsonldMetadata(content_id_to_asset={}, path_to_asset_metadata=path_to_asset_metadata)
+    return assets
 
 
-def _upstream_metadata() -> AssetsJsonldMetadata:
-    return AssetsJsonldMetadata(
-        content_id_to_asset={},
-        path_to_asset_metadata={
-            _SOURCE_PATH: AssetMetadata(
-                path=_SOURCE_PATH,
-                date_modified="2025-01-01T00:00:00+00:00",
-                content_size=9,
-                content_id="content-xyz",
-            )
-        },
-    )
+def _source_assets() -> list[dict]:
+    return [
+        {
+            "path": _SOURCE_PATH,
+            "dateModified": "2025-01-01T00:00:00+00:00",
+            "contentSize": 9,
+            "contentUrl": [f"https://example.org/blobs/{_SOURCE_CONTENT_ID}"],
+        }
+    ]
 
 
 def _plan(capsule_names: list[str], *, pipeline_path: str = _AIND_PIPELINE_PATH) -> list[tuple[str, str, dict]]:
     script = _load_script()
-    with (
-        mock.patch.object(
-            script,
-            "load_assets_jsonld_metadata",
-            return_value=_metadata_for(capsule_names, pipeline_path=pipeline_path),
-        ),
-        mock.patch.object(script, "_load_upstream_assets_jsonld_metadata", return_value=_upstream_metadata()),
-    ):
+
+    def _fake_fetch_assets(dandiset_id: str, /) -> list[dict]:
+        if dandiset_id == "001697":
+            return _capsule_assets(capsule_names, pipeline_path=pipeline_path)
+        return _source_assets()
+
+    with mock.patch.object(script, "fetch_assets", side_effect=_fake_fetch_assets):
         return script.plan_migration(dandiset_id="001697")
+
+
+@pytest.mark.ai_generated
+def test_script_imports_nothing_from_the_package() -> None:
+    """
+    The script must stay standalone so it runs against any installed version of the package,
+    including one that predates the job ID.
+    """
+    tree = ast.parse(_SCRIPT_PATH.read_text())
+    imported_roots = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported_roots.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            imported_roots.add(node.module.split(".")[0])
+
+    assert "dandi_compute_code" not in imported_roots
+    assert imported_roots <= set(sys.stdlib_module_names)
 
 
 @pytest.mark.ai_generated
@@ -92,7 +111,7 @@ def _plan(capsule_names: list[str], *, pipeline_path: str = _AIND_PIPELINE_PATH)
         pytest.param(
             "version-v1.0.0/params-abc1234_config-def5678_attempt-3", "v1.0.0", "", "def5678", id="nested_attempt"
         ),
-        pytest.param("version-v1.1.0_codebase-v0.3.0_params-abc1234", "v1.1.0", "v0.3.0", "", id="flat_without_config"),
+        pytest.param("version-v1.1.0_codebase-v0.3.0_params-abc1234", "v1.1.0", "v0.3.0", "", id="flat_no_config"),
     ],
 )
 def test_plan_migration_parses_every_legacy_layout(
@@ -113,7 +132,7 @@ def test_plan_migration_parses_every_legacy_layout(
     assert identity["config"] == expected_config
     assert identity["params"] == "abc1234"
     assert identity["dandi_path"] == _SOURCE_PATH
-    assert identity["content_id"] == "content-xyz"
+    assert identity["content_id"] == _SOURCE_CONTENT_ID
 
 
 @pytest.mark.ai_generated
@@ -127,7 +146,11 @@ def test_plan_migration_dates_the_job_id_from_the_submission_script() -> None:
 
 @pytest.mark.ai_generated
 def test_plan_migration_hash_matches_what_preparation_would_compute() -> None:
-    """A migrated job keeps the hash preparation gives it, so it is never formed a second time."""
+    """
+    A migrated job keeps the hash preparation gives it, so it is never formed a second time.
+
+    The script carries its own copy of the hash, so this pins that copy to the package's.
+    """
     plan = _plan(["version-v1.1.0_codebase-v0.3.0_params-abc1234_config-def5678"])
 
     expected_hash = _compute_job_hash(
@@ -137,7 +160,7 @@ def test_plan_migration_hash_matches_what_preparation_would_compute() -> None:
         version="v1.1.0",
         params="abc1234",
         config="def5678",
-        content_id="content-xyz",
+        content_id=_SOURCE_CONTENT_ID,
     )
     assert plan[0][2]["job_id"].split("+")[-1] == expected_hash
 
@@ -195,3 +218,16 @@ def test_plan_migration_keeps_non_colliding_capsules_alongside_a_collision() -> 
 
     assert len(plan) == 1
     assert plan[0][0].endswith("config-aaa1111")
+
+
+@pytest.mark.ai_generated
+def test_plan_migration_handles_the_unnested_lfp_dandiset_layout() -> None:
+    """The LFP pipeline writes to `derivatives/dandiset-{id}/` without the `dandisets-` level."""
+    pipeline_path = "derivatives/dandiset-000409/sub-01/sub-01_ecephys/pipeline-lfp"
+    plan = _plan(["version-v0.4.0_codebase-v0.4.0_params-2f6768c"], pipeline_path=pipeline_path)
+
+    assert len(plan) == 1
+    _, new_path, identity = plan[0]
+    assert new_path.startswith(f"{pipeline_path}/job-")
+    assert identity["pipeline"] == "lfp"
+    assert identity["config"] == ""
