@@ -256,6 +256,46 @@ def test_rename_is_idempotent(tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.ai_generated
+def test_rename_re_run_keeps_the_earlier_runs_manifest_records(tmp_path: pathlib.Path) -> None:
+    """
+    A second rename run adds to the manifest instead of replacing it.
+
+    A re-run only sees capsules that are still legacy, so writing just its own records would
+    drop the earlier run's, stranding capsules that are renamed on disk but unknown to the
+    later phases.
+    """
+    script = _load_script()
+    root = _clone(tmp_path, [_LEGACY_FLAT_NAME])
+    dandiset_ids = [_DANDISET_ID]
+
+    script._phase_rename(root=root, dandiset_ids=dandiset_ids)
+    first_records = json.loads(script.manifest_path(root).read_text())["dandisets"][_DANDISET_ID]
+
+    _make_capsule(dandiset_root=root / _DANDISET_ID, capsule_name="version-v2.0.0_codebase-v0.3.0_params-999aaaa")
+    script._phase_rename(root=root, dandiset_ids=dandiset_ids)
+    second_records = json.loads(script.manifest_path(root).read_text())["dandisets"][_DANDISET_ID]
+
+    assert len(first_records) == 1
+    assert len(second_records) == 2
+    assert first_records[0] in second_records
+
+
+@pytest.mark.ai_generated
+def test_rename_re_run_records_each_capsule_once(tmp_path: pathlib.Path) -> None:
+    """Re-running with nothing new to do leaves the manifest as it was."""
+    script = _load_script()
+    root = _clone(tmp_path, [_LEGACY_FLAT_NAME])
+    dandiset_ids = [_DANDISET_ID]
+
+    script._phase_rename(root=root, dandiset_ids=dandiset_ids)
+    first_manifest = json.loads(script.manifest_path(root).read_text())["dandisets"]
+    script._phase_rename(root=root, dandiset_ids=dandiset_ids)
+    second_manifest = json.loads(script.manifest_path(root).read_text())["dandisets"]
+
+    assert second_manifest == first_manifest
+
+
+@pytest.mark.ai_generated
 def test_upload_batches_only_the_new_paths(tmp_path: pathlib.Path) -> None:
     """The upload phase pushes the renamed paths and deletes nothing."""
     script = _load_script()

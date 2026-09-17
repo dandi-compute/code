@@ -49,7 +49,9 @@ A migrated capsule keeps the date it was originally prepared, taken from the mod
 
 Two legacy capsules that describe the same logical job and differ only in codebase version map to the same job ID, since the hash ignores the codebase version. Renaming both onto one directory would merge them, so they are reported and skipped. Archive or delete all but one, then re-run.
 
-Run `dandicompute queue refresh` after `clean` to rebuild the state tables.
+`rename` can be run repeatedly, adding to the manifest rather than replacing it, since a re-run only sees the capsules that are still legacy.
+
+The migration stands alone. It shells out to `dandi` for the two archive-facing phases and otherwise reads only the clones, never invoking `dandicompute` and never reading or writing a `state.tsv`.
 
 ## Manual dispatch commands on MIT Engaging
 
