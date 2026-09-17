@@ -228,10 +228,11 @@ def test_plan_ignores_already_migrated_capsules(tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.ai_generated
-def test_plan_skips_capsules_that_would_collide(tmp_path: pathlib.Path) -> None:
+def test_plan_indexes_capsules_that_would_share_a_job_id(tmp_path: pathlib.Path) -> None:
     """
-    Two capsules differing only in codebase version are the same logical job, so they map to
-    one job ID. Renaming both would merge them, so neither is planned.
+    Two capsules differing only in codebase version are the same logical job prepared on the
+    same day, so they map to one job ID. Copying both onto one directory would merge them, so
+    the second is suffixed with a counter and both migrate.
     """
     script = _load_script()
     root = _clone(
@@ -244,7 +245,42 @@ def test_plan_skips_capsules_that_would_collide(tmp_path: pathlib.Path) -> None:
 
     plan = script.plan_migration(dandiset_root=root / _DANDISET_ID)
 
-    assert plan == []
+    job_ids = sorted(record["job_id"] for record in plan)
+    assert len(job_ids) == 2
+    assert job_ids[1] == f"{job_ids[0]}-2"
+    # Each capsule keeps a directory of its own, and the provenance agrees with the name.
+    assert len({record["new_path"] for record in plan}) == 2
+    assert all(record["new_path"].endswith(record["identity"]["job_id"]) for record in plan)
+
+
+@pytest.mark.ai_generated
+def test_plan_assigns_the_counter_by_legacy_path(tmp_path: pathlib.Path) -> None:
+    """The same clone always produces the same names, whatever order the capsules are found."""
+    script = _load_script()
+    capsule_names = [
+        "version-v1.1.0_codebase-v0.4.0_params-abc1234_config-def5678",
+        "version-v1.1.0_codebase-v0.3.0_params-abc1234_config-def5678",
+    ]
+    root = _clone(tmp_path, capsule_names)
+
+    plan = script.plan_migration(dandiset_root=root / _DANDISET_ID)
+
+    by_old_path = {record["old_path"]: record["job_id"] for record in plan}
+    first, second = (f"{_AIND_PIPELINE_PATH}/{name}" for name in sorted(capsule_names))
+    assert not by_old_path[first].endswith("-2")
+    assert by_old_path[second] == f"{by_old_path[first]}-2"
+
+
+@pytest.mark.ai_generated
+def test_plan_leaves_an_indexed_capsule_alone_once_migrated(tmp_path: pathlib.Path) -> None:
+    """A capsule already carrying a counter reads as migrated, not as something to migrate."""
+    script = _load_script()
+    root = _clone(tmp_path, ["job-250607abc123-2", _LEGACY_FLAT_NAME])
+
+    plan = script.plan_migration(dandiset_root=root / _DANDISET_ID)
+
+    assert len(plan) == 1
+    assert plan[0]["old_path"].endswith(_LEGACY_FLAT_NAME)
 
 
 @pytest.mark.ai_generated

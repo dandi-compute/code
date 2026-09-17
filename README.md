@@ -49,7 +49,7 @@ The script is standalone. It imports nothing from this package, so it can be cop
 
 Planning is entirely offline: the content ID comes from the capsule's own `code/submit.sh` and the date from its submission marker. Its hash is what preparation computes for the same job, so a migrated job is never formed a second time.
 
-Two legacy capsules that describe the same logical job and differ only in codebase version map to the same job ID, since the hash ignores the codebase version. Copying both onto one directory would merge them, so they are reported and skipped. Archive or delete all but one, then re-run.
+Two capsules can map to the same job ID when they are the same logical job prepared on the same day: re-attempts, or runs differing only in codebase version, which the hash ignores. Copying both onto one directory would merge them, so the second and later are suffixed with a `-2`, `-3` counter and every capsule migrates. Assignment is by legacy path, so a clone always produces the same names.
 
 `copy` can be run repeatedly. It adds to the manifest rather than replacing it, and a capsule whose copy an earlier run already made is recorded again rather than skipped, so a lost or truncated manifest is rebuilt by re-running the phase.
 

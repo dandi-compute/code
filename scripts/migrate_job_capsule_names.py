@@ -64,6 +64,12 @@ rather than when it was prepared, and ``plan`` reports how many capsules fell ba
 Only the hash identifies the job, in any case: it is what preparation computes for the same
 job, so a migrated job is never formed a second time.
 
+Two capsules can still land on one name, when they are the same logical job prepared on the
+same day: re-attempts, or runs differing only in codebase version, which the hash deliberately
+ignores. The second and later are suffixed with a ``-2``, ``-3`` counter rather than skipped,
+so every capsule migrates. Assignment is by legacy path, so a clone always produces the same
+names.
+
 This script is deliberately standalone. It imports nothing from ``dandi_compute_code``, so it
 runs against whatever version of the package is (or is not) installed. It needs only the
 standard library, plus the ``dandi`` command line client on PATH for ``upload`` and ``clean``.
@@ -104,8 +110,9 @@ _MANIFEST_NAME = "job-capsule-migration.json"
 #: Key under which job provenance is written into a capsule's ``dataset_description.json``.
 _PROVENANCE_KEY = "DandiCompute"
 
-#: A capsule directory that already carries a job ID.
-_JOB_ID_RE = re.compile(r"job-(?P<job_date>\d{6})(?P<job_hash>[0-9a-f]{6})")
+#: A capsule directory that already carries a job ID, with the counter that distinguishes
+#: capsules of one job prepared on one day. Kept in step with the package's own pattern.
+_JOB_ID_RE = re.compile(r"job-(?P<job_date>\d{6})(?P<job_hash>[0-9a-f]{6})(?:-(?P<job_index>[2-9]|\d{2,}))?")
 
 #: A legacy capsule directory name. The config segment is absent on pipelines that have no
 #: config, such as ``lfp``, and the attempt number is present on capsules formed before that
@@ -146,9 +153,18 @@ def compute_job_hash(
     return job_hash
 
 
-def format_job_id(*, job_hash: str, date: datetime.date) -> str:
-    """Build the ``job-{YYMMDD}{hash}`` directory name."""
-    job_id = f"job-{date:%y%m%d}{job_hash}"
+def format_job_id(*, job_hash: str, date: datetime.date, index: int = 1) -> str:
+    """
+    Build the ``job-{YYMMDD}{hash}`` directory name.
+
+    Kept in step with ``dandi_compute_code.dandiset._job_id._format_job_id``.
+
+    :param index: Which capsule this is among those sharing the name. The first carries no
+        counter, so the common case reads as ``job-260916a1b2c3``; later ones are suffixed
+        ``-2``, ``-3`` and so on.
+    """
+    counter = "" if index <= 1 else f"-{index}"
+    job_id = f"job-{date:%y%m%d}{job_hash}{counter}"
     return job_id
 
 
@@ -426,7 +442,8 @@ def plan_migration(*, dandiset_root: pathlib.Path) -> list[dict]:
         )
         if not any((capsule_dir / "code").glob("submitted_date-*")):
             undated.append(capsule_dir)
-        job_id = format_job_id(job_hash=job_hash, date=read_prepared_date(capsule_dir))
+        prepared_date = read_prepared_date(capsule_dir)
+        job_id = format_job_id(job_hash=job_hash, date=prepared_date)
         identity["job_id"] = job_id
         candidates.append(
             {
@@ -434,6 +451,11 @@ def plan_migration(*, dandiset_root: pathlib.Path) -> list[dict]:
                 "new_path": f"{identity['pipeline_path']}/{job_id}",
                 "job_id": job_id,
                 "identity": identity,
+                # Kept so a shared job ID can be re-formed with a counter once the whole clone
+                # has been examined and the sharing is visible. Text, because the record is
+                # written to the manifest as JSON.
+                "job_hash": job_hash,
+                "prepared_date": prepared_date.isoformat(),
             }
         )
 
@@ -450,21 +472,46 @@ def plan_migration(*, dandiset_root: pathlib.Path) -> list[dict]:
     for capsule_dir in unrecognised:
         _log.warning("Not a recognised job capsule, leaving alone: %s", capsule_dir)
 
-    counts = collections.Counter(record["new_path"] for record in candidates)
-    colliding = {new_path for new_path, count in counts.items() if count > 1}
-    for new_path in sorted(colliding):
+    return _index_shared_job_ids(candidates)
+
+
+def _index_shared_job_ids(candidates: list[dict], /) -> list[dict]:
+    """
+    Give each capsule sharing a job ID its own name by appending a counter.
+
+    Capsules collide when they are the same logical job prepared on the same day: re-attempts,
+    or runs that differ only in codebase version, which the hash deliberately ignores. Copying
+    them onto one directory would merge them, so the second and later get a ``-2``, ``-3``
+    suffix. Assignment is by legacy path, so the same clone always produces the same names.
+
+    :return: The records, with ``job_id`` and ``new_path`` settled.
+    :rtype: list[dict]
+    """
+    by_new_path = collections.defaultdict(list)
+    for record in candidates:
+        by_new_path[record["new_path"]].append(record)
+
+    for new_path, records in sorted(by_new_path.items()):
+        if len(records) == 1:
+            continue
         _log.warning(
-            "Skipping %d capsules that all map to %s. They are the same logical job and differ only in "
-            "codebase version. Archive or delete all but one, then re-run.",
-            counts[new_path],
+            "%d capsules map to %s. They are the same logical job prepared on the same day, so the "
+            "second and later are suffixed with a counter.",
+            len(records),
             new_path,
         )
-        for record in candidates:
-            if record["new_path"] == new_path:
-                _log.warning("  colliding capsule: %s", record["old_path"])
+        for index, record in enumerate(sorted(records, key=lambda record: record["old_path"]), start=1):
+            job_id = format_job_id(
+                job_hash=record["job_hash"],
+                date=datetime.date.fromisoformat(record["prepared_date"]),
+                index=index,
+            )
+            record["job_id"] = job_id
+            record["identity"]["job_id"] = job_id
+            record["new_path"] = f"{record['identity']['pipeline_path']}/{job_id}"
+            _log.warning("  %s -> %s", record["old_path"], record["new_path"])
 
-    plan = [record for record in candidates if record["new_path"] not in colliding]
-    return plan
+    return candidates
 
 
 def write_provenance(*, capsule_dir: pathlib.Path, identity: dict) -> None:

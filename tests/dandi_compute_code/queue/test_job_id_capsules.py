@@ -6,12 +6,14 @@ version, parameters and config are read back from the provenance block written i
 capsule's ``dataset_description.json``.
 """
 
+import datetime
 from unittest import mock
 
 import pytest
 
 import dandi_compute_code.queue._queue_utils
 from dandi_compute_code.dandiset import AssetMetadata, AssetsJsonldMetadata
+from dandi_compute_code.dandiset._job_id import _format_job_id, _parse_job_hash
 from dandi_compute_code.queue import QueueState
 
 _JOB_ID = "job-240101a1b2c3"
@@ -123,3 +125,39 @@ def test_from_dandi_keeps_capsule_without_provenance(dataset_description: dict) 
     assert entry.job.codebase == ""
     assert entry.job.params == ""
     assert entry.job.config == ""
+
+
+@pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    ("job_id", "expected_hash"),
+    [
+        pytest.param("job-240101a1b2c3", "a1b2c3", id="no_counter"),
+        pytest.param("job-240101a1b2c3-2", "a1b2c3", id="counter"),
+        pytest.param("job-240101a1b2c3-12", "a1b2c3", id="two_digit_counter"),
+        pytest.param("job-240101a1b2c3-1", None, id="counter_one_is_not_a_spelling"),
+        pytest.param("job-240101a1b2c3-0", None, id="counter_zero_is_not_a_spelling"),
+        pytest.param("version-v1.1.0_params-abc1234", None, id="legacy_name"),
+    ],
+)
+def test_job_hash_reads_through_the_counter(job_id: str, expected_hash: str | None) -> None:
+    """
+    Capsules of one job prepared on one day are told apart by a counter, and still read back as
+    the same job, so preparation recognises one of them as the job already being formed.
+
+    The first capsule carries no counter, so ``-1`` and ``-0`` are not job IDs at all: each
+    capsule has exactly one spelling.
+    """
+    assert _parse_job_hash(job_id) == expected_hash
+
+
+@pytest.mark.ai_generated
+def test_formatting_round_trips_through_the_counter() -> None:
+    """Every index a migration can assign produces a name the package reads back."""
+    date = datetime.date(2026, 9, 16)
+
+    job_ids = [_format_job_id(job_hash="a1b2c3", date=date, index=index) for index in range(1, 13)]
+
+    assert job_ids[0] == "job-260916a1b2c3"
+    assert job_ids[1] == "job-260916a1b2c3-2"
+    assert len(set(job_ids)) == len(job_ids)
+    assert all(_parse_job_hash(job_id) == "a1b2c3" for job_id in job_ids)
