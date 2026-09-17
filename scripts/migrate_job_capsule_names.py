@@ -28,6 +28,22 @@ so the archive briefly carries both names. Check that the new capsules look righ
 replacing it, and a capsule whose copy an earlier run already made is recorded again rather
 than skipped, so a lost or truncated manifest is rebuilt by re-running the phase.
 
+There is a fifth phase, ``reconcile``, for repairing a migration that was carried out by an
+earlier version of this script that moved the local directory instead of copying it::
+
+    python migrate_job_capsule_names.py reconcile   # find legacy paths only the archive still has
+
+Those capsules were uploaded under their job ID but their legacy paths were never deleted, and
+the local legacy directory is gone, so ``plan`` cannot see them. ``reconcile`` reads the
+archive's asset list and pairs each legacy capsule it still holds with a migrated capsule in
+the same pipeline directory whose local provenance block describes the same job. Only a paired
+legacy path is recorded, so ``clean`` never deletes one whose replacement is not up. It changes
+nothing itself.
+
+``clean`` does this same reconciliation before deleting, so those improperly named folders are
+removed along with the ones this run copied, whether or not ``reconcile`` was run first. Pass
+``--no-reconcile`` to delete only what the manifest records.
+
 This is a one-off migration and stands entirely alone. It shells out to ``dandi`` for the two
 archive-facing phases and reads nothing but the clones themselves; it never invokes
 ``dandicompute`` and never reads or writes a ``state.tsv``.
@@ -39,8 +55,10 @@ All legacy layouts are handled, with or without a trailing ``_attempt-N``::
     pipeline-{pipeline}/version-{version}_codebase-{codebase}_params-{params}
 
 The ``YYMMDD`` of each migrated capsule comes from the modification time of its
-``code/submit.sh``, so a capsule keeps the date it was originally prepared. Its hash is what
-preparation computes for the same job, so a migrated job is never formed a second time.
+``code/submit.sh``. That is the date the capsule's files last landed, which for a capsule that
+has since been archived is the date it was archived rather than the date it was prepared, so
+the date is not always meaningful. Only the hash identifies the job: it is what preparation
+computes for the same job, so a migrated job is never formed a second time.
 
 This script is deliberately standalone. It imports nothing from ``dandi_compute_code``, so it
 runs against whatever version of the package is (or is not) installed. It needs only the
@@ -66,11 +84,15 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.request
 
 _log = logging.getLogger("migrate_job_capsule_names")
 
 _JOB_CAPSULES_DANDISET_ID = "001697"
 _FAILED_RUNS_ARCHIVE_DANDISET_ID = "001873"
+
+#: Where the archive lists every asset path in a Dandiset's draft version.
+_ASSETS_JSONLD_URL_TEMPLATE = "https://dandiarchive.s3.amazonaws.com/dandisets/{dandiset_id}/draft/assets.jsonld"
 
 #: Where ``copy`` records what it did, and what ``upload`` and ``clean`` read back.
 _MANIFEST_NAME = "job-capsule-migration.json"
@@ -143,9 +165,10 @@ def read_prepared_date(capsule_dir: pathlib.Path, /) -> datetime.date:
     """
     Read the date a capsule was prepared from its ``code/submit.sh`` modification time.
 
-    ``dandi download`` preserves the archive's modification times, so a freshly downloaded
-    clone carries the original preparation date. Falls back to today when the script is
-    missing.
+    ``dandi download`` preserves the archive's modification times, so this is the date the
+    capsule's files last landed on the archive. For a capsule that was later archived into
+    another Dandiset that is the date it was archived, not the date it was prepared. Falls back
+    to today when the script is missing.
     """
     submission_script = capsule_dir / "code" / "submit.sh"
     if not submission_script.is_file():
@@ -164,8 +187,20 @@ def parse_legacy_capsule(*, capsule_dir: pathlib.Path, dandiset_root: pathlib.Pa
     :return: The identity, or ``None`` when *capsule_dir* is not a legacy job capsule.
     :rtype: dict or None
     """
-    parts = capsule_dir.relative_to(dandiset_root).parts
+    return parse_legacy_capsule_parts(capsule_dir.relative_to(dandiset_root).parts)
 
+
+def parse_legacy_capsule_parts(parts: tuple[str, ...], /) -> dict | None:
+    """
+    Parse the path segments of a legacy capsule into the identity its name spells out.
+
+    Takes segments rather than a path so the same parser serves both a directory in the local
+    clone and an asset path listed by the archive.
+
+    :param parts: Path segments relative to the Dandiset root, ending at the capsule directory.
+    :return: The identity, or ``None`` when *parts* do not describe a legacy job capsule.
+    :rtype: dict or None
+    """
     dandiset_index = next((index for index, part in enumerate(parts) if part.startswith("dandiset-")), None)
     if dandiset_index is None:
         return None
@@ -481,6 +516,132 @@ def _remove_empty_parents(*, start: pathlib.Path, stop: pathlib.Path) -> None:
         current = current.parent
 
 
+def fetch_archive_capsule_names(dandiset_id: str, /) -> dict[str, set[str]]:
+    """
+    Read the capsule directory names the archive currently holds, per pipeline directory.
+
+    The draft ``assets.jsonld`` lists every asset path in the Dandiset, which is enough to see
+    which capsule directories exist without downloading anything.
+
+    :return: Capsule directory names, keyed by the pipeline directory that holds them. Both are
+        paths relative to the Dandiset root.
+    :rtype: dict[str, set[str]]
+    """
+    url = _ASSETS_JSONLD_URL_TEMPLATE.format(dandiset_id=dandiset_id)
+    _log.info("Reading the archive's asset list for dandiset-%s", dandiset_id)
+    with urllib.request.urlopen(url) as response:
+        assets = json.loads(response.read().decode("utf-8"))
+
+    # The document is a JSON-LD object listing its assets under ``hasPart``, but accept a bare
+    # list of assets too rather than depending on that framing.
+    asset_entries = assets.get("hasPart", []) if isinstance(assets, dict) else assets
+
+    capsule_names: dict[str, set[str]] = collections.defaultdict(set)
+    for asset in asset_entries:
+        if not isinstance(asset, dict):
+            continue
+        asset_path = asset.get("path", "")
+        parts = pathlib.PurePosixPath(asset_path).parts
+        pipeline_index = next((index for index, part in enumerate(parts) if part.startswith("pipeline-")), None)
+        if pipeline_index is None or pipeline_index + 1 >= len(parts):
+            continue
+        pipeline_path = "/".join(parts[: pipeline_index + 1])
+        capsule_names[pipeline_path].add(parts[pipeline_index + 1])
+
+    return dict(capsule_names)
+
+
+def read_provenance(capsule_dir: pathlib.Path, /) -> dict | None:
+    """Read a capsule's ``DandiCompute`` provenance block, or ``None`` when it has none."""
+    dataset_description_file = capsule_dir / "dataset_description.json"
+    if not dataset_description_file.is_file():
+        return None
+    try:
+        dataset_description = json.loads(dataset_description_file.read_text())
+    except json.JSONDecodeError:
+        return None
+    provenance = dataset_description.get(_PROVENANCE_KEY)
+    return provenance if isinstance(provenance, dict) else None
+
+
+def _identity_key(identity: dict, /) -> tuple[str, str, str, str]:
+    """The fields that decide whether a legacy name and a migrated capsule are the same job."""
+    return (
+        identity.get("version", ""),
+        identity.get("codebase", ""),
+        identity.get("params", ""),
+        identity.get("config", ""),
+    )
+
+
+def find_orphaned_legacy_paths(
+    *, dandiset_root: pathlib.Path, dandiset_id: str, known_old_paths: set[str] | None = None
+) -> list[dict]:
+    """
+    Find legacy capsule paths the archive still holds whose migrated capsule is already up.
+
+    This is the repair path for capsules migrated by an earlier run that moved the local
+    directory instead of copying it. The legacy directory is gone locally, so ``plan`` cannot
+    see it, but the archive still carries it alongside the uploaded job ID capsule.
+
+    A legacy path is only reported when the archive also holds a job ID capsule in the same
+    pipeline directory whose provenance block describes the same job, read from the local
+    clone. That pairing is what makes deleting the legacy path safe, so a capsule whose
+    migrated counterpart is missing or unreadable is left alone and reported.
+
+    :param known_old_paths: Legacy paths already accounted for elsewhere, such as by the
+        manifest. They are passed over silently, since the archive's asset list can lag a just
+        finished upload and would otherwise report them as unpaired.
+    :return: One record per orphan, shaped like the records ``copy`` writes, so ``clean`` can
+        delete them without knowing where they came from.
+    :rtype: list[dict]
+    """
+    known_old_paths = known_old_paths if known_old_paths is not None else set()
+    archive_capsule_names = fetch_archive_capsule_names(dandiset_id)
+    progress = _Progress(f"Reconciling {dandiset_root.name} against the archive")
+    orphans: list[dict] = []
+    unpaired: list[str] = []
+
+    for pipeline_path, capsule_names in sorted(archive_capsule_names.items()):
+        progress.advance(pipeline_path.rsplit("/", maxsplit=1)[-1])
+        legacy_names = [name for name in capsule_names if _JOB_ID_RE.fullmatch(name) is None]
+        job_id_names = [name for name in capsule_names if _JOB_ID_RE.fullmatch(name) is not None]
+        if not legacy_names or not job_id_names:
+            continue
+
+        provenance_by_identity = {}
+        for job_id_name in job_id_names:
+            provenance = read_provenance(dandiset_root / pipeline_path / job_id_name)
+            if provenance is not None:
+                provenance_by_identity[_identity_key(provenance)] = job_id_name
+
+        for legacy_name in sorted(legacy_names):
+            legacy_path = f"{pipeline_path}/{legacy_name}"
+            if legacy_path in known_old_paths:
+                continue
+            identity = parse_legacy_capsule_parts(pathlib.PurePosixPath(legacy_path).parts)
+            if identity is None:
+                continue
+            job_id_name = provenance_by_identity.get(_identity_key(identity))
+            if job_id_name is None:
+                unpaired.append(legacy_path)
+                continue
+            identity["job_id"] = job_id_name
+            orphans.append(
+                {
+                    "old_path": legacy_path,
+                    "new_path": f"{pipeline_path}/{job_id_name}",
+                    "job_id": job_id_name,
+                    "identity": identity,
+                }
+            )
+
+    progress.close(f"{len(orphans)} paired with a migrated capsule, {len(unpaired)} left alone")
+    for legacy_path in unpaired:
+        _log.warning("No migrated capsule found for %s; leaving it on the archive", legacy_path)
+    return orphans
+
+
 def _batched(items: list[str], size: int) -> list[list[str]]:
     return [items[index : index + size] for index in range(0, len(items), size)]
 
@@ -546,9 +707,15 @@ def _read_manifest_for_update(root: pathlib.Path, /) -> dict:
 
 
 def _merged_records(*, existing: list[dict], added: list[dict]) -> list[dict]:
-    """Append *added* to *existing*, dropping any record whose capsule is already recorded."""
-    known_new_paths = {record["new_path"] for record in existing}
-    return existing + [record for record in added if record["new_path"] not in known_new_paths]
+    """
+    Append *added* to *existing*, dropping any record for a legacy path already recorded.
+
+    Keyed on the legacy path rather than the job ID, because several legacy paths can share one
+    job ID: re-attempts of the same job differ only by a suffix the identity ignores, so each
+    one is its own path to delete even though they all pair with the same migrated capsule.
+    """
+    known_old_paths = {record["old_path"] for record in existing}
+    return existing + [record for record in added if record["old_path"] not in known_old_paths]
 
 
 def _resolve_dandiset_root(*, root: pathlib.Path, dandiset_id: str) -> pathlib.Path | None:
@@ -624,17 +791,31 @@ def _phase_upload(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
     return 0
 
 
-def _phase_clean(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
+def _phase_clean(*, root: pathlib.Path, dandiset_ids: list[str], reconcile: bool = True) -> int:
     manifest = load_manifest(root)
     deleted_total = 0
     for dandiset_id in dandiset_ids:
         records = manifest["dandisets"].get(dandiset_id, [])
+        dandiset_root = _resolve_dandiset_root(root=root, dandiset_id=dandiset_id)
+
+        if reconcile and dandiset_root is not None:
+            # Legacy paths an earlier run left on the archive when it moved the local directory
+            # instead of copying it. They are not in the manifest, because nothing local records
+            # them, but they are exactly the improperly named folders this phase is here to
+            # remove. Only ones paired with a migrated capsule already on the archive come back.
+            orphans = find_orphaned_legacy_paths(
+                dandiset_root=dandiset_root,
+                dandiset_id=dandiset_id,
+                known_old_paths={record["old_path"] for record in records},
+            )
+            records = _merged_records(existing=records, added=orphans)
+            manifest["dandisets"][dandiset_id] = records
+
         if not records:
             continue
         delete_legacy_paths(dandiset_id=dandiset_id, old_paths=[record["old_path"] for record in records])
         deleted_total += len(records)
 
-        dandiset_root = _resolve_dandiset_root(root=root, dandiset_id=dandiset_id)
         if dandiset_root is None:
             continue
         for record in records:
@@ -643,17 +824,44 @@ def _phase_clean(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
                 shutil.rmtree(legacy_dir)
             _remove_empty_parents(start=legacy_dir.parent, stop=dandiset_root / "derivatives")
 
+    manifest_path(root).write_text(json.dumps(manifest, indent=2) + "\n")
     if deleted_total == 0:
-        print("\nNothing to delete: the manifest records no copied capsules.")
+        print("\nNothing to delete: no legacy paths are recorded, and none were found on the archive.")
         return 0
 
     print(f"\nDeleted {deleted_total} legacy job capsule path(s). The migration is complete.")
     return 0
 
 
+def _phase_reconcile(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
+    manifest = _read_manifest_for_update(root)
+    manifest["generated_at"] = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
+    manifest["root"] = str(root)
+
+    found_now = 0
+    for dandiset_id in dandiset_ids:
+        dandiset_root = _resolve_dandiset_root(root=root, dandiset_id=dandiset_id)
+        if dandiset_root is None:
+            continue
+        orphans = find_orphaned_legacy_paths(dandiset_root=dandiset_root, dandiset_id=dandiset_id)
+        found_now += len(orphans)
+        manifest["dandisets"][dandiset_id] = _merged_records(
+            existing=manifest["dandisets"].get(dandiset_id, []), added=orphans
+        )
+        _print_plan(dandiset_id=dandiset_id, plan=orphans)
+
+    manifest_path(root).write_text(json.dumps(manifest, indent=2) + "\n")
+    total = sum(len(records) for records in manifest["dandisets"].values())
+    print(f"\nFound {found_now} orphaned legacy path(s) ({total} recorded in total).")
+    print(f"Manifest: {manifest_path(root)}")
+    print("Nothing was uploaded or deleted. Review the manifest, then run the `clean` phase.")
+    return 0
+
+
 _PHASES = {
     "plan": _phase_plan,
     "copy": _phase_copy,
+    "reconcile": _phase_reconcile,
     "upload": _phase_upload,
     "clean": _phase_clean,
 }
@@ -667,6 +875,15 @@ def main() -> int:
         type=pathlib.Path,
         default=pathlib.Path.cwd(),
         help="Directory holding the local Dandiset clones. Defaults to the working directory.",
+    )
+    parser.add_argument(
+        "--no-reconcile",
+        dest="reconcile",
+        action="store_false",
+        help=(
+            "For the `clean` phase: do not also look on the archive for improperly named legacy "
+            "paths left behind by an earlier migration. Deletes only what the manifest records."
+        ),
     )
     parser.add_argument(
         "--dandiset",
@@ -685,8 +902,12 @@ def main() -> int:
         _log.error("`DANDI_API_KEY` environment variable is not set or is blank.")
         return 1
 
+    phase_arguments = {"root": root, "dandiset_ids": dandiset_ids}
+    if arguments.phase == "clean":
+        phase_arguments["reconcile"] = arguments.reconcile
+
     try:
-        return _PHASES[arguments.phase](root=root, dandiset_ids=dandiset_ids)
+        return _PHASES[arguments.phase](**phase_arguments)
     except RuntimeError as exception:
         _log.error("%s", exception)
         return 1

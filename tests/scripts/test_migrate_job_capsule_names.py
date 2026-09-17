@@ -10,8 +10,10 @@ of the package.
 """
 
 import ast
+import contextlib
 import datetime
 import importlib.util
+import io
 import json
 import os
 import pathlib
@@ -63,6 +65,17 @@ def _make_capsule(
     prepared_at = datetime.datetime.combine(_PREPARED_ON, datetime.time(12, 0), tzinfo=datetime.timezone.utc)
     os.utime(submission_script, (prepared_at.timestamp(), prepared_at.timestamp()))
     return capsule_dir
+
+
+def _fake_urlopen(payload: dict):
+    """Stand in for urlopen, serving *payload* as the archive's assets.jsonld."""
+    body = json.dumps(payload).encode("utf-8")
+
+    @contextlib.contextmanager
+    def opener(url):  # noqa: ARG001 - the URL is irrelevant to the stub
+        yield io.BytesIO(body)
+
+    return opener
 
 
 def _clone(tmp_path: pathlib.Path, capsule_names: list[str], **capsule_kwargs) -> pathlib.Path:
@@ -137,7 +150,7 @@ def test_plan_parses_every_legacy_layout(
 
 @pytest.mark.ai_generated
 def test_plan_dates_the_job_id_from_the_submission_script(tmp_path: pathlib.Path) -> None:
-    """A migrated capsule keeps the date it was originally prepared."""
+    """The job ID is dated from the submission script, i.e. when the capsule's files landed."""
     script = _load_script()
     root = _clone(tmp_path, [_LEGACY_FLAT_NAME])
 
@@ -375,7 +388,7 @@ def test_phases_hand_off_through_the_manifest(tmp_path: pathlib.Path) -> None:
     assert mock_run.call_args.args[0] == ["dandi", "upload", "--allow-any-path", record["new_path"]]
 
     with mock.patch.object(script, "_run") as mock_run:
-        script._phase_clean(root=root, dandiset_ids=dandiset_ids)
+        script._phase_clean(root=root, dandiset_ids=dandiset_ids, reconcile=False)
     assert mock_run.call_args.args[0] == [
         "dandi",
         "delete",
@@ -395,10 +408,187 @@ def test_clean_removes_the_legacy_copy_left_behind_locally(tmp_path: pathlib.Pat
     assert (dandiset_root / _AIND_PIPELINE_PATH / "version-v1.0.0").is_dir()
 
     with mock.patch.object(script, "_run"):
-        script._phase_clean(root=root, dandiset_ids=dandiset_ids)
+        script._phase_clean(root=root, dandiset_ids=dandiset_ids, reconcile=False)
 
     assert not (dandiset_root / _AIND_PIPELINE_PATH / "version-v1.0.0").exists()
     assert (dandiset_root / _AIND_PIPELINE_PATH).is_dir()
+
+
+def _archive_assets(paths: list[str]) -> dict:
+    """Shape a list of asset paths the way the archive's assets.jsonld presents them."""
+    return {"hasPart": [{"path": path} for path in paths]}
+
+
+@pytest.mark.ai_generated
+def test_reconcile_pairs_an_orphaned_legacy_path_with_its_migrated_capsule(tmp_path: pathlib.Path) -> None:
+    """
+    A capsule an earlier run moved rather than copied is recoverable from the archive.
+
+    Its legacy directory is gone locally, so the plan phase cannot see it, but the archive
+    still carries the legacy path next to the uploaded job ID capsule.
+    """
+    script = _load_script()
+    root = _clone(tmp_path, ["job-250607abc123"])
+    dandiset_root = root / _DANDISET_ID
+    (dandiset_root / _AIND_PIPELINE_PATH / "job-250607abc123" / "dataset_description.json").write_text(
+        json.dumps(
+            {
+                "DandiCompute": {
+                    "version": "v1.1.0",
+                    "codebase": "v0.3.0",
+                    "params": "abc1234",
+                    "config": "def5678",
+                }
+            }
+        )
+    )
+    archive_paths = [
+        f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}/code/submit.sh",
+        f"{_AIND_PIPELINE_PATH}/job-250607abc123/code/submit.sh",
+    ]
+
+    with mock.patch.object(script.urllib.request, "urlopen", _fake_urlopen(_archive_assets(archive_paths))):
+        orphans = script.find_orphaned_legacy_paths(dandiset_root=dandiset_root, dandiset_id=_DANDISET_ID)
+
+    assert len(orphans) == 1
+    assert orphans[0]["old_path"] == f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}"
+    assert orphans[0]["new_path"] == f"{_AIND_PIPELINE_PATH}/job-250607abc123"
+
+
+@pytest.mark.ai_generated
+def test_reconcile_records_every_attempt_sharing_one_migrated_capsule(tmp_path: pathlib.Path) -> None:
+    """
+    Re-attempts of one job differ only by a suffix the identity ignores, so they all pair with
+    the same migrated capsule. Each is still its own path on the archive and must be recorded.
+    """
+    script = _load_script()
+    root = _clone(tmp_path, ["job-250607abc123"])
+    dandiset_root = root / _DANDISET_ID
+    (dandiset_root / _AIND_PIPELINE_PATH / "job-250607abc123" / "dataset_description.json").write_text(
+        json.dumps(
+            {"DandiCompute": {"version": "v1.1.0", "codebase": "v0.3.0", "params": "abc1234", "config": "def5678"}}
+        )
+    )
+    archive_paths = [
+        f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}_attempt-1/code/submit.sh",
+        f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}_attempt-2/code/submit.sh",
+        f"{_AIND_PIPELINE_PATH}/job-250607abc123/code/submit.sh",
+    ]
+
+    with mock.patch.object(script.urllib.request, "urlopen", _fake_urlopen(_archive_assets(archive_paths))):
+        script._phase_reconcile(root=root, dandiset_ids=[_DANDISET_ID])
+
+    records = json.loads(script.manifest_path(root).read_text())["dandisets"][_DANDISET_ID]
+    assert sorted(record["old_path"] for record in records) == [
+        f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}_attempt-1",
+        f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}_attempt-2",
+    ]
+
+
+@pytest.mark.ai_generated
+def test_reconcile_leaves_a_legacy_path_with_no_migrated_capsule_alone(tmp_path: pathlib.Path) -> None:
+    """
+    A legacy path is only recorded once its replacement is confirmed on the archive.
+
+    Recording an unpaired one would let clean delete a capsule that was never migrated.
+    """
+    script = _load_script()
+    root = _clone(tmp_path, ["job-250607abc123"])
+    dandiset_root = root / _DANDISET_ID
+    (dandiset_root / _AIND_PIPELINE_PATH / "job-250607abc123" / "dataset_description.json").write_text(
+        json.dumps({"DandiCompute": {"version": "v9.9.9", "codebase": "v0.3.0", "params": "zzz", "config": "yyy"}})
+    )
+    archive_paths = [
+        f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}/code/submit.sh",
+        f"{_AIND_PIPELINE_PATH}/job-250607abc123/code/submit.sh",
+    ]
+
+    with mock.patch.object(script.urllib.request, "urlopen", _fake_urlopen(_archive_assets(archive_paths))):
+        orphans = script.find_orphaned_legacy_paths(dandiset_root=dandiset_root, dandiset_id=_DANDISET_ID)
+
+    assert orphans == []
+
+
+@pytest.mark.ai_generated
+def test_reconcile_writes_a_manifest_that_clean_deletes_from(tmp_path: pathlib.Path) -> None:
+    """The reconcile phase hands off to clean through the same manifest the copy phase uses."""
+    script = _load_script()
+    root = _clone(tmp_path, ["job-250607abc123"])
+    dandiset_root = root / _DANDISET_ID
+    (dandiset_root / _AIND_PIPELINE_PATH / "job-250607abc123" / "dataset_description.json").write_text(
+        json.dumps(
+            {
+                "DandiCompute": {
+                    "version": "v1.1.0",
+                    "codebase": "v0.3.0",
+                    "params": "abc1234",
+                    "config": "def5678",
+                }
+            }
+        )
+    )
+    archive_paths = [
+        f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}/code/submit.sh",
+        f"{_AIND_PIPELINE_PATH}/job-250607abc123/code/submit.sh",
+    ]
+
+    with mock.patch.object(script.urllib.request, "urlopen", _fake_urlopen(_archive_assets(archive_paths))):
+        script._phase_reconcile(root=root, dandiset_ids=[_DANDISET_ID])
+
+    with mock.patch.object(script, "_run") as mock_run:
+        script._phase_clean(root=root, dandiset_ids=[_DANDISET_ID], reconcile=False)
+
+    assert mock_run.call_args.args[0] == [
+        "dandi",
+        "delete",
+        f"dandi://dandi/{_DANDISET_ID}/{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}/",
+    ]
+
+
+@pytest.mark.ai_generated
+def test_clean_also_deletes_orphans_the_manifest_never_recorded(tmp_path: pathlib.Path) -> None:
+    """
+    clean reconciles against the archive, so improperly named folders left by an earlier
+    migration are removed alongside the capsules this run copied.
+    """
+    script = _load_script()
+    root = _clone(tmp_path, ["job-250607abc123"])
+    dandiset_root = root / _DANDISET_ID
+    (dandiset_root / _AIND_PIPELINE_PATH / "job-250607abc123" / "dataset_description.json").write_text(
+        json.dumps(
+            {"DandiCompute": {"version": "v1.1.0", "codebase": "v0.3.0", "params": "abc1234", "config": "def5678"}}
+        )
+    )
+    script.manifest_path(root).write_text(json.dumps({"dandisets": {_DANDISET_ID: []}}) + "\n")
+    archive_paths = [
+        f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}/code/submit.sh",
+        f"{_AIND_PIPELINE_PATH}/job-250607abc123/code/submit.sh",
+    ]
+
+    with mock.patch.object(script.urllib.request, "urlopen", _fake_urlopen(_archive_assets(archive_paths))):
+        with mock.patch.object(script, "_run") as mock_run:
+            script._phase_clean(root=root, dandiset_ids=[_DANDISET_ID])
+
+    assert mock_run.call_args.args[0] == [
+        "dandi",
+        "delete",
+        f"dandi://dandi/{_DANDISET_ID}/{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}/",
+    ]
+
+
+@pytest.mark.ai_generated
+def test_clean_without_reconcile_deletes_only_what_the_manifest_records(tmp_path: pathlib.Path) -> None:
+    """`--no-reconcile` keeps clean off the archive listing, deleting only recorded paths."""
+    script = _load_script()
+    root = _clone(tmp_path, ["job-250607abc123"])
+    script.manifest_path(root).write_text(json.dumps({"dandisets": {_DANDISET_ID: []}}) + "\n")
+
+    with mock.patch.object(script.urllib.request, "urlopen") as mock_urlopen:
+        with mock.patch.object(script, "_run") as mock_run:
+            script._phase_clean(root=root, dandiset_ids=[_DANDISET_ID], reconcile=False)
+
+    mock_urlopen.assert_not_called()
+    mock_run.assert_not_called()
 
 
 @pytest.mark.ai_generated
