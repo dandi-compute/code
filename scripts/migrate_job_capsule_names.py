@@ -1,28 +1,32 @@
 """
 One-off migration of job capsule directories to the ``job-{YYMMDD}{hash}`` naming.
 
-Works against local Dandiset clones sitting next to each other, so the renames happen on
-disk first, the uploads go up in batches, and the legacy structure is only torn down once
-you have looked at the result. Four phases, run in order::
+Works against local Dandiset clones sitting next to each other. The archive has no notion of
+renaming a path, so a migration is a copy, an upload of the copies, and a delete of the
+originals once you have confirmed the result. Four phases, run in order::
 
-    python migrate_job_capsule_names.py plan     # what would be renamed; changes nothing
-    python migrate_job_capsule_names.py rename   # rename on disk, write a manifest
+    python migrate_job_capsule_names.py plan     # what would be copied; changes nothing
+    python migrate_job_capsule_names.py copy     # copy on disk, write a manifest
     python migrate_job_capsule_names.py upload   # batch-upload the new paths
     python migrate_job_capsule_names.py clean    # delete the legacy paths
 
-``rename`` is purely local. It renames each legacy capsule directory to its job ID and writes
-the ``DandiCompute`` provenance block into the capsule's ``dataset_description.json``, so the
+``copy`` is purely local. It copies each legacy capsule directory to its job ID name and writes
+the ``DandiCompute`` provenance block into the copy's ``dataset_description.json``, so the
 pipeline version, codebase version, parameters and config the old name spelled out are
-preserved. It records every rename in a manifest next to the clones, which the later phases
-read, so you can inspect or edit it before anything reaches the archive.
+preserved. The legacy directory is left exactly as it was, so the clone stays a complete mirror
+of the archive until ``clean``. It records every copy in a manifest next to the clones, which
+the later phases read, so you can inspect or edit it before anything reaches the archive.
+
+Because the capsules exist twice on disk between ``copy`` and ``clean``, the clone needs room
+for a second copy of every capsule being migrated.
 
 ``upload`` pushes only the new paths, batched per Dandiset. Nothing is deleted at this point,
 so the archive briefly carries both names. Check that the new capsules look right, then run
 ``clean`` to remove the legacy paths from the archive and prune the emptied local parents.
 
-``rename`` can be run repeatedly. Each run adds what it renamed to the manifest rather than
-replacing it, because a re-run only sees capsules that are still legacy: the ones an earlier
-run renamed read as already migrated.
+``copy`` can be run repeatedly. Each run adds what it copied to the manifest rather than
+replacing it, and a capsule whose copy an earlier run already made is recorded again rather
+than skipped, so a lost or truncated manifest is rebuilt by re-running the phase.
 
 This is a one-off migration and stands entirely alone. It shells out to ``dandi`` for the two
 archive-facing phases and reads nothing but the clones themselves; it never invokes
@@ -68,7 +72,7 @@ _log = logging.getLogger("migrate_job_capsule_names")
 _JOB_CAPSULES_DANDISET_ID = "001697"
 _FAILED_RUNS_ARCHIVE_DANDISET_ID = "001873"
 
-#: Where ``rename`` records what it did, and what ``upload`` and ``clean`` read back.
+#: Where ``copy`` records what it did, and what ``upload`` and ``clean`` read back.
 _MANIFEST_NAME = "job-capsule-migration.json"
 
 #: Key under which job provenance is written into a capsule's ``dataset_description.json``.
@@ -319,14 +323,14 @@ def find_legacy_capsules(dandiset_root: pathlib.Path, /) -> list[pathlib.Path]:
 
 def plan_migration(*, dandiset_root: pathlib.Path) -> list[dict]:
     """
-    Build the list of renames for one local clone.
+    Build the list of copies for one local clone.
 
     Capsules that map onto the same job ID are left out. That happens when two legacy capsules
     describe the same logical job and differ only in the codebase version, which the job hash
     deliberately ignores. Renaming both onto one directory would merge them, so they are
     reported and skipped for a human to resolve.
 
-    :return: One record per planned rename, each with ``old_path``, ``new_path``, ``job_id``
+    :return: One record per planned copy, each with ``old_path``, ``new_path``, ``job_id``
         and the parsed ``identity``. Paths are relative to *dandiset_root*.
     :rtype: list[dict]
     """
@@ -418,35 +422,48 @@ def write_provenance(*, capsule_dir: pathlib.Path, identity: dict) -> None:
     dataset_description_file.write_text(json.dumps(dataset_description, indent=2) + "\n")
 
 
-def rename_capsules(*, dandiset_root: pathlib.Path, plan: list[dict]) -> list[dict]:
+def copy_capsules(*, dandiset_root: pathlib.Path, plan: list[dict]) -> list[dict]:
     """
-    Rename each planned capsule on disk and write its provenance block.
+    Copy each planned capsule to its job ID name and write the copy's provenance block.
 
-    Purely local. Nothing is uploaded or deleted here, so a bad plan costs only a re-download.
+    A copy, not a move. The archive has no notion of renaming a path: the new capsule is
+    uploaded as new assets and the legacy assets are deleted afterwards, so the legacy paths
+    have to stay on disk and on the archive until that deletion is confirmed. Keeping them
+    also leaves the clone a complete mirror of the archive while the copies are checked.
 
-    :return: The records that were renamed.
+    Purely local. Nothing is uploaded or deleted here.
+
+    :return: The records that were copied.
     :rtype: list[dict]
     """
-    renamed: list[dict] = []
+    copied: list[dict] = []
     for record in plan:
         source_dir = dandiset_root / record["old_path"]
         target_dir = dandiset_root / record["new_path"]
-        if target_dir.exists():
-            _log.warning("Skipping %s: %s already exists", record["old_path"], record["new_path"])
-            continue
         if not source_dir.is_dir():
             _log.warning("Skipping %s: no longer on disk", record["old_path"])
             continue
+        if target_dir.exists():
+            # An earlier run already made this copy. Record it again rather than skipping, so a
+            # manifest that was lost or truncated picks the capsule back up.
+            if (target_dir / "code" / "submit.sh").is_file():
+                _log.info("Already copied, re-recording %s -> %s", record["old_path"], record["new_path"])
+                copied.append(record)
+            else:
+                _log.warning(
+                    "Skipping %s: %s exists but does not look like a capsule; remove it and re-run",
+                    record["old_path"],
+                    record["new_path"],
+                )
+            continue
 
         target_dir.parent.mkdir(parents=True, exist_ok=True)
-        source_dir.rename(target_dir)
+        shutil.copytree(source_dir, target_dir)
         write_provenance(capsule_dir=target_dir, identity=record["identity"])
-        _log.info("Renamed %s -> %s", record["old_path"], record["new_path"])
-        renamed.append(record)
+        _log.info("Copied %s -> %s", record["old_path"], record["new_path"])
+        copied.append(record)
 
-    for record in renamed:
-        _remove_empty_parents(start=(dandiset_root / record["old_path"]).parent, stop=dandiset_root / "derivatives")
-    return renamed
+    return copied
 
 
 def _remove_empty_parents(*, start: pathlib.Path, stop: pathlib.Path) -> None:
@@ -477,7 +494,7 @@ def _run(command: list[str], *, cwd: pathlib.Path | None = None, input_text: str
 
 
 def upload_new_paths(*, dandiset_root: pathlib.Path, new_paths: list[str]) -> None:
-    """Upload the renamed capsules, in batches, from the clone's root."""
+    """Upload the copied capsules, in batches, from the clone's root."""
     for batch in _batched(new_paths, _BATCH_SIZE):
         _log.info("Uploading %d path(s) from %s", len(batch), dandiset_root)
         _run(["dandi", "upload", "--allow-any-path", *batch], cwd=dandiset_root)
@@ -496,10 +513,10 @@ def manifest_path(root: pathlib.Path, /) -> pathlib.Path:
 
 
 def load_manifest(root: pathlib.Path, /) -> dict:
-    """Read the manifest written by ``rename``, or raise when it is missing."""
+    """Read the manifest written by ``copy``, or raise when it is missing."""
     path = manifest_path(root)
     if not path.is_file():
-        message = f"No migration manifest at {path}. Run the `rename` phase first."
+        message = f"No migration manifest at {path}. Run the `copy` phase first."
         raise RuntimeError(message)
     return json.loads(path.read_text())
 
@@ -508,11 +525,9 @@ def _read_manifest_for_update(root: pathlib.Path, /) -> dict:
     """
     Read an existing manifest so a re-run can add to it, or start a fresh one.
 
-    ``rename`` is routinely run more than once, and a run only ever sees the capsules it
-    renames itself: the ones an earlier run already renamed read as already migrated. Writing
-    only this run's records would therefore drop the earlier ones, leaving capsules renamed on
-    disk that ``upload`` and ``clean`` no longer know about. An unreadable manifest is moved
-    aside rather than overwritten in place.
+    ``copy`` is routinely run more than once. Writing only the current run's records would drop
+    the earlier ones, leaving capsules copied on disk that ``upload`` and ``clean`` no longer
+    know about. An unreadable manifest is moved aside rather than overwritten in place.
     """
     path = manifest_path(root)
     if not path.is_file():
@@ -556,33 +571,33 @@ def _phase_plan(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
         if dandiset_root is None:
             continue
         _print_plan(dandiset_id=dandiset_id, plan=plan_migration(dandiset_root=dandiset_root))
-    print("\nNothing was changed. Run the `rename` phase to apply this on disk.")
+    print("\nNothing was changed. Run the `copy` phase to apply this on disk.")
     return 0
 
 
-def _phase_rename(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
+def _phase_copy(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
     manifest = _read_manifest_for_update(root)
     manifest["generated_at"] = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
     manifest["root"] = str(root)
 
-    renamed_now = 0
+    copied_now = 0
     for dandiset_id in dandiset_ids:
         dandiset_root = _resolve_dandiset_root(root=root, dandiset_id=dandiset_id)
         if dandiset_root is None:
             continue
         plan = plan_migration(dandiset_root=dandiset_root)
-        renamed = rename_capsules(dandiset_root=dandiset_root, plan=plan)
-        renamed_now += len(renamed)
+        copied = copy_capsules(dandiset_root=dandiset_root, plan=plan)
+        copied_now += len(copied)
         manifest["dandisets"][dandiset_id] = _merged_records(
-            existing=manifest["dandisets"].get(dandiset_id, []), added=renamed
+            existing=manifest["dandisets"].get(dandiset_id, []), added=copied
         )
-        _print_plan(dandiset_id=dandiset_id, plan=renamed)
+        _print_plan(dandiset_id=dandiset_id, plan=copied)
 
     manifest_path(root).write_text(json.dumps(manifest, indent=2) + "\n")
     total = sum(len(records) for records in manifest["dandisets"].values())
-    print(f"\nRenamed {renamed_now} job capsule(s) on disk ({total} recorded in total).")
+    print(f"\nCopied {copied_now} job capsule(s) on disk ({total} recorded in total).")
     print(f"Manifest: {manifest_path(root)}")
-    print("Review the renamed capsules, then run the `upload` phase.")
+    print("The legacy paths are untouched. Review the copies, then run the `upload` phase.")
     return 0
 
 
@@ -600,7 +615,7 @@ def _phase_upload(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
         uploaded_total += len(records)
 
     if uploaded_total == 0:
-        print("\nNothing to upload: the manifest records no renamed capsules.")
+        print("\nNothing to upload: the manifest records no copied capsules.")
         return 0
 
     print(f"\nUploaded {uploaded_total} job capsule(s).")
@@ -629,7 +644,7 @@ def _phase_clean(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
             _remove_empty_parents(start=legacy_dir.parent, stop=dandiset_root / "derivatives")
 
     if deleted_total == 0:
-        print("\nNothing to delete: the manifest records no renamed capsules.")
+        print("\nNothing to delete: the manifest records no copied capsules.")
         return 0
 
     print(f"\nDeleted {deleted_total} legacy job capsule path(s). The migration is complete.")
@@ -638,7 +653,7 @@ def _phase_clean(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
 
 _PHASES = {
     "plan": _phase_plan,
-    "rename": _phase_rename,
+    "copy": _phase_copy,
     "upload": _phase_upload,
     "clean": _phase_clean,
 }

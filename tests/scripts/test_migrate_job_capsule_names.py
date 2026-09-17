@@ -203,24 +203,25 @@ def test_plan_skips_capsules_that_would_collide(tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.ai_generated
-def test_rename_moves_capsules_and_writes_provenance(tmp_path: pathlib.Path) -> None:
-    """The rename phase is purely local: it renames on disk and records the provenance."""
+def test_copy_duplicates_capsules_and_writes_provenance(tmp_path: pathlib.Path) -> None:
+    """The copy phase is purely local: it duplicates on disk and records the provenance."""
     script = _load_script()
     root = _clone(tmp_path, [_LEGACY_FLAT_NAME], with_output=True)
     dandiset_root = root / _DANDISET_ID
 
     plan = script.plan_migration(dandiset_root=dandiset_root)
-    renamed = script.rename_capsules(dandiset_root=dandiset_root, plan=plan)
+    copied = script.copy_capsules(dandiset_root=dandiset_root, plan=plan)
 
-    assert len(renamed) == 1
-    new_dir = dandiset_root / renamed[0]["new_path"]
+    assert len(copied) == 1
+    new_dir = dandiset_root / copied[0]["new_path"]
     assert new_dir.is_dir()
-    assert not (dandiset_root / renamed[0]["old_path"]).exists()
-    # The whole capsule moved, not just its code directory.
+    # The legacy path survives: the archive deletes it only in the clean phase.
+    assert (dandiset_root / copied[0]["old_path"]).is_dir()
+    # The whole capsule was copied, not just its code directory.
     assert (new_dir / "derivatives" / "output.nwb").read_text() == "output\n"
 
     provenance = json.loads((new_dir / "dataset_description.json").read_text())["DandiCompute"]
-    assert provenance["job_id"] == renamed[0]["job_id"]
+    assert provenance["job_id"] == copied[0]["job_id"]
     assert provenance["version"] == "v1.1.0"
     assert provenance["codebase"] == "v0.3.0"
     assert provenance["params"] == "abc1234"
@@ -229,50 +230,67 @@ def test_rename_moves_capsules_and_writes_provenance(tmp_path: pathlib.Path) -> 
 
 
 @pytest.mark.ai_generated
-def test_rename_prunes_the_emptied_legacy_version_directory(tmp_path: pathlib.Path) -> None:
-    """The nested layout's now-empty `version-` directory does not linger after the rename."""
+def test_copy_leaves_the_legacy_version_directory_in_place(tmp_path: pathlib.Path) -> None:
+    """
+    The nested layout's `version-` parent stays until clean.
+
+    The legacy capsule under it is still on the archive at this point, so the clone has to keep
+    mirroring it.
+    """
     script = _load_script()
-    root = _clone(tmp_path, ["version-v1.0.0/params-abc1234_config-def5678"])
+    legacy_name = "version-v1.0.0/params-abc1234_config-def5678"
+    root = _clone(tmp_path, [legacy_name])
     dandiset_root = root / _DANDISET_ID
 
     plan = script.plan_migration(dandiset_root=dandiset_root)
-    script.rename_capsules(dandiset_root=dandiset_root, plan=plan)
+    script.copy_capsules(dandiset_root=dandiset_root, plan=plan)
 
-    assert not (dandiset_root / _AIND_PIPELINE_PATH / "version-v1.0.0").exists()
-    assert (dandiset_root / _AIND_PIPELINE_PATH).is_dir()
+    assert (dandiset_root / _AIND_PIPELINE_PATH / legacy_name).is_dir()
 
 
 @pytest.mark.ai_generated
-def test_rename_is_idempotent(tmp_path: pathlib.Path) -> None:
-    """Re-running the rename phase finds nothing left to do."""
+def test_copy_is_idempotent(tmp_path: pathlib.Path) -> None:
+    """
+    Re-running the copy phase makes no second copy.
+
+    The legacy capsule is still on disk, so it is planned again. The copy itself is what
+    recognises the existing job ID directory, and it re-reports the capsule rather than
+    skipping it, so a manifest that was lost is rebuilt by re-running.
+    """
     script = _load_script()
     root = _clone(tmp_path, [_LEGACY_FLAT_NAME])
     dandiset_root = root / _DANDISET_ID
+    pipeline_dir = dandiset_root / _AIND_PIPELINE_PATH
 
-    script.rename_capsules(dandiset_root=dandiset_root, plan=script.plan_migration(dandiset_root=dandiset_root))
-    second_plan = script.plan_migration(dandiset_root=dandiset_root)
+    first_copied = script.copy_capsules(
+        dandiset_root=dandiset_root, plan=script.plan_migration(dandiset_root=dandiset_root)
+    )
+    directories_after_first = sorted(child.name for child in pipeline_dir.iterdir())
+    second_copied = script.copy_capsules(
+        dandiset_root=dandiset_root, plan=script.plan_migration(dandiset_root=dandiset_root)
+    )
 
-    assert second_plan == []
+    assert [record["new_path"] for record in second_copied] == [record["new_path"] for record in first_copied]
+    assert sorted(child.name for child in pipeline_dir.iterdir()) == directories_after_first
 
 
 @pytest.mark.ai_generated
-def test_rename_re_run_keeps_the_earlier_runs_manifest_records(tmp_path: pathlib.Path) -> None:
+def test_copy_re_run_keeps_the_earlier_runs_manifest_records(tmp_path: pathlib.Path) -> None:
     """
-    A second rename run adds to the manifest instead of replacing it.
+    A second copy run adds to the manifest instead of replacing it.
 
-    A re-run only sees capsules that are still legacy, so writing just its own records would
-    drop the earlier run's, stranding capsules that are renamed on disk but unknown to the
-    later phases.
+    Writing just its own records would drop the earlier run's, stranding capsules that are
+    copied on disk but unknown to the later phases.
     """
     script = _load_script()
     root = _clone(tmp_path, [_LEGACY_FLAT_NAME])
     dandiset_ids = [_DANDISET_ID]
 
-    script._phase_rename(root=root, dandiset_ids=dandiset_ids)
+    script._phase_copy(root=root, dandiset_ids=dandiset_ids)
     first_records = json.loads(script.manifest_path(root).read_text())["dandisets"][_DANDISET_ID]
 
     _make_capsule(dandiset_root=root / _DANDISET_ID, capsule_name="version-v2.0.0_codebase-v0.3.0_params-999aaaa")
-    script._phase_rename(root=root, dandiset_ids=dandiset_ids)
+    script._phase_copy(root=root, dandiset_ids=dandiset_ids)
     second_records = json.loads(script.manifest_path(root).read_text())["dandisets"][_DANDISET_ID]
 
     assert len(first_records) == 1
@@ -281,15 +299,15 @@ def test_rename_re_run_keeps_the_earlier_runs_manifest_records(tmp_path: pathlib
 
 
 @pytest.mark.ai_generated
-def test_rename_re_run_records_each_capsule_once(tmp_path: pathlib.Path) -> None:
+def test_copy_re_run_records_each_capsule_once(tmp_path: pathlib.Path) -> None:
     """Re-running with nothing new to do leaves the manifest as it was."""
     script = _load_script()
     root = _clone(tmp_path, [_LEGACY_FLAT_NAME])
     dandiset_ids = [_DANDISET_ID]
 
-    script._phase_rename(root=root, dandiset_ids=dandiset_ids)
+    script._phase_copy(root=root, dandiset_ids=dandiset_ids)
     first_manifest = json.loads(script.manifest_path(root).read_text())["dandisets"]
-    script._phase_rename(root=root, dandiset_ids=dandiset_ids)
+    script._phase_copy(root=root, dandiset_ids=dandiset_ids)
     second_manifest = json.loads(script.manifest_path(root).read_text())["dandisets"]
 
     assert second_manifest == first_manifest
@@ -297,7 +315,7 @@ def test_rename_re_run_records_each_capsule_once(tmp_path: pathlib.Path) -> None
 
 @pytest.mark.ai_generated
 def test_upload_batches_only_the_new_paths(tmp_path: pathlib.Path) -> None:
-    """The upload phase pushes the renamed paths and deletes nothing."""
+    """The upload phase pushes the copied paths and deletes nothing."""
     script = _load_script()
     dandiset_root = tmp_path / _DANDISET_ID
     dandiset_root.mkdir()
@@ -342,12 +360,12 @@ def test_clean_deletes_the_legacy_paths_by_url() -> None:
 
 @pytest.mark.ai_generated
 def test_phases_hand_off_through_the_manifest(tmp_path: pathlib.Path) -> None:
-    """rename writes a manifest that upload and clean read back, so the phases chain up."""
+    """copy writes a manifest that upload and clean read back, so the phases chain up."""
     script = _load_script()
     root = _clone(tmp_path, [_LEGACY_FLAT_NAME])
     dandiset_ids = [_DANDISET_ID]
 
-    script._phase_rename(root=root, dandiset_ids=dandiset_ids)
+    script._phase_copy(root=root, dandiset_ids=dandiset_ids)
     manifest = json.loads(script.manifest_path(root).read_text())
     assert len(manifest["dandisets"][_DANDISET_ID]) == 1
     record = manifest["dandisets"][_DANDISET_ID][0]
@@ -366,9 +384,27 @@ def test_phases_hand_off_through_the_manifest(tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.ai_generated
+def test_clean_removes_the_legacy_copy_left_behind_locally(tmp_path: pathlib.Path) -> None:
+    """The legacy directory the copy phase preserved is torn down once clean has run."""
+    script = _load_script()
+    root = _clone(tmp_path, ["version-v1.0.0/params-abc1234_config-def5678"])
+    dandiset_ids = [_DANDISET_ID]
+    dandiset_root = root / _DANDISET_ID
+
+    script._phase_copy(root=root, dandiset_ids=dandiset_ids)
+    assert (dandiset_root / _AIND_PIPELINE_PATH / "version-v1.0.0").is_dir()
+
+    with mock.patch.object(script, "_run"):
+        script._phase_clean(root=root, dandiset_ids=dandiset_ids)
+
+    assert not (dandiset_root / _AIND_PIPELINE_PATH / "version-v1.0.0").exists()
+    assert (dandiset_root / _AIND_PIPELINE_PATH).is_dir()
+
+
+@pytest.mark.ai_generated
 @pytest.mark.parametrize("phase", ["upload", "clean"])
 def test_phases_requiring_the_archive_fail_without_a_manifest(tmp_path: pathlib.Path, phase: str) -> None:
-    """upload and clean refuse to guess: they need the manifest the rename phase wrote."""
+    """upload and clean refuse to guess: they need the manifest the copy phase wrote."""
     script = _load_script()
 
     with pytest.raises(RuntimeError, match="No migration manifest"):

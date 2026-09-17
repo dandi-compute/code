@@ -25,7 +25,7 @@ The job ID is the only capsule layout this package understands. Capsules prepare
 
 ### Migrating legacy capsules
 
-`scripts/migrate_job_capsule_names.py` migrates the capsules already on the archive. It works against local clones of the Dandisets sitting next to each other, so the renames happen on disk first, the uploads go up in batches, and the legacy structure is only torn down once you have looked at the result.
+`scripts/migrate_job_capsule_names.py` migrates the capsules already on the archive. The archive has no notion of renaming a path, so a migration is a copy under the new name, an upload of the copies, and a delete of the originals once you have confirmed the result. It works against local clones of the Dandisets sitting next to each other.
 
 Download the clones, then run the four phases in order from the directory holding them:
 
@@ -33,13 +33,15 @@ Download the clones, then run the four phases in order from the directory holdin
 dandi download DANDI:001697
 dandi download DANDI:001873
 
-python migrate_job_capsule_names.py plan     # what would be renamed; changes nothing
-python migrate_job_capsule_names.py rename   # rename on disk, write a manifest
+python migrate_job_capsule_names.py plan     # what would be copied; changes nothing
+python migrate_job_capsule_names.py copy     # copy on disk, write a manifest
 python migrate_job_capsule_names.py upload   # batch-upload the new paths
 python migrate_job_capsule_names.py clean    # delete the legacy paths
 ```
 
-`rename` is purely local, so a bad plan costs only a re-download. It records every rename in `job-capsule-migration.json` next to the clones, which `upload` and `clean` read back, so you can inspect or edit it before anything reaches the archive. `upload` pushes only the new paths and deletes nothing, so the archive briefly carries both names. Check the new capsules, then `clean` removes the legacy paths.
+`copy` is purely local and leaves the legacy directory exactly as it was, so the clone stays a complete mirror of the archive and a bad plan costs only a re-download. It records every copy in `job-capsule-migration.json` next to the clones, which `upload` and `clean` read back, so you can inspect or edit it before anything reaches the archive. `upload` pushes only the new paths and deletes nothing, so the archive carries both names. Check the new capsules, then `clean` deletes the legacy paths from the archive and removes them locally.
+
+Because the capsules exist twice on disk between `copy` and `clean`, the clone needs room for a second copy of every capsule being migrated.
 
 Use `--root` when the clones are somewhere other than the working directory, and `--dandiset` to migrate one Dandiset at a time.
 
@@ -47,9 +49,9 @@ The script is standalone. It imports nothing from this package, so it can be cop
 
 A migrated capsule keeps the date it was originally prepared, taken from the modification time of its `code/submit.sh`, and its content ID is read from that same script, so planning is entirely offline. Its hash is what preparation computes for the same job, so a migrated job is never formed a second time.
 
-Two legacy capsules that describe the same logical job and differ only in codebase version map to the same job ID, since the hash ignores the codebase version. Renaming both onto one directory would merge them, so they are reported and skipped. Archive or delete all but one, then re-run.
+Two legacy capsules that describe the same logical job and differ only in codebase version map to the same job ID, since the hash ignores the codebase version. Copying both onto one directory would merge them, so they are reported and skipped. Archive or delete all but one, then re-run.
 
-`rename` can be run repeatedly, adding to the manifest rather than replacing it, since a re-run only sees the capsules that are still legacy.
+`copy` can be run repeatedly. It adds to the manifest rather than replacing it, and a capsule whose copy an earlier run already made is recorded again rather than skipped, so a lost or truncated manifest is rebuilt by re-running the phase.
 
 The migration stands alone. It shells out to `dandi` for the two archive-facing phases and otherwise reads only the clones, never invoking `dandicompute` and never reading or writing a `state.tsv`.
 
