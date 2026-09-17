@@ -47,7 +47,7 @@ Use `--root` when the clones are somewhere other than the working directory, and
 
 The script is standalone. It imports nothing from this package, so it can be copied anywhere and run against whatever version of `dandi-compute-code` is installed, or none at all. It needs only the standard library, plus the `dandi` client on PATH for `upload` and `clean`.
 
-Planning is entirely offline: both the content ID and the date come from the capsule's own `code/submit.sh`. Its hash is what preparation computes for the same job, so a migrated job is never formed a second time.
+Planning is entirely offline: the content ID comes from the capsule's own `code/submit.sh` and the date from its submission marker. Its hash is what preparation computes for the same job, so a migrated job is never formed a second time.
 
 Two legacy capsules that describe the same logical job and differ only in codebase version map to the same job ID, since the hash ignores the codebase version. Copying both onto one directory would merge them, so they are reported and skipped. Archive or delete all but one, then re-run.
 
@@ -55,7 +55,7 @@ Two legacy capsules that describe the same logical job and differ only in codeba
 
 `clean` also reconciles against the archive before deleting, which picks up improperly named folders an earlier migration left behind: ones uploaded under their job ID whose legacy path was never deleted and whose local legacy directory is gone, so `plan` cannot see them. Each is only deleted once it pairs with a migrated capsule the archive already holds, matched through that capsule's local provenance block, and every re-attempt sharing one job ID is deleted in its own right. Run `reconcile` to see what this would find without deleting anything, or pass `--no-reconcile` to `clean` to delete only what the manifest records.
 
-The date in a job ID comes from the modification time of the capsule's `code/submit.sh`, which is when its files last landed on the archive. For a capsule that was later archived into another Dandiset that is the date it was archived, not the date it was prepared, so the date is not always meaningful. Only the hash identifies the job.
+The date in a job ID is the date the capsule's job was submitted, read from the name of the `submitted_date-YYYY+MM+DD_time-...` marker submission writes into the capsule. Being in the file's name is what makes it usable: it survives the capsule being re-uploaded, where a modification time does not. A capsule that was never submitted falls back to the modification time of its `code/submit.sh`, which records when its files last landed, and `plan` reports how many capsules fell back. Only the hash identifies the job in any case.
 
 The migration stands alone. It shells out to `dandi` for the two archive-facing phases and otherwise reads only the clones, never invoking `dandicompute` and never reading or writing a `state.tsv`.
 

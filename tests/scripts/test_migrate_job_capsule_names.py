@@ -149,8 +149,40 @@ def test_plan_parses_every_legacy_layout(
 
 
 @pytest.mark.ai_generated
-def test_plan_dates_the_job_id_from_the_submission_script(tmp_path: pathlib.Path) -> None:
-    """The job ID is dated from the submission script, i.e. when the capsule's files landed."""
+def test_plan_dates_the_job_id_from_the_submission_marker(tmp_path: pathlib.Path) -> None:
+    """
+    The job ID carries the date the capsule's job was submitted.
+
+    That date lives in the marker's file name, so it survives the capsule being re-uploaded,
+    which the modification times do not.
+    """
+    script = _load_script()
+    root = _clone(tmp_path, [_LEGACY_FLAT_NAME])
+    code_dir = root / _DANDISET_ID / _AIND_PIPELINE_PATH / _LEGACY_FLAT_NAME / "code"
+    (code_dir / "submitted_date-2024+11+03_time-14+32+09").write_bytes(b"1")
+
+    plan = script.plan_migration(dandiset_root=root / _DANDISET_ID)
+
+    assert plan[0]["job_id"].startswith("job-241103")
+
+
+@pytest.mark.ai_generated
+def test_plan_dates_a_resubmitted_capsule_from_its_first_submission(tmp_path: pathlib.Path) -> None:
+    """A capsule submitted more than once keeps the date of its first run."""
+    script = _load_script()
+    root = _clone(tmp_path, [_LEGACY_FLAT_NAME])
+    code_dir = root / _DANDISET_ID / _AIND_PIPELINE_PATH / _LEGACY_FLAT_NAME / "code"
+    (code_dir / "submitted_date-2025+02+18_time-09+00+00").write_bytes(b"1")
+    (code_dir / "submitted_date-2024+11+03_time-14+32+09").write_bytes(b"1")
+
+    plan = script.plan_migration(dandiset_root=root / _DANDISET_ID)
+
+    assert plan[0]["job_id"].startswith("job-241103")
+
+
+@pytest.mark.ai_generated
+def test_plan_falls_back_to_the_submission_script_when_never_submitted(tmp_path: pathlib.Path) -> None:
+    """A capsule with no submission marker is dated from when its files last landed."""
     script = _load_script()
     root = _clone(tmp_path, [_LEGACY_FLAT_NAME])
 

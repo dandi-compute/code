@@ -54,11 +54,15 @@ All legacy layouts are handled, with or without a trailing ``_attempt-N``::
     pipeline-{pipeline}/version-{version}/params-{params}_config-{config}
     pipeline-{pipeline}/version-{version}_codebase-{codebase}_params-{params}
 
-The ``YYMMDD`` of each migrated capsule comes from the modification time of its
-``code/submit.sh``. That is the date the capsule's files last landed, which for a capsule that
-has since been archived is the date it was archived rather than the date it was prepared, so
-the date is not always meaningful. Only the hash identifies the job: it is what preparation
-computes for the same job, so a migrated job is never formed a second time.
+The ``YYMMDD`` of each migrated capsule is the date its job was submitted, read from the name
+of the ``submitted_date-YYYY+MM+DD_time-...`` marker submission writes into the capsule. The
+date being in the file's name is what makes it usable: it survives the capsule being
+re-uploaded, where a modification time does not. A capsule that was never submitted falls back
+to the modification time of its ``code/submit.sh``, which records when its files last landed
+rather than when it was prepared, and ``plan`` reports how many capsules fell back.
+
+Only the hash identifies the job, in any case: it is what preparation computes for the same
+job, so a migrated job is never formed a second time.
 
 This script is deliberately standalone. It imports nothing from ``dandi_compute_code``, so it
 runs against whatever version of the package is (or is not) installed. It needs only the
@@ -112,6 +116,10 @@ _LEGACY_CAPSULE_DIR_RE = re.compile(
     r"(?:_attempt-(?P<attempt>\d+))?"
 )
 
+#: The marker submission writes into a capsule's ``code/`` directory, carrying the submission
+#: date in its name, e.g. ``submitted_date-2025+06+07_time-14+32+09``.
+_SUBMITTED_MARKER_RE = re.compile(r"submitted_date-(?P<year>\d{4})\+(?P<month>\d{2})\+(?P<day>\d{2})")
+
 #: How many paths to hand a single ``dandi`` invocation.
 _BATCH_SIZE = 100
 
@@ -163,17 +171,33 @@ def read_content_id(capsule_dir: pathlib.Path, /) -> str:
 
 def read_prepared_date(capsule_dir: pathlib.Path, /) -> datetime.date:
     """
-    Read the date a capsule was prepared from its ``code/submit.sh`` modification time.
+    Read the date a capsule's job was submitted, which is the date it was prepared.
 
-    ``dandi download`` preserves the archive's modification times, so this is the date the
-    capsule's files last landed on the archive. For a capsule that was later archived into
-    another Dandiset that is the date it was archived, not the date it was prepared. Falls back
-    to today when the script is missing.
+    Submission writes a marker into the capsule named ``submitted_date-YYYY+MM+DD_time-...``,
+    so the date is carried in the file's *name*. That is what makes it usable here: a name
+    survives being re-uploaded, where a modification time does not. The earliest marker is
+    taken, so a capsule re-submitted later keeps the date of its first run.
+
+    Falls back to the modification time of ``code/submit.sh`` for a capsule that was never
+    submitted, and to today when there is no submission script either. Both fallbacks record
+    when the capsule's files last landed rather than when it was prepared, which for a capsule
+    that has since been archived is the date it was archived.
     """
-    submission_script = capsule_dir / "code" / "submit.sh"
+    code_dir = capsule_dir / "code"
+    submitted_dates = []
+    if code_dir.is_dir():
+        for marker in code_dir.glob("submitted_date-*"):
+            match = _SUBMITTED_MARKER_RE.match(marker.name)
+            if match is not None:
+                submitted_dates.append(datetime.date(int(match["year"]), int(match["month"]), int(match["day"])))
+    if submitted_dates:
+        return min(submitted_dates)
+
+    submission_script = code_dir / "submit.sh"
     if not submission_script.is_file():
-        _log.warning("No code/submit.sh in %s; dating its job ID today", capsule_dir)
+        _log.warning("No submission marker or code/submit.sh in %s; dating its job ID today", capsule_dir)
         return datetime.datetime.now(tz=datetime.timezone.utc).date()
+    _log.debug("No submission marker in %s; dating its job ID from code/submit.sh", capsule_dir)
     timestamp = submission_script.stat().st_mtime
     return datetime.datetime.fromtimestamp(timestamp, tz=datetime.timezone.utc).date()
 
@@ -372,6 +396,7 @@ def plan_migration(*, dandiset_root: pathlib.Path) -> list[dict]:
     capsule_dirs = find_legacy_capsules(dandiset_root)
     progress = _Progress(f"Examining {dandiset_root.name} capsules")
     already_migrated = 0
+    undated: list[pathlib.Path] = []
     unrecognised: list[pathlib.Path] = []
 
     candidates: list[dict] = []
@@ -399,6 +424,8 @@ def plan_migration(*, dandiset_root: pathlib.Path) -> list[dict]:
             config=identity["config"],
             content_id=identity["content_id"],
         )
+        if not any((capsule_dir / "code").glob("submitted_date-*")):
+            undated.append(capsule_dir)
         job_id = format_job_id(job_hash=job_hash, date=read_prepared_date(capsule_dir))
         identity["job_id"] = job_id
         candidates.append(
@@ -413,6 +440,13 @@ def plan_migration(*, dandiset_root: pathlib.Path) -> list[dict]:
     progress.close(
         f"{len(candidates)} to migrate, {already_migrated} already migrated, {len(unrecognised)} unrecognised"
     )
+    if undated:
+        _log.warning(
+            "%d of %d capsules carry no submission marker; their job IDs are dated from when their files "
+            "last landed rather than when they were submitted",
+            len(undated),
+            len(candidates),
+        )
     for capsule_dir in unrecognised:
         _log.warning("Not a recognised job capsule, leaving alone: %s", capsule_dir)
 
