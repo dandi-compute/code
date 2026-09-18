@@ -17,6 +17,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import sys
 from unittest import mock
 
@@ -353,6 +354,53 @@ def test_copy_is_idempotent(tmp_path: pathlib.Path) -> None:
 
     assert [record["new_path"] for record in second_copied] == [record["new_path"] for record in first_copied]
     assert sorted(child.name for child in pipeline_dir.iterdir()) == directories_after_first
+
+
+@pytest.mark.ai_generated
+def test_copy_keeps_a_capsule_on_its_own_copy_when_the_group_shrinks(tmp_path: pathlib.Path) -> None:
+    """
+    A capsule keeps the copy it already has, whatever counter that copy took.
+
+    The counter is assigned by position when the plan is built, so removing a capsule from a
+    group shifts the positions of those left. Trusting the position would hand the second
+    capsule the directory holding the first one's copy, record it as migrated, and let clean
+    delete its legacy path though its contents were never uploaded.
+    """
+    script = _load_script()
+    first_name = "version-v1.1.0_codebase-v0.3.0_params-abc1234_config-def5678"
+    second_name = "version-v1.1.0_codebase-v0.4.0_params-abc1234_config-def5678"
+    root = _clone(tmp_path, [first_name, second_name])
+    dandiset_root = root / _DANDISET_ID
+    pipeline_dir = dandiset_root / _AIND_PIPELINE_PATH
+
+    first_copied = script.copy_capsules(
+        dandiset_root=dandiset_root, plan=script.plan_migration(dandiset_root=dandiset_root)
+    )
+    second_job_id = next(record["job_id"] for record in first_copied if record["old_path"].endswith(second_name))
+
+    # The first capsule is taken out of the group, which shifts the second one's position.
+    shutil.rmtree(pipeline_dir / first_name)
+    re_copied = script.copy_capsules(
+        dandiset_root=dandiset_root, plan=script.plan_migration(dandiset_root=dandiset_root)
+    )
+
+    assert [record["job_id"] for record in re_copied] == [second_job_id]
+    assert (pipeline_dir / second_job_id / "dataset_description.json").is_file()
+    provenance = json.loads((pipeline_dir / second_job_id / "dataset_description.json").read_text())["DandiCompute"]
+    assert provenance["migrated_from"] == f"{_AIND_PIPELINE_PATH}/{second_name}"
+
+
+@pytest.mark.ai_generated
+def test_copy_records_where_each_capsule_came_from(tmp_path: pathlib.Path) -> None:
+    """The provenance names the legacy path, which is what makes a copy attributable."""
+    script = _load_script()
+    root = _clone(tmp_path, [_LEGACY_FLAT_NAME])
+    dandiset_root = root / _DANDISET_ID
+
+    copied = script.copy_capsules(dandiset_root=dandiset_root, plan=script.plan_migration(dandiset_root=dandiset_root))
+
+    provenance = json.loads((dandiset_root / copied[0]["new_path"] / "dataset_description.json").read_text())
+    assert provenance["DandiCompute"]["migrated_from"] == f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}"
 
 
 @pytest.mark.ai_generated

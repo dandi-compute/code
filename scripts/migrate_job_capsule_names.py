@@ -69,8 +69,13 @@ job, so a migrated job is never formed a second time.
 Two capsules can still land on one name, when they are the same logical job prepared on the
 same day: re-attempts, or runs differing only in codebase version, which the hash deliberately
 ignores. The second and later are suffixed with a ``-2``, ``-3`` counter rather than skipped,
-so every capsule migrates. Assignment is by legacy path, so a clone always produces the same
-names.
+so every capsule migrates.
+
+The plan assigns those counters by position, ordered by legacy path, so a clone plans the same
+names every time. The copy does not trust that position, though: it recognises a capsule's own
+copy by the ``migrated_from`` its provenance records, and takes the first counter not already
+on disk otherwise. A group that has shrunk since the last run therefore cannot hand a capsule
+the directory holding a different capsule's copy.
 
 This script is deliberately standalone. It imports nothing from ``dandi_compute_code``, so it
 runs against whatever version of the package is (or is not) installed. It needs only the
@@ -87,6 +92,7 @@ import argparse
 import collections
 import datetime
 import hashlib
+import itertools
 import json
 import logging
 import os
@@ -447,6 +453,7 @@ def plan_migration(*, dandiset_root: pathlib.Path) -> list[dict]:
         prepared_date = read_prepared_date(capsule_dir)
         job_id = format_job_id(job_hash=job_hash, date=prepared_date)
         identity["job_id"] = job_id
+        identity["old_path"] = capsule_dir.relative_to(dandiset_root).as_posix()
         candidates.append(
             {
                 "old_path": capsule_dir.relative_to(dandiset_root).as_posix(),
@@ -517,7 +524,12 @@ def _index_shared_job_ids(candidates: list[dict], /) -> list[dict]:
 
 
 def write_provenance(*, capsule_dir: pathlib.Path, identity: dict) -> None:
-    """Add the ``DandiCompute`` provenance block to a capsule's ``dataset_description.json``."""
+    """
+    Add the ``DandiCompute`` provenance block to a capsule's ``dataset_description.json``.
+
+    The block records ``migrated_from``, the legacy path this copy was made from, which is what
+    lets a later run recognise the copy as this capsule's rather than guessing from its name.
+    """
     dataset_description_file = capsule_dir / "dataset_description.json"
     dataset_description = {}
     if dataset_description_file.is_file():
@@ -536,6 +548,7 @@ def write_provenance(*, capsule_dir: pathlib.Path, identity: dict) -> None:
         "codebase": identity["codebase"],
         "params": identity["params"],
         "config": identity["config"],
+        "migrated_from": identity.get("old_path", ""),
     }
     dataset_description_file.write_text(json.dumps(dataset_description, indent=2) + "\n")
 
@@ -557,22 +570,21 @@ def copy_capsules(*, dandiset_root: pathlib.Path, plan: list[dict]) -> list[dict
     copied: list[dict] = []
     for record in plan:
         source_dir = dandiset_root / record["old_path"]
-        target_dir = dandiset_root / record["new_path"]
         if not source_dir.is_dir():
             _log.warning("Skipping %s: no longer on disk", record["old_path"])
             continue
+
+        job_id = _settle_job_id(dandiset_root=dandiset_root, record=record)
+        if job_id is None:
+            continue
+        _apply_job_id(record, job_id)
+
+        target_dir = dandiset_root / record["new_path"]
         if target_dir.exists():
             # An earlier run already made this copy. Record it again rather than skipping, so a
             # manifest that was lost or truncated picks the capsule back up.
-            if (target_dir / "code" / "submit.sh").is_file():
-                _log.info("Already copied, re-recording %s -> %s", record["old_path"], record["new_path"])
-                copied.append(record)
-            else:
-                _log.warning(
-                    "Skipping %s: %s exists but does not look like a capsule; remove it and re-run",
-                    record["old_path"],
-                    record["new_path"],
-                )
+            _log.info("Already copied, re-recording %s -> %s", record["old_path"], record["new_path"])
+            copied.append(record)
             continue
 
         target_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -582,6 +594,58 @@ def copy_capsules(*, dandiset_root: pathlib.Path, plan: list[dict]) -> list[dict
         copied.append(record)
 
     return copied
+
+
+def _apply_job_id(record: dict, job_id: str, /) -> None:
+    """Settle a record's job ID and the path that follows from it."""
+    record["job_id"] = job_id
+    record["identity"]["job_id"] = job_id
+    record["new_path"] = f"{record['identity']['pipeline_path']}/{job_id}"
+
+
+def _settle_job_id(*, dandiset_root: pathlib.Path, record: dict) -> str | None:
+    """
+    Decide which job ID this capsule's copy takes, against what is already on disk.
+
+    The counter that separates capsules sharing a job ID is assigned by position when the plan
+    is built, so it depends on which legacy capsules the scan found. Trusting that position on
+    a re-run is unsafe: if the set has changed since the copy was made, a capsule can be handed
+    the name holding a *different* capsule's copy, be recorded as migrated, and have its legacy
+    path deleted though its contents were never uploaded.
+
+    So the copy settles the name itself. A capsule that already has a copy is recognised by the
+    ``migrated_from`` its provenance records, whatever counter that copy ended up with, and
+    anything else takes the first counter not already on disk.
+
+    :return: The job ID to use, or ``None`` when a directory is in the way that cannot be told
+        apart from a capsule.
+    :rtype: str or None
+    """
+    pipeline_dir = dandiset_root / record["identity"]["pipeline_path"]
+    base_job_id = format_job_id(job_hash=record["job_hash"], date=datetime.date.fromisoformat(record["prepared_date"]))
+
+    for index in itertools.count(start=1):
+        job_id = format_job_id(
+            job_hash=record["job_hash"], date=datetime.date.fromisoformat(record["prepared_date"]), index=index
+        )
+        candidate_dir = pipeline_dir / job_id
+        if not candidate_dir.exists():
+            return job_id
+
+        provenance = read_provenance(candidate_dir)
+        if provenance is not None and provenance.get("migrated_from") == record["old_path"]:
+            return job_id
+        if provenance is None and not (candidate_dir / "code" / "submit.sh").is_file():
+            _log.warning(
+                "Skipping %s: %s exists but does not look like a capsule; remove it and re-run",
+                record["old_path"],
+                f"{record['identity']['pipeline_path']}/{job_id}",
+            )
+            return None
+        if provenance is not None and "migrated_from" not in provenance and job_id == base_job_id:
+            # Copied by a version that did not record where a capsule came from. Only the
+            # uncounted name can be attributed, since that is the one a single capsule takes.
+            return job_id
 
 
 def _remove_empty_parents(*, start: pathlib.Path, stop: pathlib.Path) -> None:
