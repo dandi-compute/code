@@ -73,9 +73,11 @@ so every capsule migrates.
 
 The plan assigns those counters by position, ordered by legacy path, so a clone plans the same
 names every time. The copy does not trust that position, though: it recognises a capsule's own
-copy by the ``migrated_from`` its provenance records, and takes the first counter not already
-on disk otherwise. A group that has shrunk since the last run therefore cannot hand a capsule
-the directory holding a different capsule's copy.
+copy by the ``migrated_from`` its provenance records, or by the manifest for a copy made before
+that field existed, and takes the first counter not already on disk otherwise. A group that has
+shrunk since the last run therefore cannot hand a capsule the directory holding a different
+capsule's copy. A copy the manifest identifies has the missing field written into it, so the
+pairing stops depending on the manifest surviving.
 
 This script is deliberately standalone. It imports nothing from ``dandi_compute_code``, so it
 runs against whatever version of the package is (or is not) installed. It needs only the
@@ -553,7 +555,9 @@ def write_provenance(*, capsule_dir: pathlib.Path, identity: dict) -> None:
     dataset_description_file.write_text(json.dumps(dataset_description, indent=2) + "\n")
 
 
-def copy_capsules(*, dandiset_root: pathlib.Path, plan: list[dict]) -> list[dict]:
+def copy_capsules(
+    *, dandiset_root: pathlib.Path, plan: list[dict], recorded_targets: dict[str, str] | None = None
+) -> list[dict]:
     """
     Copy each planned capsule to its job ID name and write the copy's provenance block.
 
@@ -564,9 +568,14 @@ def copy_capsules(*, dandiset_root: pathlib.Path, plan: list[dict]) -> list[dict
 
     Purely local. Nothing is uploaded or deleted here.
 
+    :param recorded_targets: Legacy path to job ID path, as the manifest already records them.
+        A copy made before the provenance carried ``migrated_from`` cannot be attributed from
+        its own contents, so the manifest is what identifies it, and the copy is healed by
+        having the field written into it.
     :return: The records that were copied.
     :rtype: list[dict]
     """
+    recorded_targets = recorded_targets if recorded_targets is not None else {}
     copied: list[dict] = []
     for record in plan:
         source_dir = dandiset_root / record["old_path"]
@@ -574,7 +583,7 @@ def copy_capsules(*, dandiset_root: pathlib.Path, plan: list[dict]) -> list[dict
             _log.warning("Skipping %s: no longer on disk", record["old_path"])
             continue
 
-        job_id = _settle_job_id(dandiset_root=dandiset_root, record=record)
+        job_id = _settle_job_id(dandiset_root=dandiset_root, record=record, recorded_targets=recorded_targets)
         if job_id is None:
             continue
         _apply_job_id(record, job_id)
@@ -583,6 +592,10 @@ def copy_capsules(*, dandiset_root: pathlib.Path, plan: list[dict]) -> list[dict
         if target_dir.exists():
             # An earlier run already made this copy. Record it again rather than skipping, so a
             # manifest that was lost or truncated picks the capsule back up.
+            provenance = read_provenance(target_dir)
+            if provenance is None or "migrated_from" not in provenance:
+                _log.info("Recording where %s came from", record["new_path"])
+                write_provenance(capsule_dir=target_dir, identity=record["identity"])
             _log.info("Already copied, re-recording %s -> %s", record["old_path"], record["new_path"])
             copied.append(record)
             continue
@@ -603,7 +616,7 @@ def _apply_job_id(record: dict, job_id: str, /) -> None:
     record["new_path"] = f"{record['identity']['pipeline_path']}/{job_id}"
 
 
-def _settle_job_id(*, dandiset_root: pathlib.Path, record: dict) -> str | None:
+def _settle_job_id(*, dandiset_root: pathlib.Path, record: dict, recorded_targets: dict[str, str]) -> str | None:
     """
     Decide which job ID this capsule's copy takes, against what is already on disk.
 
@@ -622,6 +635,13 @@ def _settle_job_id(*, dandiset_root: pathlib.Path, record: dict) -> str | None:
     :rtype: str or None
     """
     pipeline_dir = dandiset_root / record["identity"]["pipeline_path"]
+
+    # A copy the manifest already pairs with this capsule, made before the provenance recorded
+    # where a copy came from. The manifest is the only thing that can attribute it.
+    recorded_path = recorded_targets.get(record["old_path"])
+    if recorded_path is not None and (dandiset_root / recorded_path).is_dir():
+        return pathlib.PurePosixPath(recorded_path).name
+
     base_job_id = format_job_id(job_hash=record["job_hash"], date=datetime.date.fromisoformat(record["prepared_date"]))
 
     for index in itertools.count(start=1):
@@ -915,7 +935,13 @@ def _phase_copy(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
         if dandiset_root is None:
             continue
         plan = plan_migration(dandiset_root=dandiset_root)
-        copied = copy_capsules(dandiset_root=dandiset_root, plan=plan)
+        copied = copy_capsules(
+            dandiset_root=dandiset_root,
+            plan=plan,
+            recorded_targets={
+                record["old_path"]: record["new_path"] for record in manifest["dandisets"].get(dandiset_id, [])
+            },
+        )
         copied_now += len(copied)
         manifest["dandisets"][dandiset_id] = _merged_records(
             existing=manifest["dandisets"].get(dandiset_id, []), added=copied

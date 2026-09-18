@@ -391,6 +391,36 @@ def test_copy_keeps_a_capsule_on_its_own_copy_when_the_group_shrinks(tmp_path: p
 
 
 @pytest.mark.ai_generated
+def test_copy_heals_a_copy_made_before_provenance_recorded_its_origin(tmp_path: pathlib.Path) -> None:
+    """
+    A copy from an earlier version is adopted rather than duplicated.
+
+    Those copies carry no ``migrated_from``, so nothing in them says which capsule they came
+    from. The manifest is what pairs them, and the copy writes the missing field in so the
+    pairing no longer depends on the manifest surviving.
+    """
+    script = _load_script()
+    root = _clone(tmp_path, [_LEGACY_FLAT_NAME])
+    dandiset_root = root / _DANDISET_ID
+    pipeline_dir = dandiset_root / _AIND_PIPELINE_PATH
+
+    plan = script.plan_migration(dandiset_root=dandiset_root)
+    # A counted copy, as an earlier run would have left it: no provenance at all.
+    uncounted_job_id = plan[0]["job_id"]
+    old_style_job_id = f"{uncounted_job_id}-2"
+    shutil.copytree(pipeline_dir / _LEGACY_FLAT_NAME, pipeline_dir / old_style_job_id)
+    (pipeline_dir / old_style_job_id / "dataset_description.json").write_text(json.dumps({"Name": "example"}) + "\n")
+    recorded = {plan[0]["old_path"]: f"{_AIND_PIPELINE_PATH}/{old_style_job_id}"}
+
+    copied = script.copy_capsules(dandiset_root=dandiset_root, plan=plan, recorded_targets=recorded)
+
+    assert [record["job_id"] for record in copied] == [old_style_job_id]
+    assert not (pipeline_dir / uncounted_job_id).exists()
+    provenance = json.loads((pipeline_dir / old_style_job_id / "dataset_description.json").read_text())
+    assert provenance["DandiCompute"]["migrated_from"] == f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}"
+
+
+@pytest.mark.ai_generated
 def test_copy_records_where_each_capsule_came_from(tmp_path: pathlib.Path) -> None:
     """The provenance names the legacy path, which is what makes a copy attributable."""
     script = _load_script()
