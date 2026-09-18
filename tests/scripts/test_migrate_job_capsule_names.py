@@ -821,3 +821,127 @@ def test_scan_visits_far_fewer_entries_than_walking_everything(tmp_path: pathlib
 
     assert not any(str(path).endswith("derivatives") and "pipeline-" in str(path) for path in visited)
     assert len(visited) < 20
+
+
+@pytest.mark.ai_generated
+def test_refile_places_a_file_into_the_capsule_it_belongs_to(tmp_path: pathlib.Path) -> None:
+    """
+    A file moved out of a legacy capsule is placed into that capsule's migrated copy.
+
+    The file keeps the capsule path it sat under, so the manifest says which copy it belongs
+    in, wherever the tree holding it happens to be rooted.
+    """
+    script = _load_script()
+    root = tmp_path / "clones"
+    root.mkdir()
+    manifest = {
+        "dandisets": {
+            _DANDISET_ID: [
+                {
+                    "old_path": f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}",
+                    "new_path": f"{_AIND_PIPELINE_PATH}/job-250607abc123",
+                }
+            ]
+        }
+    }
+    stray = tmp_path / "stray"
+    stray_file = (
+        stray
+        / "dandiset-000409"
+        / "sub-01"
+        / "sub-01_ecephys"
+        / "pipeline-aind+ephys"
+        / _LEGACY_FLAT_NAME
+        / "derivatives"
+        / "out_block0.nwb"
+    )
+    stray_file.parent.mkdir(parents=True)
+    stray_file.write_text("output\n")
+
+    moves, undecided = script.plan_refiling(source_dir=stray, manifest=manifest)
+    moved = script.refile_outputs(root=root, moves=moves)
+
+    assert undecided == []
+    assert moved == 1
+    assert not stray_file.exists()
+    placed = root / _DANDISET_ID / _AIND_PIPELINE_PATH / "job-250607abc123" / "derivatives" / "out_block0.nwb"
+    assert placed.read_text() == "output\n"
+
+
+@pytest.mark.ai_generated
+def test_refile_leaves_a_file_whose_capsule_two_dandisets_both_record(tmp_path: pathlib.Path) -> None:
+    """
+    A capsule path both Dandisets record cannot say which clone the file came from.
+
+    The failed runs archive holds capsules under the paths they had in the job capsules
+    Dandiset, so the same legacy path appears in both. Guessing could file a run's output into
+    the wrong Dandiset, so the file is left alone and reported.
+    """
+    script = _load_script()
+    root = tmp_path / "clones"
+    root.mkdir()
+    record = {
+        "old_path": f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}",
+        "new_path": f"{_AIND_PIPELINE_PATH}/job-250607abc123",
+    }
+    manifest = {"dandisets": {"001697": [record], "001873": [dict(record)]}}
+    stray = tmp_path / "stray"
+    stray_file = (
+        stray / "dandiset-000409" / "sub-01" / "sub-01_ecephys" / "pipeline-aind+ephys" / _LEGACY_FLAT_NAME
+    ) / "derivatives/out.nwb"
+    stray_file.parent.mkdir(parents=True)
+    stray_file.write_text("output\n")
+
+    moves, undecided = script.plan_refiling(source_dir=stray, manifest=manifest)
+
+    assert moves == []
+    assert undecided == [stray_file]
+    assert stray_file.exists()
+
+
+@pytest.mark.ai_generated
+def test_refile_never_overwrites_what_the_capsule_already_holds(tmp_path: pathlib.Path) -> None:
+    """A file already in the migrated capsule was put there deliberately, so it stands."""
+    script = _load_script()
+    root = tmp_path / "clones"
+    manifest = {
+        "dandisets": {
+            _DANDISET_ID: [
+                {
+                    "old_path": f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}",
+                    "new_path": f"{_AIND_PIPELINE_PATH}/job-250607abc123",
+                }
+            ]
+        }
+    }
+    placed = root / _DANDISET_ID / _AIND_PIPELINE_PATH / "job-250607abc123" / "derivatives" / "out.nwb"
+    placed.parent.mkdir(parents=True)
+    placed.write_text("already here\n")
+    stray = tmp_path / "stray"
+    stray_file = (
+        stray / "dandiset-000409" / "sub-01" / "sub-01_ecephys" / "pipeline-aind+ephys" / _LEGACY_FLAT_NAME
+    ) / "derivatives/out.nwb"
+    stray_file.parent.mkdir(parents=True)
+    stray_file.write_text("stray\n")
+
+    moves, _ = script.plan_refiling(source_dir=stray, manifest=manifest)
+    moved = script.refile_outputs(root=root, moves=moves)
+
+    assert moved == 0
+    assert placed.read_text() == "already here\n"
+    assert stray_file.exists()
+
+
+@pytest.mark.ai_generated
+def test_refile_reports_a_file_the_manifest_does_not_place(tmp_path: pathlib.Path) -> None:
+    """A file from a capsule the migration never recorded is left where it is."""
+    script = _load_script()
+    stray = tmp_path / "stray"
+    stray_file = stray / "loose" / "somewhere.nwb"
+    stray_file.parent.mkdir(parents=True)
+    stray_file.write_text("output\n")
+
+    moves, undecided = script.plan_refiling(source_dir=stray, manifest={"dandisets": {}})
+
+    assert moves == []
+    assert undecided == [stray_file]

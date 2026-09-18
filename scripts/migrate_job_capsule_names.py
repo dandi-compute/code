@@ -46,6 +46,19 @@ nothing itself.
 removed along with the ones this run copied, whether or not ``reconcile`` was run first. Pass
 ``--no-reconcile`` to delete only what the manifest records.
 
+A sixth phase, ``refile``, puts back capsule files that were moved out of the clones while the
+migration was under way::
+
+    python migrate_job_capsule_names.py refile --from ../stray-outputs           # report only
+    python migrate_job_capsule_names.py refile --from ../stray-outputs --apply   # move them
+
+A file taken out of a clone keeps the capsule path it sat under, so the manifest says which
+migrated copy it belongs in and where inside that copy. The tree holding the files can be
+rooted anywhere: capsules are matched from the ``dandiset-`` segment onwards. A file whose
+capsule the manifest does not record, or whose capsule path both Dandisets record and so cannot
+be told apart, is left where it is and reported, and a file already present at its target is
+never overwritten.
+
 This is a one-off migration and stands entirely alone. It shells out to ``dandi`` for the two
 archive-facing phases and reads nothing but the clones themselves; it never invokes
 ``dandicompute`` and never reads or writes a ``state.tsv``.
@@ -1058,12 +1071,171 @@ def _phase_reconcile(*, root: pathlib.Path, dandiset_ids: list[str]) -> int:
     return 0
 
 
+def _legacy_tail(path: str, /) -> str | None:
+    """
+    The part of a capsule path that identifies it regardless of where the tree is rooted.
+
+    Everything from the ``dandiset-`` segment onwards, which is what a capsule path and a copy
+    of one taken out of the clone still have in common.
+    """
+    parts = pathlib.PurePosixPath(path).parts
+    dandiset_index = next((index for index, part in enumerate(parts) if part.startswith("dandiset-")), None)
+    if dandiset_index is None:
+        return None
+    return "/".join(parts[dandiset_index:])
+
+
+def index_manifest_by_legacy_tail(manifest: dict, /) -> dict[str, list[tuple[str, str]]]:
+    """
+    Index the manifest so a capsule can be found from a path rooted anywhere.
+
+    :return: Legacy tail to the ``(dandiset_id, new_path)`` pairs recording it. A tail can be
+        recorded by both Dandisets, since the failed runs archive holds capsules under the
+        paths they had in the job capsules Dandiset.
+    :rtype: dict[str, list[tuple[str, str]]]
+    """
+    index: dict[str, list[tuple[str, str]]] = collections.defaultdict(list)
+    for dandiset_id, records in manifest.get("dandisets", {}).items():
+        for record in records:
+            tail = _legacy_tail(record["old_path"])
+            if tail is not None:
+                index[tail].append((dandiset_id, record["new_path"]))
+    return dict(index)
+
+
+def _split_at_capsule_contents(parts: tuple[str, ...], /) -> tuple[str, str] | None:
+    """
+    Split a path into the capsule that held a file and the file's path inside that capsule.
+
+    The capsule directory is what follows the ``pipeline-`` segment, and its contents start at
+    the ``derivatives``, ``logs``, ``code`` or ``intermediate`` directory beneath it.
+    """
+    pipeline_index = next((index for index, part in enumerate(parts) if part.startswith("pipeline-")), None)
+    if pipeline_index is None:
+        return None
+    contents_index = next(
+        (
+            index
+            for index in range(pipeline_index + 1, len(parts))
+            if parts[index] in ("derivatives", "logs", "code", "intermediate")
+        ),
+        None,
+    )
+    if contents_index is None or contents_index == pipeline_index + 1:
+        return None
+    return "/".join(parts[:contents_index]), "/".join(parts[contents_index:])
+
+
+def plan_refiling(*, source_dir: pathlib.Path, manifest: dict) -> tuple[list[dict], list[pathlib.Path]]:
+    """
+    Work out where files taken out of legacy capsules belong under the job ID naming.
+
+    Files moved out of a clone keep the capsule path they sat under, so the manifest can say
+    which copy each one belongs in. A file whose capsule the manifest does not record, or whose
+    capsule path is recorded by both Dandisets and so cannot be told apart, is left alone.
+
+    :return: The planned moves, each with ``source``, ``dandiset_id`` and ``target`` relative to
+        that Dandiset's clone, and the files nothing could be decided for.
+    :rtype: tuple[list[dict], list[pathlib.Path]]
+    """
+    index = index_manifest_by_legacy_tail(manifest)
+    progress = _Progress(f"Scanning {source_dir.name}")
+    moves: list[dict] = []
+    undecided: list[pathlib.Path] = []
+
+    for current, _, file_names in os.walk(source_dir):
+        current_dir = pathlib.Path(current)
+        progress.advance(current_dir.name)
+        for file_name in sorted(file_names):
+            source_file = current_dir / file_name
+            split = _split_at_capsule_contents(source_file.relative_to(source_dir).parts)
+            if split is None:
+                undecided.append(source_file)
+                continue
+            capsule_path, inside_capsule = split
+
+            tail = _legacy_tail(capsule_path)
+            recorded = index.get(tail) if tail is not None else None
+            if recorded is None:
+                undecided.append(source_file)
+                continue
+            if len({new_path for _, new_path in recorded}) > 1 or len(recorded) > 1:
+                _log.warning("%s belongs to a capsule recorded by more than one Dandiset; leaving it", source_file)
+                undecided.append(source_file)
+                continue
+
+            dandiset_id, new_path = recorded[0]
+            moves.append(
+                {
+                    "source": source_file,
+                    "dandiset_id": dandiset_id,
+                    "target": f"{new_path}/{inside_capsule}",
+                }
+            )
+
+    progress.close(f"{len(moves)} file(s) placed, {len(undecided)} undecided")
+    return moves, undecided
+
+
+def refile_outputs(*, root: pathlib.Path, moves: list[dict]) -> int:
+    """
+    Move each planned file into the capsule copy it belongs to.
+
+    A file already present at the target is left where it is rather than overwritten, since the
+    copy is the migrated capsule and what is in it was put there deliberately.
+
+    :return: How many files were moved.
+    :rtype: int
+    """
+    moved = 0
+    for move in moves:
+        target_file = root / move["dandiset_id"] / move["target"]
+        if target_file.exists():
+            _log.warning("Leaving %s: %s already exists", move["source"], target_file)
+            continue
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(move["source"]), str(target_file))
+        _log.info("Moved %s -> %s", move["source"], target_file)
+        moved += 1
+    return moved
+
+
+def _phase_refile(*, root: pathlib.Path, dandiset_ids: list[str], source_dir: pathlib.Path | None, apply: bool) -> int:
+    if source_dir is None:
+        message = "The `refile` phase needs `--from`, the directory holding the files to put back."
+        raise RuntimeError(message)
+    if not source_dir.is_dir():
+        message = f"No directory at {source_dir}."
+        raise RuntimeError(message)
+
+    manifest = load_manifest(root)
+    moves, undecided = plan_refiling(source_dir=source_dir, manifest=manifest)
+    moves = [move for move in moves if move["dandiset_id"] in dandiset_ids]
+
+    for move in moves:
+        print(f"  {move['source']}\n    -> {root / move['dandiset_id'] / move['target']}")
+    for source_file in undecided:
+        _log.warning("Nothing in the manifest places %s", source_file)
+
+    if not apply:
+        print(f"\n{len(moves)} file(s) would be moved, {len(undecided)} left alone. Nothing was changed.")
+        print("Re-run with `--apply` to move them.")
+        return 0
+
+    moved = refile_outputs(root=root, moves=moves)
+    print(f"\nMoved {moved} file(s) into their migrated capsules, {len(undecided)} left alone.")
+    if moved != len(moves):
+        print("Some were left because a file already sat at the target; they are logged above.")
+    return 0
+
+
 _PHASES = {
     "plan": _phase_plan,
     "copy": _phase_copy,
     "reconcile": _phase_reconcile,
     "upload": _phase_upload,
     "clean": _phase_clean,
+    "refile": _phase_refile,
 }
 
 
@@ -1086,6 +1258,21 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--from",
+        dest="source_dir",
+        type=pathlib.Path,
+        default=None,
+        help=(
+            "For the `refile` phase: the directory holding capsule files that were moved out of "
+            "the clones, to be put back into the capsules they belong to."
+        ),
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="For the `refile` phase: move the files. Without it the phase only reports what it would do.",
+    )
+    parser.add_argument(
         "--dandiset",
         dest="dandiset_ids",
         action="append",
@@ -1105,6 +1292,10 @@ def main() -> int:
     phase_arguments = {"root": root, "dandiset_ids": dandiset_ids}
     if arguments.phase == "clean":
         phase_arguments["reconcile"] = arguments.reconcile
+    if arguments.phase == "refile":
+        source_dir = arguments.source_dir
+        phase_arguments["source_dir"] = source_dir.expanduser().resolve() if source_dir is not None else None
+        phase_arguments["apply"] = arguments.apply
 
     try:
         return _PHASES[arguments.phase](**phase_arguments)
