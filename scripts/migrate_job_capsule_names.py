@@ -24,9 +24,11 @@ for a second copy of every capsule being migrated.
 so the archive briefly carries both names. Check that the new capsules look right, then run
 ``clean`` to remove the legacy paths from the archive and prune the emptied local parents.
 
-``copy`` can be run repeatedly. Each run adds what it copied to the manifest rather than
-replacing it, and a capsule whose copy an earlier run already made is recorded again rather
-than skipped, so a lost or truncated manifest is rebuilt by re-running the phase.
+Every phase can be re-run. ``plan`` changes nothing; ``copy`` makes no second copy and records
+again what an earlier run already copied, so a lost or truncated manifest is rebuilt by
+re-running it; ``upload`` re-uploads paths the archive already has, which ``dandi`` treats as
+unchanged; and ``clean`` skips legacy paths the archive no longer holds, so a second run
+deletes nothing rather than failing on a path that is already gone.
 
 There is a fifth phase, ``reconcile``, for repairing a migration that was carried out by an
 earlier version of this script that moved the local directory instead of copying it::
@@ -655,8 +657,21 @@ def _identity_key(identity: dict, /) -> tuple[str, str, str, str]:
     )
 
 
+def archive_capsule_paths(archive_capsule_names: dict[str, set[str]], /) -> set[str]:
+    """Flatten a per-pipeline listing into the set of capsule paths the archive holds."""
+    return {
+        f"{pipeline_path}/{capsule_name}"
+        for pipeline_path, capsule_names in archive_capsule_names.items()
+        for capsule_name in capsule_names
+    }
+
+
 def find_orphaned_legacy_paths(
-    *, dandiset_root: pathlib.Path, dandiset_id: str, known_old_paths: set[str] | None = None
+    *,
+    dandiset_root: pathlib.Path,
+    dandiset_id: str,
+    known_old_paths: set[str] | None = None,
+    archive_capsule_names: dict[str, set[str]] | None = None,
 ) -> list[dict]:
     """
     Find legacy capsule paths the archive still holds whose migrated capsule is already up.
@@ -673,12 +688,14 @@ def find_orphaned_legacy_paths(
     :param known_old_paths: Legacy paths already accounted for elsewhere, such as by the
         manifest. They are passed over silently, since the archive's asset list can lag a just
         finished upload and would otherwise report them as unpaired.
+    :param archive_capsule_names: An already fetched listing, to save fetching it again.
     :return: One record per orphan, shaped like the records ``copy`` writes, so ``clean`` can
         delete them without knowing where they came from.
     :rtype: list[dict]
     """
     known_old_paths = known_old_paths if known_old_paths is not None else set()
-    archive_capsule_names = fetch_archive_capsule_names(dandiset_id)
+    if archive_capsule_names is None:
+        archive_capsule_names = fetch_archive_capsule_names(dandiset_id)
     progress = _Progress(f"Reconciling {dandiset_root.name} against the archive")
     orphans: list[dict] = []
     unpaired: list[str] = []
@@ -880,6 +897,8 @@ def _phase_clean(*, root: pathlib.Path, dandiset_ids: list[str], reconcile: bool
         dandiset_root = _resolve_dandiset_root(root=root, dandiset_id=dandiset_id)
 
         if reconcile and dandiset_root is not None:
+            archive_capsule_names = fetch_archive_capsule_names(dandiset_id)
+
             # Legacy paths an earlier run left on the archive when it moved the local directory
             # instead of copying it. They are not in the manifest, because nothing local records
             # them, but they are exactly the improperly named folders this phase is here to
@@ -888,9 +907,19 @@ def _phase_clean(*, root: pathlib.Path, dandiset_ids: list[str], reconcile: bool
                 dandiset_root=dandiset_root,
                 dandiset_id=dandiset_id,
                 known_old_paths={record["old_path"] for record in records},
+                archive_capsule_names=archive_capsule_names,
             )
             records = _merged_records(existing=records, added=orphans)
             manifest["dandisets"][dandiset_id] = records
+
+            # A path the archive no longer holds was deleted by an earlier run, so asking the
+            # archive to delete it again would fail the phase. Re-running clean is then a no-op
+            # rather than an error, and the manifest stays as the record of what was migrated.
+            held_by_archive = archive_capsule_paths(archive_capsule_names)
+            already_deleted = [record for record in records if record["old_path"] not in held_by_archive]
+            if already_deleted:
+                _log.info("%d legacy path(s) are already gone from the archive; skipping them", len(already_deleted))
+            records = [record for record in records if record["old_path"] in held_by_archive]
 
         if not records:
             continue

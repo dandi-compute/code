@@ -645,6 +645,37 @@ def test_clean_also_deletes_orphans_the_manifest_never_recorded(tmp_path: pathli
 
 
 @pytest.mark.ai_generated
+def test_clean_is_idempotent(tmp_path: pathlib.Path) -> None:
+    """
+    Re-running clean deletes nothing a second time.
+
+    The manifest still records the migrated capsules, but the archive no longer holds their
+    legacy paths, and asking it to delete a path that is gone would fail the phase.
+    """
+    script = _load_script()
+    root = _clone(tmp_path, [_LEGACY_FLAT_NAME])
+    dandiset_ids = [_DANDISET_ID]
+    before_paths = [
+        f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}/code/submit.sh",
+        f"{_AIND_PIPELINE_PATH}/job-250607abc123/code/submit.sh",
+    ]
+
+    script._phase_copy(root=root, dandiset_ids=dandiset_ids)
+    with mock.patch.object(script.urllib.request, "urlopen", _fake_urlopen(_archive_assets(before_paths))):
+        with mock.patch.object(script, "_run") as first_run:
+            script._phase_clean(root=root, dandiset_ids=dandiset_ids)
+
+    # The archive no longer lists the legacy path once the first clean has deleted it.
+    after_paths = [f"{_AIND_PIPELINE_PATH}/job-250607abc123/code/submit.sh"]
+    with mock.patch.object(script.urllib.request, "urlopen", _fake_urlopen(_archive_assets(after_paths))):
+        with mock.patch.object(script, "_run") as second_run:
+            script._phase_clean(root=root, dandiset_ids=dandiset_ids)
+
+    assert first_run.call_count == 1
+    second_run.assert_not_called()
+
+
+@pytest.mark.ai_generated
 def test_clean_without_reconcile_deletes_only_what_the_manifest_records(tmp_path: pathlib.Path) -> None:
     """`--no-reconcile` keeps clean off the archive listing, deleting only recorded paths."""
     script = _load_script()
