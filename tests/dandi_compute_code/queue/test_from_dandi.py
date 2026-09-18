@@ -32,10 +32,10 @@ def test_from_dandi_returns_all_ordered_pending_entries() -> None:
     """from_dandi returns ordered pending entries from metadata."""
     capsule_metadata_by_path = {
         f"derivatives/dandiset-001697/sub-{i:02d}/sub-{i:02d}_ecephys/pipeline-test/"
-        f"version-v1.0_codebase-v0.3.0_params-default_config-{i:07d}/code/submit.sh": AssetMetadata(
+        f"job-240101{i:06d}/code/submit.sh": AssetMetadata(
             path=(
                 f"derivatives/dandiset-001697/sub-{i:02d}/sub-{i:02d}_ecephys/pipeline-test/"
-                f"version-v1.0_codebase-v0.3.0_params-default_config-{i:07d}/code/submit.sh"
+                f"job-240101{i:06d}/code/submit.sh"
             ),
             date_modified="2024-01-01T00:00:00+00:00",
             content_size=1,
@@ -77,8 +77,7 @@ def test_from_dandi_includes_entries_with_submitted_markers() -> None:
     """from_dandi does not depend on local submitted marker files."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     capsule_path = (
-        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
-        "version-v1.0_codebase-v0.3.0_params-default_config-def5678/code/submit.sh"
+        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/job-240101def567/code/submit.sh"
     )
     with (
         mock.patch(
@@ -119,10 +118,7 @@ def test_from_dandi_includes_entries_with_submitted_markers() -> None:
 def test_from_dandi_submitted_marker_sets_has_been_submitted() -> None:
     """from_dandi sets has_been_submitted when code/submitted_date-* exists."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    capsule_prefix = (
-        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
-        "version-v1.0_codebase-v0.3.0_params-default_config-def5678"
-    )
+    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/job-240101def567"
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={},
         path_to_asset_metadata={
@@ -168,12 +164,11 @@ def test_from_dandi_submitted_marker_sets_has_been_submitted() -> None:
 
 
 @pytest.mark.ai_generated
-def test_from_dandi_parses_capsule_fields_and_presence_flags_from_assets_paths() -> None:
-    """from_dandi parses job capsule metadata from derivatives asset paths."""
+def test_from_dandi_parses_capsule_location_and_presence_flags_from_assets_paths() -> None:
+    """from_dandi parses a capsule's location and lifecycle flags from derivatives asset paths."""
     source_path = "sub-mouse01/sourcedata/aind-sample.nwb"
     capsule_prefix = (
-        "derivatives/dandiset-001849/sub-mouse01/sourcedata/aind-sample/pipeline-aind+ephys/"
-        "version-v1.1.1+b268fd2+2372f8e_codebase-v0.3.0_params-4af6a25_config-0d4bf36"
+        "derivatives/dandiset-001849/sub-mouse01/sourcedata/aind-sample/pipeline-aind+ephys/job-2401010d4bf3"
     )
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={
@@ -250,9 +245,7 @@ def test_from_dandi_parses_capsule_fields_and_presence_flags_from_assets_paths()
     assert state_entries[0]["dandiset_id"] == "001849"
     assert state_entries[0]["dandi_path"] == source_path
     assert state_entries[0]["pipeline"] == "aind+ephys"
-    assert state_entries[0]["version"] == "v1.1.1+b268fd2+2372f8e"
-    assert state_entries[0]["params"] == "4af6a25"
-    assert state_entries[0]["config"] == "0d4bf36"
+    assert state_entries[0]["job_id"] == "job-2401010d4bf3"
     assert state_entries[0]["content_id"] == "source-content-id"
     assert state_entries[0]["asset_size_bytes"] == 1234
     assert state_entries[0]["has_code"] is True
@@ -272,7 +265,7 @@ def test_from_dandi_resolves_dandi_path_for_nested_asset() -> None:
     asset_size_bytes = 1234
     capsule_path = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ses-ses001_obj-raw/"
-        "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-2222222/code/submit.sh"
+        "pipeline-aind+ephys/job-240101222222/code/submit.sh"
     )
 
     with (
@@ -321,7 +314,7 @@ def test_from_dandi_resolves_dandi_path_for_root_level_asset() -> None:
     root_asset_path = "sub-mouse01_ses-ses001_obj-raw.nwb"
     capsule_path = (
         "derivatives/dandiset-001697/sub-mouse01_ses-ses001_obj-raw/"
-        "pipeline-aind+ephys/version-v1.0_codebase-v0.3.0_params-abc1234_config-3333333/code/submit.sh"
+        "pipeline-aind+ephys/job-240101333333/code/submit.sh"
     )
 
     with (
@@ -382,20 +375,20 @@ def test_from_dandi_includes_all_entries_derived_from_metadata() -> None:
         content_id_to_asset={},
         path_to_asset_metadata={
             "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test-pipeline/"
-            "version-v1.0_codebase-v0.3.0_params-abc1234_config-1111111/code/submit.sh": AssetMetadata(
+            "job-240101111111/code/submit.sh": AssetMetadata(
                 path=(
                     "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test-pipeline/"
-                    "version-v1.0_codebase-v0.3.0_params-abc1234_config-1111111/code/submit.sh"
+                    "job-240101111111/code/submit.sh"
                 ),
                 date_modified="2025-01-01T00:00:00+00:00",
                 content_size=1,
                 content_id="capsule-1",
             ),
             "derivatives/dandiset-001697/sub-mouse02/sub-mouse02_ecephys/pipeline-test-pipeline/"
-            "version-v1.0_codebase-v0.3.0_params-abc1234_config-2222222/code/submit.sh": AssetMetadata(
+            "job-240101222222/code/submit.sh": AssetMetadata(
                 path=(
                     "derivatives/dandiset-001697/sub-mouse02/sub-mouse02_ecephys/pipeline-test-pipeline/"
-                    "version-v1.0_codebase-v0.3.0_params-abc1234_config-2222222/code/submit.sh"
+                    "job-240101222222/code/submit.sh"
                 ),
                 date_modified="2025-01-02T00:00:00+00:00",
                 content_size=1,
@@ -442,7 +435,7 @@ def test_from_dandi_is_independent_of_local_submitted_marker_files() -> None:
     """from_dandi output is independent of local submitted marker files."""
     capsule_path = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test-pipeline/"
-        "version-v1.0_codebase-v0.3.0_params-abc1234_config-9999999/code/submit.sh"
+        "job-240101999999/code/submit.sh"
     )
     with (
         mock.patch(
@@ -482,78 +475,10 @@ def test_from_dandi_is_independent_of_local_submitted_marker_files() -> None:
 
 
 @pytest.mark.ai_generated
-def test_from_dandi_parses_codebase_field_from_new_format_path() -> None:
-    """from_dandi parses the _codebase- entity from new-format derivatives paths."""
-    source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    capsule_prefix = (
-        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-aind+ephys/"
-        "version-v1.1.1_codebase-v0.3.17_params-4af6a25_config-0d4bf36"
-    )
-    metadata = AssetsJsonldMetadata(
-        content_id_to_asset={
-            "source-content-id": {
-                "path": source_path,
-                "contentSize": 500,
-                "blobDateModified": "2026-05-24T09:00:00+00:00",
-            },
-            "code-content-id": {
-                "path": f"{capsule_prefix}/code/submit.sh",
-                "contentSize": 1,
-                "dateModified": "2026-05-24T10:00:00+00:00",
-            },
-        },
-        path_to_asset_metadata={
-            source_path: AssetMetadata(
-                path=source_path,
-                date_modified="2026-05-24T09:00:00+00:00",
-                content_size=500,
-                content_id="source-content-id",
-            ),
-            f"{capsule_prefix}/code/submit.sh": AssetMetadata(
-                path=f"{capsule_prefix}/code/submit.sh",
-                date_modified="2026-05-24T10:00:00+00:00",
-                content_size=1,
-                content_id="code-content-id",
-            ),
-        },
-    )
-    upstream_metadata = AssetsJsonldMetadata(
-        content_id_to_asset={},
-        path_to_asset_metadata={
-            source_path: AssetMetadata(
-                path=source_path,
-                date_modified="2026-05-24T09:00:00+00:00",
-                content_size=500,
-                content_id="source-content-id",
-            )
-        },
-    )
-    with (
-        mock.patch("dandi_compute_code.queue._queue_state.load_assets_jsonld_metadata", return_value=metadata),
-        mock.patch(
-            "dandi_compute_code.queue._queue_utils._load_upstream_assets_jsonld_metadata",
-            return_value=upstream_metadata,
-        ),
-    ):
-        state = QueueState.from_dandi()
-
-    state_entries = _entries(state)
-    assert len(state_entries) == 1
-    assert state_entries[0]["version"] == "v1.1.1"
-    assert state_entries[0]["params"] == "4af6a25"
-    assert state_entries[0]["config"] == "0d4bf36"
-    assert state_entries[0]["codebase"] == "v0.3.17"
-    assert state_entries[0]["has_code"] is True
-
-
-@pytest.mark.ai_generated
 def test_from_dandi_output_paths_empty_when_no_output() -> None:
     """from_dandi returns output_paths as an empty dict when has_output is False."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    capsule_prefix = (
-        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
-        "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678"
-    )
+    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/job-240101def567"
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={},
         path_to_asset_metadata={
@@ -596,10 +521,7 @@ def test_from_dandi_output_paths_empty_when_no_output() -> None:
 def test_from_dandi_log_paths_empty_when_no_logs() -> None:
     """from_dandi returns log_paths as an empty dict when has_logs is False."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    capsule_prefix = (
-        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
-        "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678"
-    )
+    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/job-240101def567"
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={},
         path_to_asset_metadata={
@@ -641,10 +563,7 @@ def test_from_dandi_log_paths_empty_when_no_logs() -> None:
 def test_from_dandi_output_paths_maps_asset_paths_to_blob_ids() -> None:
     """from_dandi populates output_paths with all derivatives asset paths mapped to their blob IDs."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    capsule_prefix = (
-        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
-        "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678"
-    )
+    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/job-240101def567"
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={},
         path_to_asset_metadata={
@@ -701,10 +620,7 @@ def test_from_dandi_output_paths_maps_asset_paths_to_blob_ids() -> None:
 def test_from_dandi_log_paths_map_asset_paths_to_blob_ids() -> None:
     """from_dandi populates log_paths with log asset paths mapped to their blob IDs."""
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
-    capsule_prefix = (
-        "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/"
-        "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678"
-    )
+    capsule_prefix = "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-test/job-240101def567"
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={},
         path_to_asset_metadata={

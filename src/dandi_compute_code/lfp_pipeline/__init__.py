@@ -1,5 +1,5 @@
 from ._handle_template import generate_lfp_submission_script
-from ._prepare_job import build_lfp_output_path_base, prepare_lfp_job
+from ._prepare_job import build_lfp_job_id, build_lfp_pipeline_path, find_existing_lfp_capsule_path, prepare_lfp_job
 from ._resolve import resolve_filter_kwargs, resolve_reference_spec
 
 # The runtime processing modules require the LFP container environment
@@ -16,7 +16,9 @@ except ImportError:
 __all__ = [
     "generate_lfp_submission_script",
     "prepare_lfp_job",
-    "build_lfp_output_path_base",
+    "build_lfp_job_id",
+    "build_lfp_pipeline_path",
+    "find_existing_lfp_capsule_path",
     "resolve_filter_kwargs",
     "resolve_reference_spec",
     "load_lfp_parameters",

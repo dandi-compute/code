@@ -9,6 +9,7 @@ import pathlib
 import re
 import subprocess
 import tempfile
+import typing
 import urllib.request
 
 import dandi
@@ -23,12 +24,33 @@ from ..dandiset._globals import (
     _SANDBOX_DANDISET_ID,
     _dandiset_derivatives_relative_dir,
 )
+from ..dandiset._job_id import _PROVENANCE_KEY, _compute_job_hash, _format_job_id, _parse_job_hash
 
 _log = logging.getLogger(__name__)
 
 
 class UnmappedContentIDError(ValueError):
     """Raised when a content ID cannot be resolved to a unique Dandiset path."""
+
+
+def _find_existing_capsule_path(
+    *,
+    asset_paths: typing.Iterable[str],
+    pipeline_dandiset_path: str,
+    job_hash: str,
+) -> str | None:
+    """
+    Find an already formed job capsule for this job among *asset_paths*, if there is one.
+
+    Matching is on the job hash alone, so a capsule prepared on an earlier date is still
+    recognised.
+    """
+    for asset_path in asset_paths:
+        capsule_name = asset_path.removeprefix(f"{pipeline_dandiset_path}/").split("/")[0]
+        if _parse_job_hash(capsule_name) == job_hash:
+            return f"{pipeline_dandiset_path}/{capsule_name}"
+
+    return None
 
 
 def _parse_pipeline_version(version: str, *, label: str) -> tuple[int, int, int]:
@@ -285,17 +307,30 @@ def prepare_aind_ephys_job(
 
     codebase_version = importlib.metadata.version("dandi-compute-code")
     bidsy_pipeline_version = pipeline_version.replace("-", "+")
-    output_dandiset_path = f"derivatives/{_dandiset_derivatives_relative_dir(dandiset_id)}/{output_dandi_path}/"
-    output_dandiset_path += (
-        f"pipeline-aind+ephys/"
-        f"version-{bidsy_pipeline_version}_codebase-v{codebase_version}"
-        f"_params-{params_id}_config-{config_id}"
+    pipeline_dandiset_path = (
+        f"derivatives/{_dandiset_derivatives_relative_dir(dandiset_id)}/{output_dandi_path}/pipeline-aind+ephys"
     )
+    job_hash = _compute_job_hash(
+        dandiset_id=dandiset_id,
+        dandi_path=dandiset_path,
+        pipeline="aind+ephys",
+        version=bidsy_pipeline_version,
+        params=params_id,
+        config=config_id,
+        content_id=content_id,
+    )
+    job_id = _format_job_id(job_hash=job_hash)
+    output_dandiset_path = f"{pipeline_dandiset_path}/{job_id}"
 
     client = dandi.dandiapi.DandiAPIClient(token=os.environ["DANDI_API_KEY"])
     dandiset = client.get_dandiset(dandiset_id=_JOB_CAPSULES_DANDISET_ID)
-    if next(dandiset.get_assets_with_path_prefix(path=output_dandiset_path), None) is not None:
-        _log.info(f"A job capsule already exists at {output_dandiset_path}; skipping preparation.")
+    existing_capsule_path = _find_existing_capsule_path(
+        asset_paths=(asset.path for asset in dandiset.get_assets_with_path_prefix(path=f"{pipeline_dandiset_path}/")),
+        pipeline_dandiset_path=pipeline_dandiset_path,
+        job_hash=job_hash,
+    )
+    if existing_capsule_path is not None:
+        _log.info(f"A job capsule already exists at {existing_capsule_path}; skipping preparation.")
         return None
 
     blob_head = content_id[0]
@@ -363,6 +398,21 @@ def prepare_aind_ephys_job(
             },
         ],
         "SourceDatasets": [{"URL": f"https://dandiarchive.org/dandiset/{dandiset_id}/"}],
+        # Everything the capsule directory name used to spell out. This block is what the
+        # queue state table reads back to describe the job.
+        _PROVENANCE_KEY: {
+            "job_id": job_id,
+            "dandiset_id": dandiset_id,
+            "dandi_path": dandiset_path,
+            "content_id": content_id,
+            "pipeline": "aind+ephys",
+            "version": bidsy_pipeline_version,
+            "codebase": f"v{codebase_version}",
+            "params": params_id,
+            "config": config_id,
+            "params_key": parameters_key,
+            "config_key": config_key,
+        },
     }
 
     # Construct submission script from template

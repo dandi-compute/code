@@ -10,6 +10,7 @@ from dandi_compute_code.queue import JobEntry, JobInfo, QueueState
 
 def _make_entry(**overrides: object) -> JobEntry:
     job_kwargs = {
+        "job_id": "job-250101abc123",
         "dandiset_id": "001849",
         "dandi_path": "sub-mouse01/sub-mouse01_ecephys.nwb",
         "pipeline": "aind+ephys",
@@ -96,7 +97,7 @@ def test_queue_state_to_tsv_string_empty_state_has_only_header() -> None:
     tsv_text = state.to_tsv_string()
     lines = tsv_text.splitlines()
     assert len(lines) == 1
-    assert lines[0].split("\t")[0] == "dandiset_id"
+    assert lines[0].split("\t")[0] == "job_id"
 
 
 @pytest.mark.ai_generated

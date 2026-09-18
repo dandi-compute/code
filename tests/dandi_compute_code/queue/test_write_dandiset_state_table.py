@@ -15,7 +15,7 @@ def test_write_dandiset_state_table_builds_state_and_uploads() -> None:
     source_path = "sub-mouse01/sub-mouse01_ecephys.nwb"
     capsule_path = (
         "derivatives/dandiset-001697/sub-mouse01/sub-mouse01_ecephys/pipeline-aind+ephys/"
-        "version-v1.0_codebase-v0.3.0_params-abc1234_config-def5678/code/submit.sh"
+        "job-240101def567/code/submit.sh"
     )
     metadata = AssetsJsonldMetadata(
         content_id_to_asset={},

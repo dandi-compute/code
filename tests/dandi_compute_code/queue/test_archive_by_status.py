@@ -74,7 +74,7 @@ def test_archive_by_status_moves_every_matching_entry(
     selectors = _STATUS_EXAMPLE_SELECTORS[status]
     entries = [example_queue_state.entry_for(**selector) for selector in selectors]
     matching_state = QueueState(entries=entries)
-    expected_paths = [entry.capsule_path_candidates()[0] for entry in entries]
+    expected_paths = [entry.capsule_path() for entry in entries]
     metadata = _metadata_with_capsules_at(*expected_paths)
 
     with (
@@ -124,7 +124,7 @@ def test_archive_by_status_forwards_processing_directory_and_test_flag(
     processing_dir = tmp_path / "processing"
     single_entry = example_queue_state.entry_for(**_STATUS_EXAMPLE_SELECTORS[status][0])
     single_matching_state = QueueState(entries=[single_entry])
-    expected_path = single_entry.capsule_path_candidates()[0]
+    expected_path = single_entry.capsule_path()
     metadata = _metadata_with_capsules_at(expected_path)
 
     with (
@@ -147,7 +147,7 @@ def test_archive_by_status_forwards_dandiset_ids(example_queue_state: QueueState
     """archive_by_status forwards custom dandiset IDs to load_assets_jsonld_metadata and move_job_capsule."""
     single_entry = example_queue_state.entry_for(**_STATUS_EXAMPLE_SELECTORS["failed"][0])
     single_matching_state = QueueState(entries=[single_entry])
-    expected_path = single_entry.capsule_path_candidates()[0]
+    expected_path = single_entry.capsule_path()
     metadata = _metadata_with_capsules_at(expected_path)
 
     with (

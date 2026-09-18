@@ -170,25 +170,22 @@ def test_clean_unsubmitted_capsules_keeps_non_empty_parent_directories(
 
 
 @pytest.mark.ai_generated
-def test_clean_unsubmitted_capsules_removes_legacy_nested_layout(
+def test_clean_unsubmitted_capsules_prunes_empty_parents(
     example_queue_state: QueueState, tmp_path: pathlib.Path, dandi_api_key: None
 ) -> None:
-    """clean_unsubmitted_capsules removes queued capsules in the legacy nested layout."""
+    """Removing the sole capsule in a pipeline tree prunes the emptied parent directories."""
     dandiset_dir = tmp_path / "dandiset"
     queued_dir = create_job_capsule_directory(
         base_dir=dandiset_dir,
         entry=example_queue_state.entry_for(dandi_path="sub-sole/ses-capsule"),
-        legacy_nested=True,
     )
-    version_dir = queued_dir.parent
-    pipeline_dir = version_dir.parent
+    pipeline_dir = queued_dir.parent
 
     with mock.patch("subprocess.run"):
         removed = example_queue_state.clean_unsubmitted_capsules(dandiset_directory=dandiset_dir)
 
     assert removed == [queued_dir]
     assert not queued_dir.exists()
-    assert not version_dir.exists()
     assert not pipeline_dir.exists()
 
 
@@ -231,7 +228,7 @@ def test_clean_unsubmitted_capsules_removed_entry_via_fallback_capsule_resolutio
         / "dandiset-001849"
         / "sub-mouse01"
         / "pipeline-aind+ephys"
-        / "version-v1.1.1+b268fd2+a66c8df_codebase-v0.3.0_params-4af6a25_config-0d4bf36"
+        / "job-240101aa0009"
     )
     (capsule_dir / "code").mkdir(parents=True)
     (capsule_dir / "code" / "submit.sh").write_text("#!/bin/bash\necho hello\n")

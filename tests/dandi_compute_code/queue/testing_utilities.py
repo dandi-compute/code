@@ -21,17 +21,15 @@ def create_job_capsule_directory(
     with_output: bool = False,
     with_logs: bool = False,
     submitted: bool = False,
-    legacy_nested: bool = False,
 ) -> pathlib.Path:
     """
     Materialize the on-disk job capsule directory for *entry* under *base_dir*.
 
-    The layout is derived from the entry itself (via the public
-    ``JobEntry.capsule_dir_candidates``) so the directory tree always matches the
-    ground-truth example state rather than a separately specified set of coordinates.
+    The layout is derived from the entry itself (via the public ``JobEntry.capsule_dir``)
+    so the directory tree always matches the ground-truth example state rather than a
+    separately specified set of coordinates.
     """
-    flat_capsule_dir, nested_capsule_dir = entry.capsule_dir_candidates(base_dir)
-    capsule_dir = nested_capsule_dir if legacy_nested else flat_capsule_dir
+    capsule_dir = entry.capsule_dir(base_dir)
     capsule_dir.mkdir(parents=True)
     if with_code:
         code_dir = capsule_dir / "code"
@@ -53,7 +51,7 @@ def write_job_capsule_logs(
     dandiset_directory: pathlib.Path,
     dandiset_id: str,
     subject: str,
-    config: str,
+    job_id: str,
     nextflow_lines: list[str],
     slurm_lines_by_file: dict[str, list[str]],
 ) -> pathlib.Path:
@@ -64,7 +62,7 @@ def write_job_capsule_logs(
         / pathlib.PurePosixPath(_dandiset_derivatives_relative_dir(dandiset_id))
         / f"sub-{subject}"
         / "pipeline-test"
-        / f"version-v1.0_codebase-v0.3.0_params-default_config-{config}"
+        / job_id
         / "logs"
     )
     logs_dir.mkdir(parents=True)
