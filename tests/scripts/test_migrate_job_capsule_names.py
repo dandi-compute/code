@@ -945,3 +945,110 @@ def test_refile_reports_a_file_the_manifest_does_not_place(tmp_path: pathlib.Pat
 
     assert moves == []
     assert undecided == [stray_file]
+
+
+@pytest.mark.ai_generated
+def test_duplicates_finds_a_capsule_held_by_both_dandisets() -> None:
+    """
+    A migrated capsule at the same path in both Dandisets is one of them holding a leftover.
+
+    What each side holds is reported, since the paths alone cannot say which is the leftover.
+    """
+    script = _load_script()
+    shared = f"{_AIND_PIPELINE_PATH}/job-250607abc123"
+    only_live = f"{_AIND_PIPELINE_PATH}/job-250607def456"
+    listings = {
+        "001697": _archive_assets(
+            [f"{shared}/code/submit.sh", f"{shared}/derivatives/out.nwb", f"{only_live}/code/submit.sh"]
+        ),
+        "001873": _archive_assets([f"{shared}/code/submit.sh", f"{shared}/logs/run.log"]),
+    }
+
+    def fake_urlopen(url):
+        dandiset_id = "001697" if "001697" in url else "001873"
+        return _fake_urlopen(listings[dandiset_id])(url)
+
+    with mock.patch.object(script.urllib.request, "urlopen", fake_urlopen):
+        duplicates = script.find_duplicate_capsules(["001697", "001873"])
+
+    assert [duplicate["capsule_path"] for duplicate in duplicates] == [shared]
+    held_by = duplicates[0]["held_by"]
+    assert held_by["001697"] == {"asset_count": 2, "has_output": True, "has_logs": False}
+    assert held_by["001873"] == {"asset_count": 2, "has_output": False, "has_logs": True}
+
+
+@pytest.mark.ai_generated
+def test_duplicates_ignores_capsules_only_one_dandiset_holds() -> None:
+    """A capsule in one Dandiset is where it belongs, so it is not reported."""
+    script = _load_script()
+    listings = {
+        "001697": _archive_assets([f"{_AIND_PIPELINE_PATH}/job-250607abc123/code/submit.sh"]),
+        "001873": _archive_assets([f"{_AIND_PIPELINE_PATH}/job-250607def456/code/submit.sh"]),
+    }
+
+    def fake_urlopen(url):
+        dandiset_id = "001697" if "001697" in url else "001873"
+        return _fake_urlopen(listings[dandiset_id])(url)
+
+    with mock.patch.object(script.urllib.request, "urlopen", fake_urlopen):
+        duplicates = script.find_duplicate_capsules(["001697", "001873"])
+
+    assert duplicates == []
+
+
+@pytest.mark.ai_generated
+def test_duplicates_ignores_a_legacy_capsule_both_dandisets_hold() -> None:
+    """
+    Only migrated capsules are compared.
+
+    A legacy path in both is what `clean` is for, and reporting it here would invite deleting a
+    capsule that has not been migrated yet.
+    """
+    script = _load_script()
+    legacy = f"{_AIND_PIPELINE_PATH}/{_LEGACY_FLAT_NAME}"
+    listings = {
+        "001697": _archive_assets([f"{legacy}/code/submit.sh"]),
+        "001873": _archive_assets([f"{legacy}/code/submit.sh"]),
+    }
+
+    def fake_urlopen(url):
+        dandiset_id = "001697" if "001697" in url else "001873"
+        return _fake_urlopen(listings[dandiset_id])(url)
+
+    with mock.patch.object(script.urllib.request, "urlopen", fake_urlopen):
+        duplicates = script.find_duplicate_capsules(["001697", "001873"])
+
+    assert duplicates == []
+
+
+@pytest.mark.ai_generated
+def test_duplicates_deletes_from_the_named_dandiset_only(tmp_path: pathlib.Path) -> None:
+    """`--remove-from` drops the duplicate on one side, on the archive and in the clone."""
+    script = _load_script()
+    shared = f"{_AIND_PIPELINE_PATH}/job-250607abc123"
+    root = tmp_path
+    for dandiset_id in ("001697", "001873"):
+        (root / dandiset_id / shared / "code").mkdir(parents=True)
+        (root / dandiset_id / shared / "code" / "submit.sh").write_text("#!/bin/bash\n")
+    listings = {dandiset_id: _archive_assets([f"{shared}/code/submit.sh"]) for dandiset_id in ("001697", "001873")}
+
+    def fake_urlopen(url):
+        dandiset_id = "001697" if "001697" in url else "001873"
+        return _fake_urlopen(listings[dandiset_id])(url)
+
+    with mock.patch.object(script.urllib.request, "urlopen", fake_urlopen):
+        with mock.patch.object(script, "_run") as mock_run:
+            script._phase_duplicates(root=root, dandiset_ids=["001697", "001873"], remove_from="001873")
+
+    assert mock_run.call_args.args[0] == ["dandi", "delete", f"dandi://dandi/001873/{shared}/"]
+    assert not (root / "001873" / shared).exists()
+    assert (root / "001697" / shared / "code" / "submit.sh").is_file()
+
+
+@pytest.mark.ai_generated
+def test_duplicates_refuses_to_remove_from_a_dandiset_it_did_not_compare(tmp_path: pathlib.Path) -> None:
+    """Deleting from a Dandiset that was never compared would delete unexamined capsules."""
+    script = _load_script()
+
+    with pytest.raises(RuntimeError, match="not one of the Dandisets being compared"):
+        script._phase_duplicates(root=tmp_path, dandiset_ids=["001697", "001873"], remove_from="000409")

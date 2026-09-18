@@ -59,6 +59,19 @@ capsule the manifest does not record, or whose capsule path both Dandisets recor
 be told apart, is left where it is and reported, and a file already present at its target is
 never overwritten.
 
+A seventh phase, ``duplicates``, finds migrated capsules the archive holds in more than one
+Dandiset::
+
+    python migrate_job_capsule_names.py duplicates                        # report only
+    python migrate_job_capsule_names.py duplicates --remove-from 001697   # delete one side
+
+A capsule belongs to one Dandiset: the job capsules one while it is live, or the failed runs
+archive once it has been archived. Holding the same path in both means one is a leftover, which
+a half-finished archive or a re-upload can leave behind. The paths cannot say which side that
+is, so the phase reports what each side holds -- how many assets, and whether it has outputs or
+logs -- and deletes nothing until told which Dandiset to remove them from. Only migrated
+capsules are compared, since a legacy path in both is what ``clean`` is for.
+
 This is a one-off migration and stands entirely alone. It shells out to ``dandi`` for the two
 archive-facing phases and reads nothing but the clones themselves; it never invokes
 ``dandicompute`` and never reads or writes a ``state.tsv``.
@@ -696,16 +709,16 @@ def _remove_empty_parents(*, start: pathlib.Path, stop: pathlib.Path) -> None:
         current = current.parent
 
 
-def fetch_archive_capsule_names(dandiset_id: str, /) -> dict[str, set[str]]:
+def fetch_archive_capsule_assets(dandiset_id: str, /) -> dict[str, list[str]]:
     """
-    Read the capsule directory names the archive currently holds, per pipeline directory.
+    Read what the archive holds inside each capsule directory.
 
     The draft ``assets.jsonld`` lists every asset path in the Dandiset, which is enough to see
-    which capsule directories exist without downloading anything.
+    which capsule directories exist and what is in them without downloading anything.
 
-    :return: Capsule directory names, keyed by the pipeline directory that holds them. Both are
-        paths relative to the Dandiset root.
-    :rtype: dict[str, set[str]]
+    :return: The asset paths inside each capsule, keyed by the capsule's path relative to the
+        Dandiset root, and themselves relative to the capsule.
+    :rtype: dict[str, list[str]]
     """
     url = _ASSETS_JSONLD_URL_TEMPLATE.format(dandiset_id=dandiset_id)
     _log.info("Reading the archive's asset list for dandiset-%s", dandiset_id)
@@ -716,7 +729,7 @@ def fetch_archive_capsule_names(dandiset_id: str, /) -> dict[str, set[str]]:
     # list of assets too rather than depending on that framing.
     asset_entries = assets.get("hasPart", []) if isinstance(assets, dict) else assets
 
-    capsule_names: dict[str, set[str]] = collections.defaultdict(set)
+    capsule_assets: dict[str, list[str]] = collections.defaultdict(list)
     for asset in asset_entries:
         if not isinstance(asset, dict):
             continue
@@ -725,9 +738,24 @@ def fetch_archive_capsule_names(dandiset_id: str, /) -> dict[str, set[str]]:
         pipeline_index = next((index for index, part in enumerate(parts) if part.startswith("pipeline-")), None)
         if pipeline_index is None or pipeline_index + 1 >= len(parts):
             continue
-        pipeline_path = "/".join(parts[: pipeline_index + 1])
-        capsule_names[pipeline_path].add(parts[pipeline_index + 1])
+        capsule_path = "/".join(parts[: pipeline_index + 2])
+        capsule_assets[capsule_path].append("/".join(parts[pipeline_index + 2 :]))
 
+    return dict(capsule_assets)
+
+
+def fetch_archive_capsule_names(dandiset_id: str, /) -> dict[str, set[str]]:
+    """
+    Read the capsule directory names the archive currently holds, per pipeline directory.
+
+    :return: Capsule directory names, keyed by the pipeline directory that holds them. Both are
+        paths relative to the Dandiset root.
+    :rtype: dict[str, set[str]]
+    """
+    capsule_names: dict[str, set[str]] = collections.defaultdict(set)
+    for capsule_path in fetch_archive_capsule_assets(dandiset_id):
+        pipeline_path, _, capsule_name = capsule_path.rpartition("/")
+        capsule_names[pipeline_path].add(capsule_name)
     return dict(capsule_names)
 
 
@@ -1229,6 +1257,98 @@ def _phase_refile(*, root: pathlib.Path, dandiset_ids: list[str], source_dir: pa
     return 0
 
 
+def find_duplicate_capsules(dandiset_ids: list[str], /) -> list[dict]:
+    """
+    Find migrated capsules the archive holds in more than one Dandiset.
+
+    A capsule belongs to one Dandiset: the job capsules one while it is live, or the failed
+    runs archive once it has been archived. Holding the same path in both means one of them is
+    a leftover. Which one is not something the paths can say, so this only reports.
+
+    :return: One record per duplicated capsule, with its ``capsule_path`` and, per Dandiset
+        holding it, how many assets it has and whether any of them is an output.
+    :rtype: list[dict]
+    """
+    assets_by_dandiset = {dandiset_id: fetch_archive_capsule_assets(dandiset_id) for dandiset_id in dandiset_ids}
+
+    capsule_paths: dict[str, list[str]] = collections.defaultdict(list)
+    for dandiset_id, capsule_assets in assets_by_dandiset.items():
+        for capsule_path in capsule_assets:
+            if _JOB_ID_RE.fullmatch(pathlib.PurePosixPath(capsule_path).name) is not None:
+                capsule_paths[capsule_path].append(dandiset_id)
+
+    duplicates = []
+    for capsule_path, holders in sorted(capsule_paths.items()):
+        if len(holders) < 2:
+            continue
+        held_by = {}
+        for dandiset_id in holders:
+            inside = assets_by_dandiset[dandiset_id][capsule_path]
+            held_by[dandiset_id] = {
+                "asset_count": len(inside),
+                "has_output": any(subpath.startswith("derivatives/") for subpath in inside),
+                "has_logs": any(subpath.startswith("logs/") for subpath in inside),
+            }
+        duplicates.append({"capsule_path": capsule_path, "held_by": held_by})
+
+    return duplicates
+
+
+def delete_capsule_paths(*, dandiset_id: str, capsule_paths: list[str]) -> None:
+    """Delete whole capsule directories from one Dandiset on the archive, in batches."""
+    for batch in _batched(capsule_paths, _BATCH_SIZE):
+        urls = [f"dandi://dandi/{dandiset_id}/{capsule_path}/" for capsule_path in batch]
+        _log.info("Deleting %d duplicate capsule(s) from dandiset-%s", len(batch), dandiset_id)
+        _run(["dandi", "delete", *urls], input_text="y\n")
+
+
+def _phase_duplicates(*, root: pathlib.Path, dandiset_ids: list[str], remove_from: str | None) -> int:
+    if len(dandiset_ids) < 2:
+        message = "The `duplicates` phase compares Dandisets, so it needs at least two."
+        raise RuntimeError(message)
+    if remove_from is not None and remove_from not in dandiset_ids:
+        message = f"`--remove-from {remove_from}` is not one of the Dandisets being compared: {dandiset_ids}."
+        raise RuntimeError(message)
+
+    duplicates = find_duplicate_capsules(dandiset_ids)
+    if not duplicates:
+        print(f"\nNo capsule is held by more than one of {', '.join(dandiset_ids)}.")
+        return 0
+
+    print(f"\n{len(duplicates)} capsule(s) held by more than one Dandiset:\n")
+    for duplicate in duplicates:
+        print(f"  {duplicate['capsule_path']}")
+        for dandiset_id, held in sorted(duplicate["held_by"].items()):
+            marks = []
+            if held["has_output"]:
+                marks.append("output")
+            if held["has_logs"]:
+                marks.append("logs")
+            summary = ", ".join(marks) if marks else "no output or logs"
+            print(f"    dandiset-{dandiset_id}: {held['asset_count']} asset(s), {summary}")
+
+    if remove_from is None:
+        print("\nNothing was changed. A capsule belongs to one Dandiset: the job capsules one while it is")
+        print("live, or the failed runs archive once archived. Decide which side is the leftover, then")
+        print("re-run with `--remove-from <dandiset id>` to delete it there and locally.")
+        return 0
+
+    capsule_paths = [duplicate["capsule_path"] for duplicate in duplicates]
+    delete_capsule_paths(dandiset_id=remove_from, capsule_paths=capsule_paths)
+
+    dandiset_root = _resolve_dandiset_root(root=root, dandiset_id=remove_from)
+    if dandiset_root is not None:
+        for capsule_path in capsule_paths:
+            capsule_dir = dandiset_root / capsule_path
+            if capsule_dir.is_dir():
+                shutil.rmtree(capsule_dir)
+            _remove_empty_parents(start=capsule_dir.parent, stop=dandiset_root / "derivatives")
+
+    print(f"\nDeleted {len(capsule_paths)} duplicate capsule(s) from dandiset-{remove_from}, on the archive")
+    print("and in the local clone. The other Dandiset still holds each of them.")
+    return 0
+
+
 _PHASES = {
     "plan": _phase_plan,
     "copy": _phase_copy,
@@ -1236,6 +1356,7 @@ _PHASES = {
     "upload": _phase_upload,
     "clean": _phase_clean,
     "refile": _phase_refile,
+    "duplicates": _phase_duplicates,
 }
 
 
@@ -1273,6 +1394,15 @@ def main() -> int:
         help="For the `refile` phase: move the files. Without it the phase only reports what it would do.",
     )
     parser.add_argument(
+        "--remove-from",
+        dest="remove_from",
+        default=None,
+        help=(
+            "For the `duplicates` phase: the Dandiset to delete the duplicated capsules from, on "
+            "the archive and locally. Without it the phase only reports what it found."
+        ),
+    )
+    parser.add_argument(
         "--dandiset",
         dest="dandiset_ids",
         action="append",
@@ -1285,13 +1415,18 @@ def main() -> int:
     root = arguments.root.expanduser().resolve()
     dandiset_ids = arguments.dandiset_ids or [_JOB_CAPSULES_DANDISET_ID, _FAILED_RUNS_ARCHIVE_DANDISET_ID]
 
-    if arguments.phase in ("upload", "clean") and not os.environ.get("DANDI_API_KEY", "").strip():
+    needs_api_key = arguments.phase in ("upload", "clean") or (
+        arguments.phase == "duplicates" and arguments.remove_from is not None
+    )
+    if needs_api_key and not os.environ.get("DANDI_API_KEY", "").strip():
         _log.error("`DANDI_API_KEY` environment variable is not set or is blank.")
         return 1
 
     phase_arguments = {"root": root, "dandiset_ids": dandiset_ids}
     if arguments.phase == "clean":
         phase_arguments["reconcile"] = arguments.reconcile
+    if arguments.phase == "duplicates":
+        phase_arguments["remove_from"] = arguments.remove_from
     if arguments.phase == "refile":
         source_dir = arguments.source_dir
         phase_arguments["source_dir"] = source_dir.expanduser().resolve() if source_dir is not None else None
