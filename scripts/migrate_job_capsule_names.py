@@ -65,12 +65,17 @@ Dandiset::
     python migrate_job_capsule_names.py duplicates                        # report only
     python migrate_job_capsule_names.py duplicates --remove-from 001697   # delete one side
 
-A capsule belongs to one Dandiset: the job capsules one while it is live, or the failed runs
-archive once it has been archived. Holding the same path in both means one is a leftover, which
-a half-finished archive or a re-upload can leave behind. The paths cannot say which side that
-is, so the phase reports what each side holds -- how many assets, and whether it has outputs or
-logs -- and deletes nothing until told which Dandiset to remove them from. Only migrated
-capsules are compared, since a legacy path in both is what ``clean`` is for.
+The same path in both is usually expected rather than wrong. The job ID identifies a job, not
+an attempt, so a run that failed and was archived and a later re-attempt that succeeded share
+one. That reads as the archive holding logs and no output while the job capsules Dandiset holds
+both, which is a complete record, not a duplicate.
+
+What is worth looking at is a pair that does not read that way: two sides that both hold
+outputs, or an archived side holding an output it should not have, which is what a half-finished
+archive or a re-upload leaves behind. The phase reports what each side holds -- how many assets,
+and whether it has outputs or logs -- so the two can be told apart, and deletes nothing until
+told which Dandiset to remove them from. Only migrated capsules are compared, since a legacy
+path in both is what ``clean`` is for.
 
 This is a one-off migration and stands entirely alone. It shells out to ``dandi`` for the two
 archive-facing phases and reads nothing but the clones themselves; it never invokes
@@ -1261,9 +1266,10 @@ def find_duplicate_capsules(dandiset_ids: list[str], /) -> list[dict]:
     """
     Find migrated capsules the archive holds in more than one Dandiset.
 
-    A capsule belongs to one Dandiset: the job capsules one while it is live, or the failed
-    runs archive once it has been archived. Holding the same path in both means one of them is
-    a leftover. Which one is not something the paths can say, so this only reports.
+    The job ID identifies a job, not an attempt, so a run that failed and was archived and a
+    later re-attempt that succeeded share one. Holding the same path in both Dandisets is
+    therefore usually a complete record rather than a duplicate, and what each side holds is
+    what tells the two apart. This only reports.
 
     :return: One record per duplicated capsule, with its ``capsule_path`` and, per Dandiset
         holding it, how many assets it has and whether any of them is an output.
@@ -1328,9 +1334,12 @@ def _phase_duplicates(*, root: pathlib.Path, dandiset_ids: list[str], remove_fro
             print(f"    dandiset-{dandiset_id}: {held['asset_count']} asset(s), {summary}")
 
     if remove_from is None:
-        print("\nNothing was changed. A capsule belongs to one Dandiset: the job capsules one while it is")
-        print("live, or the failed runs archive once archived. Decide which side is the leftover, then")
-        print("re-run with `--remove-from <dandiset id>` to delete it there and locally.")
+        print("\nNothing was changed. Sharing a job ID across the two Dandisets is usually expected: the")
+        print("ID identifies a job, not an attempt, so an archived failure and a later successful")
+        print("re-attempt carry the same one. An archive side holding logs and no output, against a job")
+        print("capsules side holding both, is that complete record rather than a duplicate.")
+        print("\nOnly if a pair does not read that way -- both sides holding outputs, say -- is one of them")
+        print("a leftover. Re-run with `--remove-from <dandiset id>` to delete it there and locally.")
         return 0
 
     capsule_paths = [duplicate["capsule_path"] for duplicate in duplicates]
