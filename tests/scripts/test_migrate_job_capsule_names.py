@@ -1052,3 +1052,108 @@ def test_duplicates_refuses_to_remove_from_a_dandiset_it_did_not_compare(tmp_pat
 
     with pytest.raises(RuntimeError, match="not one of the Dandisets being compared"):
         script._phase_duplicates(root=tmp_path, dandiset_ids=["001697", "001873"], remove_from="000409")
+
+
+def _archive_assets_with_blobs(paths_to_blobs: dict[str, str]) -> list[dict]:
+    """Shape assets the way the archive presents them, each pointing at its content blob."""
+    return [
+        {"path": path, "contentUrl": [f"https://api.dandiarchive.org/api/assets/{blob_id}/blobs/{blob_id}/"]}
+        for path, blob_id in paths_to_blobs.items()
+    ]
+
+
+@pytest.mark.ai_generated
+def test_identical_groups_capsules_holding_the_same_outputs() -> None:
+    """
+    Two capsules whose outputs are byte for byte the same did the same work twice.
+
+    Every asset points at a content addressed blob, so the blob identifiers say so without
+    anything being downloaded.
+    """
+    script = _load_script()
+    first = f"{_AIND_PIPELINE_PATH}/job-250607abc123"
+    second = f"{_AIND_PIPELINE_PATH}/job-250608abc123"
+    other = f"{_AIND_PIPELINE_PATH}/job-250609def456"
+    assets = _archive_assets_with_blobs(
+        {
+            f"{first}/derivatives/out.nwb": "blob-same",
+            f"{first}/code/submit.sh": "blob-first-code",
+            f"{second}/derivatives/out.nwb": "blob-same",
+            f"{second}/code/submit.sh": "blob-second-code",
+            f"{other}/derivatives/out.nwb": "blob-different",
+        }
+    )
+
+    with mock.patch.object(script.urllib.request, "urlopen", _fake_urlopen(assets)):
+        groups = script.find_identical_capsules([_DANDISET_ID], scope="outputs")
+
+    assert groups == [[(_DANDISET_ID, first), (_DANDISET_ID, second)]]
+
+
+@pytest.mark.ai_generated
+def test_identical_separates_capsules_whose_outputs_differ() -> None:
+    """Same output name, different bytes, is different work and not a group."""
+    script = _load_script()
+    first = f"{_AIND_PIPELINE_PATH}/job-250607abc123"
+    second = f"{_AIND_PIPELINE_PATH}/job-250608abc123"
+    assets = _archive_assets_with_blobs(
+        {f"{first}/derivatives/out.nwb": "blob-one", f"{second}/derivatives/out.nwb": "blob-two"}
+    )
+
+    with mock.patch.object(script.urllib.request, "urlopen", _fake_urlopen(assets)):
+        groups = script.find_identical_capsules([_DANDISET_ID], scope="outputs")
+
+    assert groups == []
+
+
+@pytest.mark.ai_generated
+def test_identical_does_not_group_capsules_that_produced_nothing() -> None:
+    """
+    Capsules with no output are left out rather than grouped together.
+
+    Having no output in common is not having the same output, and failures have none at all.
+    """
+    script = _load_script()
+    first = f"{_AIND_PIPELINE_PATH}/job-250607abc123"
+    second = f"{_AIND_PIPELINE_PATH}/job-250608abc123"
+    assets = _archive_assets_with_blobs({f"{first}/logs/run.log": "blob-one", f"{second}/logs/run.log": "blob-two"})
+
+    with mock.patch.object(script.urllib.request, "urlopen", _fake_urlopen(assets)):
+        groups = script.find_identical_capsules([_DANDISET_ID], scope="outputs")
+
+    assert groups == []
+
+
+@pytest.mark.ai_generated
+def test_identical_ignores_the_submission_marker_whatever_the_scope() -> None:
+    """
+    The marker's name carries the submission time, so counting it makes every capsule unique.
+
+    Two capsules with the same code differ only by when they were submitted, which is exactly
+    what a content comparison should see through.
+    """
+    script = _load_script()
+    first = f"{_AIND_PIPELINE_PATH}/job-250607abc123"
+    second = f"{_AIND_PIPELINE_PATH}/job-250608abc123"
+    assets = _archive_assets_with_blobs(
+        {
+            f"{first}/code/params.json": "blob-params",
+            f"{first}/code/submitted_date-2025+06+07_time-09+00+00": "blob-marker-one",
+            f"{second}/code/params.json": "blob-params",
+            f"{second}/code/submitted_date-2025+06+08_time-10+00+00": "blob-marker-two",
+        }
+    )
+
+    with mock.patch.object(script.urllib.request, "urlopen", _fake_urlopen(assets)):
+        groups = script.find_identical_capsules([_DANDISET_ID], scope="code")
+
+    assert groups == [[(_DANDISET_ID, first), (_DANDISET_ID, second)]]
+
+
+@pytest.mark.ai_generated
+def test_identical_rejects_a_scope_it_does_not_know() -> None:
+    """An unknown scope would silently compare nothing, so it is refused."""
+    script = _load_script()
+
+    with pytest.raises(RuntimeError, match="Unknown comparison scope"):
+        script.find_identical_capsules([_DANDISET_ID], scope="everything")

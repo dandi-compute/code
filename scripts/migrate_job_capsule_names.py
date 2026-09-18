@@ -77,6 +77,27 @@ and whether it has outputs or logs -- so the two can be told apart, and deletes 
 told which Dandiset to remove them from. Only migrated capsules are compared, since a legacy
 path in both is what ``clean`` is for.
 
+An eighth phase, ``identical``, compares capsules by what they contain rather than by where
+they sit::
+
+    python migrate_job_capsule_names.py identical                  # by output, the default
+    python migrate_job_capsule_names.py identical --compare code   # by inputs instead
+    python migrate_job_capsule_names.py identical --compare all
+
+Every asset on the archive points at a content addressed blob, so the blob identifiers say
+whether two capsules hold the same bytes without anything being downloaded. Capsules holding
+the same files with the same contents are grouped and reported.
+
+Nothing compares a capsule whole: its ``dataset_description.json`` carries its own job ID, so
+no two capsules are ever identical, and the submission markers carry the time they were
+submitted in their names. Both are left out of every scope. A capsule with no file in scope is
+left out rather than grouped with the others, since having no output in common is not having
+the same output.
+
+Identical contents mean the same work was done more than once, not that either capsule is
+wrong: the runs differ in what the job ID ignores, such as the codebase version. Which to keep
+is a judgement, so this phase only reports.
+
 This is a one-off migration and stands entirely alone. It shells out to ``dandi`` for the two
 archive-facing phases and reads nothing but the clones themselves; it never invokes
 ``dandicompute`` and never reads or writes a ``state.tsv``.
@@ -712,6 +733,53 @@ def _remove_empty_parents(*, start: pathlib.Path, stop: pathlib.Path) -> None:
         except OSError:
             break
         current = current.parent
+
+
+def _asset_blob_id(asset: dict, /) -> str:
+    """
+    The identifier of the blob an asset points at, which is content addressed.
+
+    Two assets holding the same bytes reference the same blob, so this serves as a checksum of
+    the asset's contents without downloading it.
+    """
+    content_urls = asset.get("contentUrl")
+    return next(
+        (
+            url.rstrip("/").rsplit("/", maxsplit=1)[-1].split("?", maxsplit=1)[0]
+            for url in (content_urls if isinstance(content_urls, list) else [])
+            if isinstance(url, str) and ("/blobs/" in url or "/zarr/" in url)
+        ),
+        "",
+    )
+
+
+def fetch_archive_capsule_contents(dandiset_id: str, /) -> dict[str, dict[str, str]]:
+    """
+    Read what the archive holds inside each capsule, with a checksum for every file.
+
+    :return: Blob identifier per asset, keyed by the capsule's path relative to the Dandiset
+        root and then by the asset's path relative to the capsule.
+    :rtype: dict[str, dict[str, str]]
+    """
+    url = _ASSETS_JSONLD_URL_TEMPLATE.format(dandiset_id=dandiset_id)
+    _log.info("Reading the archive's asset list for dandiset-%s", dandiset_id)
+    with urllib.request.urlopen(url) as response:
+        assets = json.loads(response.read().decode("utf-8"))
+
+    asset_entries = assets.get("hasPart", []) if isinstance(assets, dict) else assets
+
+    contents: dict[str, dict[str, str]] = collections.defaultdict(dict)
+    for asset in asset_entries:
+        if not isinstance(asset, dict):
+            continue
+        parts = pathlib.PurePosixPath(asset.get("path", "")).parts
+        pipeline_index = next((index for index, part in enumerate(parts) if part.startswith("pipeline-")), None)
+        if pipeline_index is None or pipeline_index + 1 >= len(parts):
+            continue
+        capsule_path = "/".join(parts[: pipeline_index + 2])
+        contents[capsule_path]["/".join(parts[pipeline_index + 2 :])] = _asset_blob_id(asset)
+
+    return dict(contents)
 
 
 def fetch_archive_capsule_assets(dandiset_id: str, /) -> dict[str, list[str]]:
@@ -1358,6 +1426,85 @@ def _phase_duplicates(*, root: pathlib.Path, dandiset_ids: list[str], remove_fro
     return 0
 
 
+#: Which of a capsule's files a content comparison looks at. Nothing compares the whole capsule:
+#: its ``dataset_description.json`` carries the job ID, so no two capsules are ever identical.
+_COMPARISON_SCOPES = {
+    "outputs": ("derivatives/",),
+    "code": ("code/",),
+    "all": ("derivatives/", "code/", "logs/"),
+}
+
+
+def _comparable_contents(contents: dict[str, str], scope: str, /) -> dict[str, str]:
+    """
+    Narrow a capsule's contents to the files a comparison at *scope* looks at.
+
+    The submission markers are dropped whatever the scope: their names carry the time the job
+    was submitted, so two capsules are never alike once they are counted.
+    """
+    prefixes = _COMPARISON_SCOPES[scope]
+    return {
+        subpath: blob_id
+        for subpath, blob_id in contents.items()
+        if subpath.startswith(prefixes) and not subpath.startswith("code/submitted_date-")
+    }
+
+
+def find_identical_capsules(dandiset_ids: list[str], /, *, scope: str = "outputs") -> list[list[tuple[str, str]]]:
+    """
+    Group capsules whose files are byte for byte the same.
+
+    Every asset on the archive points at a content addressed blob, so the blob identifiers say
+    whether two capsules hold the same bytes without anything being downloaded. Capsules are
+    grouped on the names and blob identifiers of the files in *scope* together, so a group is
+    the same files holding the same contents.
+
+    Capsules with no file in scope are left out rather than grouped with each other: having no
+    output in common is not having the same output.
+
+    :return: One list per group of two or more capsules, each entry a ``(dandiset_id,
+        capsule_path)`` pair, sorted.
+    :rtype: list[list[tuple[str, str]]]
+    """
+    if scope not in _COMPARISON_SCOPES:
+        message = f"Unknown comparison scope {scope!r}; expected one of {sorted(_COMPARISON_SCOPES)}."
+        raise RuntimeError(message)
+
+    by_fingerprint: dict[str, list[tuple[str, str]]] = collections.defaultdict(list)
+    for dandiset_id in dandiset_ids:
+        for capsule_path, contents in fetch_archive_capsule_contents(dandiset_id).items():
+            if _JOB_ID_RE.fullmatch(pathlib.PurePosixPath(capsule_path).name) is None:
+                continue
+            comparable = _comparable_contents(contents, scope)
+            if not comparable:
+                continue
+            payload = "|".join(f"{subpath}:{blob_id}" for subpath, blob_id in sorted(comparable.items()))
+            fingerprint = hashlib.md5(payload.encode("utf-8")).hexdigest()
+            by_fingerprint[fingerprint].append((dandiset_id, capsule_path))
+
+    return sorted(group for group in (sorted(entries) for entries in by_fingerprint.values()) if len(group) > 1)
+
+
+def _phase_identical(*, root: pathlib.Path, dandiset_ids: list[str], scope: str) -> int:
+    del root  # This phase only reads the archive.
+    groups = find_identical_capsules(dandiset_ids, scope=scope)
+    if not groups:
+        print(f"\nNo two capsules hold the same {scope} across {', '.join(dandiset_ids)}.")
+        return 0
+
+    capsule_count = sum(len(group) for group in groups)
+    print(f"\n{len(groups)} group(s) of capsules holding identical {scope}, {capsule_count} capsule(s) in all:\n")
+    for group in groups:
+        for dandiset_id, capsule_path in group:
+            print(f"  dandiset-{dandiset_id}  {capsule_path}")
+        print()
+
+    print("Nothing was changed. Identical contents mean the same work was done more than once, not")
+    print("that either capsule is wrong: the runs differ in what the job ID ignores, such as the")
+    print("codebase version. Which to keep is a judgement, so nothing is deleted here.")
+    return 0
+
+
 _PHASES = {
     "plan": _phase_plan,
     "copy": _phase_copy,
@@ -1366,6 +1513,7 @@ _PHASES = {
     "clean": _phase_clean,
     "refile": _phase_refile,
     "duplicates": _phase_duplicates,
+    "identical": _phase_identical,
 }
 
 
@@ -1403,6 +1551,16 @@ def main() -> int:
         help="For the `refile` phase: move the files. Without it the phase only reports what it would do.",
     )
     parser.add_argument(
+        "--compare",
+        dest="scope",
+        choices=sorted(_COMPARISON_SCOPES),
+        default="outputs",
+        help=(
+            "For the `identical` phase: which of a capsule's files to compare. Defaults to its "
+            "outputs, the `derivatives/` tree."
+        ),
+    )
+    parser.add_argument(
         "--remove-from",
         dest="remove_from",
         default=None,
@@ -1434,6 +1592,8 @@ def main() -> int:
     phase_arguments = {"root": root, "dandiset_ids": dandiset_ids}
     if arguments.phase == "clean":
         phase_arguments["reconcile"] = arguments.reconcile
+    if arguments.phase == "identical":
+        phase_arguments["scope"] = arguments.scope
     if arguments.phase == "duplicates":
         phase_arguments["remove_from"] = arguments.remove_from
     if arguments.phase == "refile":
